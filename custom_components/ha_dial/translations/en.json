@@ -1,0 +1,24 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HA Dial",
+        "description": "Add the HA-managed navigation and Dial preview card."
+      }
+    },
+    "abort": { "already_configured": "HA Dial is already set up." }
+  },
+  "issues": {
+    "restart_required": {
+      "title": "Restart Home Assistant to finish updating HA Dial",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Restart Home Assistant",
+            "description": "HA Dial was updated from {from_version} to {to_version}, but Home Assistant is still running {from_version}. Restart Home Assistant to load the update."
+          }
+        }
+      }
+    }
+  }
+}

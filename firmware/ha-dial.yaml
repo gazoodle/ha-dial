@@ -1,0 +1,76 @@
+esphome:
+  name: ha-dial
+  friendly_name: HA Dial
+  includes:
+    - pointer.h
+
+esp32:
+  variant: esp32s3
+  flash_size: 8MB
+  framework:
+    type: esp-idf
+
+logger:
+  hardware_uart: USB_SERIAL_JTAG
+
+i2c:
+  - id: internal_i2c
+    sda: GPIO11
+    scl: GPIO12
+    frequency: 400kHz
+
+spi:
+  id: spi_bus
+  mosi_pin: GPIO5
+  clk_pin: GPIO6
+
+font:
+  - file: "gfonts://Roboto"
+    id: hello_font
+    size: 36
+    glyphs: "Helo"
+
+output:
+  - platform: ledc
+    pin: GPIO9
+    id: backlight_output
+    frequency: 1000Hz
+
+light:
+  - platform: monochromatic
+    id: display_backlight
+    output: backlight_output
+    restore_mode: ALWAYS_ON
+    internal: true
+
+display:
+  - platform: mipi_spi
+    id: round_display
+    model: GC9A01A
+    cs_pin: GPIO7
+    reset_pin: GPIO8
+    dc_pin: GPIO4
+    invert_colors: true
+    data_rate: 40MHz
+    update_interval: never
+    auto_clear_enabled: true
+    lambda: |-
+      const auto pointer = ha_dial_geometry::pointer_position(static_cast<int32_t>(id(dial_encoder).state));
+      it.filled_circle(pointer.x, pointer.y, 7, Color(0, 200, 255));
+      it.print(120, 120, id(hello_font), Color::WHITE, TextAlign::CENTER, "Hello");
+
+sensor:
+  - platform: rotary_encoder
+    id: dial_encoder
+    pin_a:
+      number: GPIO40
+      mode: INPUT_PULLUP
+    pin_b:
+      number: GPIO41
+      mode: INPUT_PULLUP
+    resolution: 1
+    publish_initial_value: true
+    internal: true
+    on_value:
+      then:
+        - component.update: round_display

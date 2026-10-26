@@ -1,0 +1,80 @@
+packages:
+  hardware: !include ha-dial.yaml
+
+external_components:
+  - source: ../components
+    components: [ha_dial]
+
+wifi:
+  ap:
+    ssid: "HA Dial Setup"
+    password: "ha-dial-setup"
+
+captive_portal:
+
+api:
+  custom_services: true
+  homeassistant_services: true
+
+font:
+  - id: !extend hello_font
+    size: 18
+    glyphs: " !%()+,-./0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz<"
+
+ha_dial:
+  id: dial_ui
+  device: ha_dial
+  display: round_display
+  font: hello_font
+
+display:
+  - id: !extend round_display
+    lambda: |-
+      id(dial_ui).draw(it);
+      it.print(120, 214, id(hello_font), Color(150, 150, 150), TextAlign::CENTER,
+               id(dial_ip).state.empty() ? "No WiFi" : id(dial_ip).state.c_str());
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      id: dial_ip
+      internal: true
+      on_value:
+        - component.update: round_display
+
+sensor:
+  - id: !extend dial_encoder
+    on_clockwise:
+      - lambda: id(dial_ui).rotate(1);
+    on_anticlockwise:
+      - lambda: id(dial_ui).rotate(-1);
+
+binary_sensor:
+  - platform: gpio
+    id: front_button
+    pin:
+      number: GPIO42
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    on_press:
+      - lambda: id(dial_ui).press();
+
+switch:
+  - platform: gpio
+    id: power_hold
+    pin:
+      number: GPIO46
+      ignore_strapping_warning: true
+    restore_mode: ALWAYS_ON
+    internal: true
+
+touchscreen:
+  - platform: ft5x06
+    id: dial_touch
+    display: round_display
+    i2c_id: internal_i2c
+    address: 0x38
+    on_touch:
+      - lambda: id(dial_ui).touch(touch.x, touch.y);

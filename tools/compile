@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Build outside this uncommitted repo because ESP-IDF asks Git for build metadata.
+set -euo pipefail
+repo="$(cd "$(dirname "$0")/.." && pwd)"
+work="${HA_DIAL_BUILD:-$HOME/Library/Caches/ha-dial-build}"
+config="${1:-ha-dial.yaml}"
+case "$config" in
+  ha-dial.yaml|ha-dial-connected.yaml) ;;
+  *) echo "usage: tools/compile [ha-dial.yaml|ha-dial-connected.yaml]" >&2; exit 2 ;;
+esac
+mkdir -p "$work/firmware" "$work/components/ha_dial"
+cp "$repo/firmware/ha-dial.yaml" "$repo/firmware/ha-dial-connected.yaml" \
+  "$repo/firmware/pointer.h" "$work/firmware/"
+cp "$repo/components/ha_dial/__init__.py" "$repo/components/ha_dial/ha_dial.h" \
+  "$repo/components/ha_dial/ha_dial.cpp" "$work/components/ha_dial/"
+cd "$work"
+git init -q
+git add -A firmware components
+git diff --cached --quiet || git -c user.name="HA Dial build" -c user.email="build@example.invalid" commit -qm "Build snapshot"
+# Keep ESP-IDF's cached framework from inheriting an unrelated Git repository above it.
+export GIT_CEILING_DIRECTORIES="$HOME/Library/Caches/esphome"
+exec "$repo/.venv/bin/esphome" compile "firmware/$config"

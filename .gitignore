@@ -1,0 +1,9 @@
+.tokensave
+.venv/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+*.egg-info/
+.DS_Store
+firmware/.esphome/

@@ -1,0 +1,12 @@
+{
+  "domain": "ha_dial",
+  "name": "HA Dial",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["frontend", "http"],
+  "documentation": "https://github.com/gazoodle/ha-dial",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "requirements": [],
+  "version": "0.1.0"
+}

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>HA Dial card preview</title>
+  <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#101216;font-family:system-ui}ha-dial-card{width:min(94vw,430px)}</style>
+  <script type="module" src="../custom_components/ha_dial/www/ha-dial-card.js"></script>
+  <body>
+    <ha-dial-card></ha-dial-card>
+    <script type="module">
+      await customElements.whenDefined("ha-dial-card");
+      const views = {
+        root:{kind:"menu",id:"root",title:"Home",selected:0,back:false,items:[{id:"lights",label:"Lights",icon:"mdi:lightbulb"},{id:"heating",label:"Heating",icon:"mdi:thermostat"},{id:"music",label:"Music",icon:"mdi:speaker"}]},
+        lights:{kind:"menu",id:"lights",title:"Lights",selected:0,back:true,items:[{id:"kitchen",label:"Kitchen",icon:"mdi:ceiling-light"},{id:"hall",label:"Hall",icon:"mdi:wall-sconce-flat"}]}
+      };
+      let view=structuredClone(views.root);
+      const card=document.querySelector("ha-dial-card");
+      card.setConfig({device:"preview"});
+      card.hass={callWS:async message=>{
+        if(message.type.endsWith("/view")) return view;
+        const control=item=>({kind:"control",id:`control:${item.id}`,title:item.label,profile:"dimmer",value:50,minimum:0,maximum:100,step:5,unit:"%",active:true,back:true,items:[],selected:0});
+        if(message.action.startsWith("rotate")&&view.kind==="control"){
+          const direction=message.action==="rotate_left"?-1:1;
+          view.value=Math.max(view.minimum,Math.min(view.maximum,view.value+direction*view.step));
+        }else if(message.action.startsWith("rotate")){
+          const direction=message.action==="rotate_left"?-1:1;
+          view.selected=(view.selected+direction+view.items.length)%view.items.length;
+        }
+        if(message.action==="press"&&view.kind==="control") view.active=!view.active;
+        else if(message.action==="press"&&view.id==="root"&&view.items[view.selected].id==="lights") view=structuredClone(views.lights);
+        else if(message.action==="press"&&view.id==="lights") view=control(view.items[view.selected]);
+        if(message.action==="touch"&&message.item==="lights") view=structuredClone(views.lights);
+        else if(message.action==="touch"&&view.id==="lights") view=control(view.items.find(item=>item.id===message.item));
+        if(message.action==="back") view=structuredClone(view.kind==="control"?views.lights:views.root);
+        return view;
+      }};
+    </script>
+  </body>
+</html>
