@@ -20,6 +20,7 @@ from homeassistant.helpers.event import async_track_state_change_event, async_tr
 from .const import CARD_URL, DEVICE_EVENT, DOMAIN, VERSION
 from .deployment import manifest_version, revision
 from .navigator import Navigator
+from .pill import render_pill
 from .restart_notice import async_check_restart
 
 LOADED_VERSION = manifest_version(Path(__file__).parent)
@@ -39,8 +40,13 @@ DEVICE_SCHEMA = vol.All(str, vol.Match(DEVICE_RE))
 
 def _navigator(hass: HomeAssistant, device: str) -> Navigator:
     state = hass.data[DOMAIN]
+    light_entity = state.get("light_entity")
+    light_state = hass.states.get(light_entity) if light_entity else None
+    light_name = (
+        light_state.attributes.get(ATTR_FRIENDLY_NAME) if light_state else None
+    ) or state.get("light_name", "Light")
     return state["navigators"].setdefault(
-        device, Navigator(state.get("light_entity"), state.get("light_name", "Light"))
+        device, Navigator(light_entity, light_name)
     )
 
 
@@ -60,7 +66,11 @@ def _light_values(state: State | None) -> tuple[int, bool, bool]:
 def _sync_light(hass: HomeAssistant, navigator: Navigator) -> None:
     view = navigator.current()
     if view.get("kind") == "control":
-        navigator.sync(*_light_values(hass.states.get(view["entity_id"])))
+        light_state = hass.states.get(view["entity_id"])
+        navigator.sync(
+            *_light_values(light_state),
+            light_state.attributes.get(ATTR_FRIENDLY_NAME) if light_state else None,
+        )
 
 
 async def _input(
@@ -100,6 +110,9 @@ async def _input(
 async def _push(hass: HomeAssistant, device: str, view: dict) -> None:
     service = f"{device}_ha_dial_show_view"
     if DEVICE_RE.fullmatch(device) and hass.services.has_service("esphome", service):
+        view = dict(view)
+        if view.get("kind") == "control":
+            view["pill"] = render_pill(view.get("title", "Light"))
         await hass.services.async_call(
             "esphome", service, {"view": json.dumps(view, separators=(",", ":"))}
         )

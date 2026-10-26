@@ -32,6 +32,7 @@ class HaDial : public Component, public api::CustomAPIDevice {
 
  protected:
   void flush_value_();
+  void draw_pill_(display::Display &display);
   void send_input_(const std::string &action, const std::string &item = "",
                    const std::string &value = "");
 
@@ -39,6 +40,9 @@ class HaDial : public Component, public api::CustomAPIDevice {
   std::string title_{"Waiting for HA"};
   std::string profile_;
   std::string unit_;
+  std::string pill_pixels_;
+  int pill_width_{0};
+  int pill_height_{0};
   std::array<ViewItem, 8> items_{};
   size_t item_count_{0};
   size_t selected_{0};

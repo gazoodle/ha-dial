@@ -50,9 +50,10 @@ def test_unavailable_control_ignores_input_and_accepts_state_sync():
     assert navigator.input("rotate_right")["value"] == 0
     assert navigator.input("press")["active"] is False
 
-    navigator.sync(72, True, True)
+    navigator.sync(72, True, True, "Renamed light")
     assert navigator.current()["value"] == 72
     assert navigator.current()["active"] is True
+    assert navigator.current()["title"] == "Renamed light"
 
 
 def test_absolute_value_is_clamped():

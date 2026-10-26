@@ -119,6 +119,10 @@ class Navigator:
         if parent := view.get("parent"):
             self.view_id, self.selected = parent, 0
 
-    def sync(self, value: int, active: bool, available: bool) -> None:
+    def sync(
+        self, value: int, active: bool, available: bool, title: str | None = None
+    ) -> None:
         if self.control is not None:
             self.control.update(value=value, active=active, available=available)
+            if title:
+                self.control["title"] = title

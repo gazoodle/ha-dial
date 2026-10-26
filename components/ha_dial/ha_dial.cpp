@@ -13,6 +13,16 @@ static const char *const TAG = "ha_dial";
 static const Color ORANGE(244, 111, 34);
 static const Color ITEM(42, 45, 50);
 static constexpr uint32_t VALUE_DEBOUNCE_MS = 150;
+static constexpr int MAX_PILL_WIDTH = 150;
+static constexpr int MAX_PILL_HEIGHT = 22;
+
+static int hex_value(char value) {
+  if (value >= '0' && value <= '9')
+    return value - '0';
+  if (value >= 'a' && value <= 'f')
+    return value - 'a' + 10;
+  return -1;
+}
 
 void HaDial::setup() {
   this->register_service(&HaDial::show_view, "ha_dial_show_view", {"view"});
@@ -39,6 +49,19 @@ void HaDial::show_view(std::string view) {
     this->title_ = title == nullptr ? "" : std::string(title).substr(0, 24);
     this->profile_ = profile == nullptr ? "" : std::string(profile).substr(0, 16);
     this->unit_ = unit == nullptr ? "" : std::string(unit).substr(0, 4);
+    this->pill_pixels_.clear();
+    JsonObject pill = root["pill"].as<JsonObject>();
+    const char *pixels = pill["pixels"];
+    const int pill_width = pill["width"] | 0;
+    const int pill_height = pill["height"] | 0;
+    const size_t expected = static_cast<size_t>(pill_width) * pill_height;
+    if (pixels != nullptr && pill_width > 0 && pill_width <= MAX_PILL_WIDTH && pill_height > 0 &&
+        pill_height <= MAX_PILL_HEIGHT && strlen(pixels) == expected &&
+        std::all_of(pixels, pixels + expected, [](char value) { return hex_value(value) >= 0; })) {
+      this->pill_width_ = pill_width;
+      this->pill_height_ = pill_height;
+      this->pill_pixels_ = pixels;
+    }
     const bool incoming_has_value = !root["value"].isNull();
     const float incoming_value = root["value"] | 0.0f;
     this->minimum_ = root["minimum"] | 0.0f;
@@ -112,7 +135,10 @@ void HaDial::draw(display::Display &it) {
 
   if (this->font_ == nullptr)
     return;
-  it.print(120, 78, this->font_, ORANGE, display::TextAlign::CENTER, this->title_.c_str());
+  if (this->pill_pixels_.empty())
+    it.print(120, 78, this->font_, ORANGE, display::TextAlign::CENTER, this->title_.c_str());
+  else
+    this->draw_pill_(it);
   if (this->item_count_ != 0)
     it.print(120, 120, this->font_, Color::WHITE, display::TextAlign::CENTER,
              this->items_[this->selected_].label.c_str());
@@ -131,6 +157,18 @@ void HaDial::draw(display::Display &it) {
              this->profile_.empty() ? "Ready" : this->profile_.c_str());
   if (this->has_back_)
     it.print(120, 178, this->font_, Color(150, 150, 150), display::TextAlign::CENTER, "<");
+}
+
+void HaDial::draw_pill_(display::Display &it) {
+  const int left = 120 - this->pill_width_ / 2;
+  const int top = 78 - this->pill_height_ / 2;
+  for (int index = 0; index < this->pill_width_ * this->pill_height_; index++) {
+    const int level = hex_value(this->pill_pixels_[index]);
+    if (level == 0)
+      continue;
+    it.draw_pixel_at(left + index % this->pill_width_, top + index / this->pill_width_,
+                     Color(100 * level / 15, 255 * level / 15, 184 * level / 15));
+  }
 }
 
 void HaDial::rotate(int direction) {
