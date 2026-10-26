@@ -16,6 +16,9 @@ api:
   custom_services: true
   homeassistant_services: true
 
+ota:
+  - platform: esphome
+
 font:
   - id: !extend hello_font
     size: 18

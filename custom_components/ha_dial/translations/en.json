@@ -3,10 +3,20 @@
     "step": {
       "user": {
         "title": "HA Dial",
-        "description": "Add the HA-managed navigation and Dial preview card."
+        "description": "Add the HA-managed navigation and Dial preview card.",
+        "data": { "entity_id": "Light" }
       }
     },
     "abort": { "already_configured": "HA Dial is already set up." }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Choose the Dial light",
+        "description": "The first prototype uses one light for its live dimmer control.",
+        "data": { "entity_id": "Light" }
+      }
+    }
   },
   "issues": {
     "restart_required": {

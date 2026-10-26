@@ -12,6 +12,7 @@ namespace esphome::ha_dial {
 static const char *const TAG = "ha_dial";
 static const Color ORANGE(244, 111, 34);
 static const Color ITEM(42, 45, 50);
+static constexpr uint32_t VALUE_DEBOUNCE_MS = 150;
 
 void HaDial::setup() {
   this->register_service(&HaDial::show_view, "ha_dial_show_view", {"view"});
@@ -22,6 +23,8 @@ void HaDial::loop() {
   if (connected && !this->was_connected_)
     this->send_input_("ready");
   this->was_connected_ = connected;
+  if (this->value_dirty_ && millis() - this->last_rotate_ms_ >= VALUE_DEBOUNCE_MS)
+    this->flush_value_();
 }
 
 void HaDial::show_view(std::string view) {
@@ -36,8 +39,8 @@ void HaDial::show_view(std::string view) {
     this->title_ = title == nullptr ? "" : std::string(title).substr(0, 24);
     this->profile_ = profile == nullptr ? "" : std::string(profile).substr(0, 16);
     this->unit_ = unit == nullptr ? "" : std::string(unit).substr(0, 4);
-    this->has_value_ = !root["value"].isNull();
-    this->value_ = root["value"] | 0.0f;
+    const bool incoming_has_value = !root["value"].isNull();
+    const float incoming_value = root["value"] | 0.0f;
     this->minimum_ = root["minimum"] | 0.0f;
     this->maximum_ = root["maximum"] | 0.0f;
     this->step_ = root["step"] | 1.0f;
@@ -45,8 +48,22 @@ void HaDial::show_view(std::string view) {
       std::swap(this->minimum_, this->maximum_);
     if (this->step_ <= 0)
       this->step_ = 1;
-    if (this->has_value_)
-      this->value_ = std::clamp(this->value_, this->minimum_, this->maximum_);
+    this->has_value_ = incoming_has_value;
+    if (incoming_has_value) {
+      this->confirmed_value_ = std::clamp(incoming_value, this->minimum_, this->maximum_);
+      this->has_confirmed_value_ = true;
+      if (!this->value_dirty_ && !this->value_pending_) {
+        this->value_ = this->confirmed_value_;
+      } else if (std::fabs(this->confirmed_value_ - this->value_) < 0.5f) {
+        this->value_ = this->confirmed_value_;
+        this->value_dirty_ = false;
+        this->value_pending_ = false;
+      }
+    } else {
+      this->has_confirmed_value_ = false;
+      this->value_dirty_ = false;
+      this->value_pending_ = false;
+    }
     this->has_back_ = root["back"] | false;
     const int selected = root["selected"] | 0;
     this->selected_ = selected < 0 ? 0 : static_cast<size_t>(selected);
@@ -96,17 +113,24 @@ void HaDial::draw(display::Display &it) {
   if (this->font_ == nullptr)
     return;
   it.print(120, 78, this->font_, ORANGE, display::TextAlign::CENTER, this->title_.c_str());
-  if (this->has_back_)
-    it.print(120, 120, this->font_, Color::WHITE, display::TextAlign::CENTER, "<");
-  else if (this->item_count_ != 0)
+  if (this->item_count_ != 0)
     it.print(120, 120, this->font_, Color::WHITE, display::TextAlign::CENTER,
              this->items_[this->selected_].label.c_str());
-  else if (this->has_value_)
-    it.printf(120, 120, this->font_, Color::WHITE, display::TextAlign::CENTER, "%.1f%s",
-              this->value_, this->unit_.c_str());
-  else
+  else if (this->has_value_) {
+    if (this->has_confirmed_value_ && std::fabs(this->confirmed_value_ - this->value_) >= 0.5f) {
+      it.printf(120, 110, this->font_, Color::WHITE, display::TextAlign::CENTER, "%.0f%s",
+                this->value_, this->unit_.c_str());
+      it.printf(120, 140, this->font_, Color(150, 150, 150), display::TextAlign::CENTER,
+                "HA %.0f%s", this->confirmed_value_, this->unit_.c_str());
+    } else {
+      it.printf(120, 120, this->font_, Color::WHITE, display::TextAlign::CENTER, "%.0f%s",
+                this->value_, this->unit_.c_str());
+    }
+  } else
     it.print(120, 120, this->font_, Color::WHITE, display::TextAlign::CENTER,
              this->profile_.empty() ? "Ready" : this->profile_.c_str());
+  if (this->has_back_)
+    it.print(120, 178, this->font_, Color(150, 150, 150), display::TextAlign::CENTER, "<");
 }
 
 void HaDial::rotate(int direction) {
@@ -114,10 +138,12 @@ void HaDial::rotate(int direction) {
     if (this->has_value_) {
       this->value_ = std::clamp(this->value_ + (direction < 0 ? -this->step_ : this->step_),
                                 this->minimum_, this->maximum_);
+      this->value_dirty_ = true;
+      this->value_pending_ = false;
+      this->last_rotate_ms_ = millis();
       if (this->display_ != nullptr)
         this->display_->update();
     }
-    this->send_input_(direction < 0 ? "rotate_left" : "rotate_right");
     return;
   }
   this->selected_ = (this->selected_ + this->item_count_ + (direction < 0 ? -1 : 1)) %
@@ -128,10 +154,14 @@ void HaDial::rotate(int direction) {
 }
 
 void HaDial::press() {
+  this->flush_value_();
   this->send_input_("press", this->item_count_ == 0 ? "" : this->items_[this->selected_].id);
 }
 
-void HaDial::back() { this->send_input_("back"); }
+void HaDial::back() {
+  this->flush_value_();
+  this->send_input_("back");
+}
 
 void HaDial::touch(int x, int y) {
   const int center_distance = (x - 120) * (x - 120) + (y - 120) * (y - 120);
@@ -153,11 +183,23 @@ void HaDial::touch(int x, int y) {
   }
 }
 
-void HaDial::send_input_(const std::string &action, const std::string &item) {
+void HaDial::flush_value_() {
+  if (!this->value_dirty_ || !this->is_connected())
+    return;
+  this->value_dirty_ = false;
+  this->value_pending_ = true;
+  this->send_input_("set_value", "", std::to_string(this->value_));
+}
+
+void HaDial::send_input_(const std::string &action, const std::string &item,
+                         const std::string &value) {
   if (!this->is_connected())
     return;
-  this->fire_homeassistant_event(
-      "esphome.ha_dial_input", {{"device", this->device_}, {"action", action}, {"item", item}});
+  this->fire_homeassistant_event("esphome.ha_dial_input",
+                                 {{"device", this->device_},
+                                  {"action", action},
+                                  {"item", item},
+                                  {"value", value}});
 }
 
 }  // namespace esphome::ha_dial

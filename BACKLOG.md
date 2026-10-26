@@ -32,3 +32,23 @@ Acceptance criteria:
 
 Investigate ESPHome Improv Serial/BLE as a second provisioning route, but keep the captive
 portal as the dependency-free baseline unless testing proves it unreliable.
+
+## Camera thumbnail screen
+
+Add a camera view that keeps image processing in Home Assistant. HA should decode, crop and
+resize a camera JPEG, convert it to RGB565, and expose the raw frame through a short-lived,
+device-scoped local URL. The Dial should stream the bytes into a fixed buffer and keep the
+previous complete frame visible until the replacement passes its length and CRC checks.
+
+Start at 128 × 128 (32 KB); test 160 × 160 (50 KB) only if heap measurements remain healthy.
+Both sizes fit completely inside the 240-pixel circular display, leaving the outer area for
+the orange ring, camera name and navigation. Do not put a general Home Assistant access token
+on the device or base64-encode frames into the existing JSON service.
+
+Acceptance criteria:
+
+- Free heap is measured before transfer, during receipt and after releasing the frame.
+- Repeated refreshes do not degrade encoder response or API connectivity.
+- A failed or partial transfer leaves the previous image visible and reports the failure.
+- Frames refresh on screen entry and explicitly configured events, with a conservative timed
+  refresh only while the camera screen is visible.

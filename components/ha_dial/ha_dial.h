@@ -31,7 +31,9 @@ class HaDial : public Component, public api::CustomAPIDevice {
   void back();
 
  protected:
-  void send_input_(const std::string &action, const std::string &item = "");
+  void flush_value_();
+  void send_input_(const std::string &action, const std::string &item = "",
+                   const std::string &value = "");
 
   std::string device_;
   std::string title_{"Waiting for HA"};
@@ -41,12 +43,17 @@ class HaDial : public Component, public api::CustomAPIDevice {
   size_t item_count_{0};
   size_t selected_{0};
   float value_{0};
+  float confirmed_value_{0};
   float minimum_{0};
   float maximum_{0};
   float step_{1};
   bool has_value_{false};
+  bool has_confirmed_value_{false};
+  bool value_dirty_{false};
+  bool value_pending_{false};
   bool has_back_{false};
   bool was_connected_{false};
+  uint32_t last_rotate_ms_{0};
   display::Display *display_{nullptr};
   font::Font *font_{nullptr};
 };

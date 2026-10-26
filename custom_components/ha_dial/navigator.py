@@ -4,60 +4,40 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-VIEWS = {
-    "root": {
-        "id": "root",
-        "title": "Home",
-        "items": [
-            {"id": "lights", "label": "Lights", "icon": "mdi:lightbulb", "view": "lights"},
-            {
-                "id": "heating",
-                "label": "Heating",
-                "icon": "mdi:thermostat",
-                "entity_id": "climate.example",
-                "profile": "thermostat",
-            },
-            {
-                "id": "music",
-                "label": "Music",
-                "icon": "mdi:speaker",
-                "entity_id": "media_player.example",
-                "profile": "volume",
-            },
-        ],
-    },
-    "lights": {
-        "id": "lights",
-        "title": "Lights",
-        "parent": "root",
-        "items": [
-            {
-                "id": "kitchen",
-                "label": "Kitchen",
-                "icon": "mdi:ceiling-light",
-                "entity_id": "light.example_kitchen",
-                "profile": "dimmer",
-            },
-            {
-                "id": "hall",
-                "label": "Hall",
-                "icon": "mdi:wall-sconce-flat",
-                "entity_id": "light.example_hall",
-                "profile": "dimmer",
-            },
-        ],
-    },
-}
-
-CONTROL_DEFAULTS = {
-    "dimmer": {"value": 50, "minimum": 0, "maximum": 100, "step": 5, "unit": "%"},
-    "thermostat": {"value": 20, "minimum": 7, "maximum": 30, "step": 0.5, "unit": "°C"},
-    "volume": {"value": 40, "minimum": 0, "maximum": 100, "step": 5, "unit": "%"},
-}
-
 
 class Navigator:
-    def __init__(self) -> None:
+    def __init__(self, light_entity: str | None = None, light_name: str = "Light") -> None:
+        items = []
+        if light_entity:
+            items.append(
+                {
+                    "id": light_entity,
+                    "label": light_name,
+                    "icon": "mdi:lightbulb",
+                    "entity_id": light_entity,
+                    "profile": "dimmer",
+                }
+            )
+        self.views = {
+            "root": {
+                "id": "root",
+                "title": "Home",
+                "items": [
+                    {
+                        "id": "lights",
+                        "label": "Lights",
+                        "icon": "mdi:lightbulb",
+                        "view": "lights",
+                    }
+                ],
+            },
+            "lights": {
+                "id": "lights",
+                "title": "Lights",
+                "parent": "root",
+                "items": items,
+            },
+        }
         self.view_id = "root"
         self.selected = 0
         self.control: dict | None = None
@@ -65,27 +45,36 @@ class Navigator:
     def current(self) -> dict:
         if self.control is not None:
             return deepcopy(self.control)
-        view = deepcopy(VIEWS[self.view_id])
+        view = deepcopy(self.views[self.view_id])
         view.update(kind="menu", selected=self.selected, back="parent" in view)
         return view
 
-    def input(self, action: str, item_id: str | None = None) -> dict:
+    def input(
+        self, action: str, item_id: str | None = None, value: float | None = None
+    ) -> dict:
         if action == "ready":
             return self.current()
         if action == "back":
             self._back()
             return self.current()
         if self.control is not None:
+            if not self.control["available"]:
+                return self.current()
             if action in {"rotate_left", "rotate_right"}:
                 direction = -1 if action == "rotate_left" else 1
                 value = self.control["value"] + direction * self.control["step"]
                 value = max(self.control["minimum"], min(self.control["maximum"], value))
                 self.control["value"] = round(value, 2)
+                self.control["active"] = True
+            elif action == "set_value" and value is not None:
+                value = max(self.control["minimum"], min(self.control["maximum"], value))
+                self.control["value"] = round(value, 2)
+                self.control["active"] = True
             elif action == "press":
                 self.control["active"] = not self.control["active"]
             return self.current()
 
-        items = VIEWS[self.view_id]["items"]
+        items = self.views[self.view_id]["items"]
         if action in {"rotate_left", "rotate_right"} and items:
             step = -1 if action == "rotate_left" else 1
             self.selected = (self.selected + step) % len(items)
@@ -110,8 +99,13 @@ class Navigator:
                 "icon": item["icon"],
                 "entity_id": entity_id,
                 "profile": item["profile"],
-                **CONTROL_DEFAULTS[item["profile"]],
+                "value": 50,
+                "minimum": 0,
+                "maximum": 100,
+                "step": 5,
+                "unit": "%",
                 "active": True,
+                "available": True,
                 "back": True,
                 "items": [],
                 "selected": 0,
@@ -121,6 +115,10 @@ class Navigator:
         if self.control is not None:
             self.control = None
             return
-        view = VIEWS[self.view_id]
+        view = self.views[self.view_id]
         if parent := view.get("parent"):
             self.view_id, self.selected = parent, 0
+
+    def sync(self, value: int, active: bool, available: bool) -> None:
+        if self.control is not None:
+            self.control.update(value=value, active=active, available=available)

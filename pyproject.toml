@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ha-dial"
-version = "0.1.0"
+version = "0.1.4"
 description = "A focused M5Dial controller for Home Assistant."
 readme = "README.md"
 requires-python = ">=3.11"

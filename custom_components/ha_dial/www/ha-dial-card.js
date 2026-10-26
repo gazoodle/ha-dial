@@ -1,9 +1,5 @@
 const ICONS = {
   "mdi:lightbulb": "💡",
-  "mdi:thermostat": "♨",
-  "mdi:speaker": "♫",
-  "mdi:ceiling-light": "◉",
-  "mdi:wall-sconce-flat": "◒",
 };
 
 const escapeHtml = (value) => String(value).replace(
@@ -29,7 +25,17 @@ class HaDialCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    if (!this.view) this.load();
+    if (!this.view) {
+      this.load();
+    } else if (this.view.kind === "control") {
+      const state = hass.states[this.view.entity_id];
+      const available = Boolean(state) && !["unknown", "unavailable"].includes(state.state);
+      const active = available && state.state === "on";
+      const brightness = state?.attributes.brightness;
+      const value = available ? (Number.isFinite(brightness) ? Math.round(brightness * 100 / 255) : (active ? 100 : 0)) : 0;
+      this.view = { ...this.view, value, active, available };
+      this.render();
+    }
   }
 
   async load() {
@@ -64,8 +70,6 @@ class HaDialCard extends HTMLElement {
       back: false,
       items: [
         { id: "lights", label: "Lights", icon: "mdi:lightbulb" },
-        { id: "heating", label: "Heating", icon: "mdi:thermostat" },
-        { id: "music", label: "Music", icon: "mdi:speaker" },
       ],
     };
     const items = view.items || [];
@@ -78,7 +82,9 @@ class HaDialCard extends HTMLElement {
     }).join("");
     const centreAction = view.back ? "back" : "press";
     const centreIcon = view.back ? "‹" : (ICONS[view.icon] || "●");
-    const selectedLabel = view.kind === "control" && view.value != null
+    const selectedLabel = view.kind === "control" && view.available === false
+      ? "Unavailable"
+      : view.kind === "control" && view.value != null
       ? `${view.value}${view.unit || ""}`
       : items[view.selected]?.label || view.profile || "Turn to choose";
     dial.innerHTML = `<div class="face"><div class="title">${escapeHtml(view.title)}</div>${radial}<button class="centre" data-action="${centreAction}" aria-label="${view.back ? "Back" : "Press"}"><b>${centreIcon}</b><span>${escapeHtml(selectedLabel)}</span></button><div class="notch"></div></div>`;

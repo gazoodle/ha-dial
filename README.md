@@ -6,7 +6,7 @@ Home Assistant chooses what the Dial controls. The Dial chooses the right intera
 
 Turn it. Press it. Done.
 
-> Status: end-to-end navigation prototype and hardware bring-up
+> Status: end-to-end light dimmer prototype and hardware bring-up
 
 ## The idea
 
@@ -241,7 +241,7 @@ Hardware definitions should begin with M5Stack’s current ESPHome configuration
 
 The first USB prototype displays **Hello** in the centre and moves a pointer around the edge as the encoder turns. It deliberately has no Wi-Fi, Home Assistant API or device-specific configuration yet.
 
-The connected prototype is `firmware/ha-dial-connected.yaml`. It adds the reusable external component, native API, encoder button and FT5x06 touch input. Navigation can enter simulated dimmer, thermostat and volume controls; binding those profiles to configured HA entities is the next slice. The base hardware test remains network-free.
+The connected prototype is `firmware/ha-dial-connected.yaml`. It adds the reusable external component, native API, OTA updates, encoder button and FT5x06 touch input. The HA integration binds its navigation to one configured light: turning sets brightness, pressing toggles power, and external state changes return to both the card and Dial. The base hardware test remains network-free.
 
 ```shell
 python3 -m venv .venv
@@ -259,7 +259,7 @@ The development host serves the repository to ESPHome and mirrors the integratio
 tools/serve
 ```
 
-On the first deployment, restart Home Assistant manually and then add the HA Dial integration under **Settings → Devices & services**. The card is registered automatically; add this manual card to a dashboard:
+On the first deployment, restart Home Assistant manually and then add the HA Dial integration under **Settings → Devices & services**. Choose the light during setup, or use **Configure** on the existing HA Dial integration. The card is registered automatically; add this manual card to a dashboard:
 
 ```yaml
 type: custom:ha-dial-card
