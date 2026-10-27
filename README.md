@@ -8,6 +8,8 @@ Turn it. Press it. Done.
 
 > Status: end-to-end light dimmer prototype and hardware bring-up
 
+The rendering and interaction boundaries are defined in [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## The idea
 
 M5Dial projects support a range of interface and deployment models. This project focuses on one control at a time, assigned dynamically by Home Assistant:

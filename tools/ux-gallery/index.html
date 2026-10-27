@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="A static design atlas for the HA Dial interface.">
+    <title>HA Dial — UX Atlas</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">HA Dial · UX exploration</p>
+        <h1>A small circle.<br><em>Hundreds of worlds.</em></h1>
+        <p class="lede">A static contact sheet for navigation, controls, complications,
+          graphs and camera views. Every concept is composed inside the real Dial artwork and
+          has a stable reference ID.</p>
+      </div>
+      <div class="hero-orbit" aria-hidden="true">
+        <span>240 × 240</span>
+        <b>∞</b>
+        <small>HA-owned scenes</small>
+      </div>
+    </header>
+
+    <main>
+      <section class="principles" aria-label="Design principles">
+        <article><b>01</b><span>One resolved scene</span><small>Preview and device share geometry.</small></article>
+        <article><b>02</b><span>Glance first</span><small>Hierarchy before decoration.</small></article>
+        <article><b>03</b><span>Depth rewards</span><small>Fine detail appears on a closer look.</small></article>
+        <article><b>04</b><span>Back + Home</span><small>Persistent, optional escape routes.</small></article>
+      </section>
+
+      <section class="toolbar" aria-label="Catalogue filters">
+        <div>
+          <p class="eyebrow">Contact sheet</p>
+          <h2><span id="visible-count">0</span> concepts</h2>
+        </div>
+        <label class="search">
+          <span>Search</span>
+          <input id="search" type="search" placeholder="ID, domain, layout or note…">
+        </label>
+        <label>
+          <span>Family</span>
+          <select id="family"><option value="all">All families</option></select>
+        </label>
+        <label>
+          <span>Theme</span>
+          <select id="theme"><option value="all">All themes</option></select>
+        </label>
+        <label>
+          <span>Dial host</span>
+          <input id="dial-host" value="ha-dial.local" spellcheck="false">
+        </label>
+      </section>
+
+      <p id="push-status" class="push-status" role="status">Click any Dial preview to push it to the real device.</p>
+
+      <section id="catalogue" class="catalogue" aria-live="polite"></section>
+      <p id="empty" class="empty" hidden>No concepts match those filters.</p>
+    </main>
+
+    <footer>
+      <span>HA Dial UX Atlas</span>
+      <span>Static exploration · generated from reusable scene families</span>
+    </footer>
+    <script type="module" src="gallery.js"></script>
+  </body>
+</html>

@@ -34,8 +34,6 @@ display:
   - id: !extend round_display
     lambda: |-
       id(dial_ui).draw(it);
-      it.print(120, 214, id(hello_font), Color(150, 150, 150), TextAlign::CENTER,
-               id(dial_ip).state.empty() ? "No WiFi" : id(dial_ip).state.c_str());
 
 text_sensor:
   - platform: wifi_info

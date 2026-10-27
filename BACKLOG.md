@@ -52,3 +52,56 @@ Acceptance criteria:
 - A failed or partial transfer leaves the previous image visible and reports the failure.
 - Frames refresh on screen entry and explicitly configured events, with a conservative timed
   refresh only while the camera screen is visible.
+
+## Additional UX/domain types
+
+- **Alarm panel** — show armed state, available arm modes, entry/exit countdowns and open-zone
+  warnings. Support optional on-device PIN entry without retaining or echoing the code, and require
+  an explicit confirmation step for consequential actions.
+- **QR code** — let Home Assistant generate a scannable code for guest Wi-Fi, onboarding, pairing,
+  a dashboard deep link or other configured text. Keep sufficient quiet border and contrast for the
+  physical display, and do not expose credentials or long-lived tokens unless explicitly enabled.
+
+## Shared scene model and faithful card preview
+
+Move layout decisions to Home Assistant. HA should resolve each screen into a compact 240 × 240
+scene containing final element positions, dimensions, colours, bitmap masks and matching touch
+bounds. The device should clip and draw that scene, retain responsive rotary input and optimistic
+feedback, and avoid making aesthetic layout decisions such as centring the current pill.
+
+Render the same resolved scene on a canvas in the HA card so it becomes a pixel-accurate live
+preview and simulator rather than a stylised approximation. Use the existing transparent dial
+branding artwork as the physical surround, with rotate-left, rotate-right and press controls kept
+outside the simulated display.
+
+Start with absolute pill placement and the existing compact antialiased mask format. Add good
+Casa Mia defaults, then theme-level spacing, colour, scale and typography controls, with explicit
+`x`/`y` overrides for users who want them. Cache static scene elements when configuration is saved
+and regenerate state-dependent elements only when their content changes.
+
+Acceptance criteria:
+
+- The card and device consume the same resolved scene; there is no duplicate layout logic.
+- The card preview matches photographed device output for position, colour and circular clipping.
+- Visual bounds and touch bounds cannot drift apart.
+- A user can adjust an element's position in HA and see the same result in the preview and device.
+- The device retains a useful offline/fallback screen and immediate local rotary feedback.
+- Full-frame streaming and a general constraint-layout language remain out of scope until the
+  compact scene model proves insufficient.
+
+## Document navigation at large-installation scale
+
+Explain how one Dial can navigate an HA installation with 5,000 or more entities without storing
+the entity registry or navigation tree on the device. Use an invented multi-building example with
+four or five meaningful levels, such as building → floor → room → function → device, and show that
+short lists at each level remain practical with a rotary encoder.
+
+Cover lazy, on-demand navigation generated from HA floors, areas, labels and domains, plus external
+building models, templates and hand-authored virtual groups. Document useful refinements including
+remembered selection per branch, recent or frequently used items, aggregate room/floor actions,
+single-child level skipping, fast-spin acceleration and filtering diagnostic entities from normal
+navigation.
+
+Tie the explanation back to the architectural invariant: HA owns the arbitrarily large navigation
+graph while the device retains only its current and previous scenes, so installation size does not
+determine device memory use.

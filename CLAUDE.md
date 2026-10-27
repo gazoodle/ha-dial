@@ -19,6 +19,9 @@ Use `.venv/bin/pytest -q` for the fast suite and
 
 The owner's shared core rules live in `~/Documents/AGENTS.md` (master). Repos carry a generated copy, `AGENTS.core.md`, loaded via the import below. Never edit `AGENTS.core.md` directly; edit the master and run `~/Documents/sync-agent-rules`.
 
+Read `ARCHITECTURE.md` before changing rendering, navigation, input handling or the HA/card/device
+protocol. Its ownership and dependency boundaries are project rules.
+
 @AGENTS.core.md
 
 ## Code exploration

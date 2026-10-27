@@ -5,8 +5,8 @@ import esphome.config_validation as cv
 from esphome.components import display, font
 from esphome.const import CONF_DISPLAY, CONF_FONT, CONF_ID
 
-AUTO_LOAD = ["json"]
-DEPENDENCIES = ["api", "display"]
+AUTO_LOAD = ["json", "web_server_base"]
+DEPENDENCIES = ["api", "display", "network"]
 
 CONF_DEVICE = "device"
 

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <map>
 
 #include "esphome/components/json/json_util.h"
@@ -15,6 +16,8 @@ static const Color ITEM(42, 45, 50);
 static constexpr uint32_t VALUE_DEBOUNCE_MS = 150;
 static constexpr int MAX_PILL_WIDTH = 150;
 static constexpr int MAX_PILL_HEIGHT = 22;
+static constexpr size_t ATLAS_FRAME_BYTES = 240 * 240 * 2;
+static constexpr const char *ATLAS_FRAME_PATH = "/ha-dial/atlas-frame";
 
 static int hex_value(char value) {
   if (value >= '0' && value <= '9')
@@ -26,6 +29,62 @@ static int hex_value(char value) {
 
 void HaDial::setup() {
   this->register_service(&HaDial::show_view, "ha_dial_show_view", {"view"});
+  auto *server = web_server_base::global_web_server_base;
+  if (server != nullptr) {
+    server->add_handler(this);
+    server->init();
+    this->web_server_started_ = true;
+  }
+}
+
+void HaDial::on_shutdown() {
+  if (this->web_server_started_ && web_server_base::global_web_server_base != nullptr)
+    web_server_base::global_web_server_base->deinit();
+}
+
+float HaDial::get_setup_priority() const { return setup_priority::WIFI - 1.0f; }
+
+bool HaDial::canHandle(AsyncWebServerRequest *request) const {
+  if (request->method() != HTTP_POST)
+    return false;
+#ifdef USE_ESP32
+  char url_buffer[AsyncWebServerRequest::URL_BUF_SIZE];
+  return request->url_to(url_buffer) == ATLAS_FRAME_PATH;
+#else
+  return request->url() == ATLAS_FRAME_PATH;
+#endif
+}
+
+void HaDial::handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index,
+                        size_t total) {
+  if (index == 0) {
+    this->atlas_upload_error_ = total != ATLAS_FRAME_BYTES;
+    this->atlas_received_ = 0;
+    if (!this->atlas_upload_error_ && this->atlas_frame_ == nullptr)
+      this->atlas_frame_ = RAMAllocator<uint8_t>().make_unique_array_for_overwrite(ATLAS_FRAME_BYTES);
+    if (this->atlas_frame_ == nullptr)
+      this->atlas_upload_error_ = true;
+  }
+  if (this->atlas_upload_error_ || index != this->atlas_received_ || len > total - index) {
+    this->atlas_upload_error_ = true;
+    return;
+  }
+  std::memcpy(this->atlas_frame_.get() + index, data, len);
+  this->atlas_received_ += len;
+}
+
+void HaDial::handleRequest(AsyncWebServerRequest *request) {
+  if (this->atlas_upload_error_ || this->atlas_received_ != ATLAS_FRAME_BYTES) {
+    request->send(this->atlas_frame_ == nullptr ? 503 : 400, "application/json",
+                  this->atlas_frame_ == nullptr ? "{\"ok\":false,\"error\":\"not enough memory\"}"
+                                                : "{\"ok\":false,\"error\":\"expected 115200 bytes\"}");
+    return;
+  }
+  this->defer("atlas-frame", [this]() {
+    if (this->display_ != nullptr)
+      this->display_->update();
+  });
+  request->send(200, "application/json", "{\"ok\":true,\"bytes\":115200}");
 }
 
 void HaDial::loop() {
@@ -113,11 +172,22 @@ void HaDial::show_view(std::string view) {
     ESP_LOGW(TAG, "Ignoring invalid view JSON");
     return;
   }
+  this->atlas_received_ = 0;
   if (this->display_ != nullptr)
     this->display_->update();
 }
 
 void HaDial::draw(display::Display &it) {
+  if (this->atlas_received_ == ATLAS_FRAME_BYTES && !this->atlas_upload_error_) {
+    for (size_t pixel = 0; pixel < 240 * 240; pixel++) {
+      const uint16_t rgb565 = static_cast<uint16_t>(this->atlas_frame_[pixel * 2]) << 8 |
+                              this->atlas_frame_[pixel * 2 + 1];
+      it.draw_pixel_at(pixel % 240, pixel / 240,
+                       Color(((rgb565 >> 11) & 0x1F) * 255 / 31,
+                             ((rgb565 >> 5) & 0x3F) * 255 / 63, (rgb565 & 0x1F) * 255 / 31));
+    }
+    return;
+  }
   it.fill(Color::BLACK);
   it.circle(120, 120, 116, ORANGE);
   it.circle(120, 120, 113, ORANGE);
