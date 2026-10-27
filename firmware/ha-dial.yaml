@@ -72,5 +72,6 @@ sensor:
     publish_initial_value: true
     internal: true
     on_value:
-      then:
-        - component.update: round_display
+      - id: encoder_redraw
+        then:
+          - component.update: round_display

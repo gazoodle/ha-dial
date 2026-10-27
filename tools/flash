@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-[ "$#" -ge 1 ] && [ "$#" -le 2 ] || { echo "usage: tools/flash /dev/cu.usbmodem… [ha-dial.yaml|ha-dial-connected.yaml]" >&2; exit 2; }
+[ "$#" -ge 1 ] && [ "$#" -le 2 ] || { echo "usage: tools/flash HOST_OR_SERIAL_PORT [ha-dial.yaml|ha-dial-connected.yaml]" >&2; exit 2; }
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 work="${HA_DIAL_BUILD:-$HOME/Library/Caches/ha-dial-build}"
 config="${2:-ha-dial.yaml}"

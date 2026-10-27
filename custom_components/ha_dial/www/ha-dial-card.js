@@ -1,119 +1,180 @@
-const ICONS = {
-  "mdi:lightbulb": "💡",
-};
+import { renderScene } from "./scene.js";
 
-const escapeHtml = (value) => String(value).replace(
-  /[&<>"']/g,
-  (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character],
-);
+import { defaultConfig } from "./editor.js";
 
 class HaDialCard extends HTMLElement {
+  constructor() {
+    super();
+    this.draftDevice = "preview_" + Array.from(crypto.getRandomValues(new Uint32Array(2))).join("_");
+    this.configVersion = 0;
+    this.lastRevision = -1;
+  }
+
+  connectedCallback() { this.load(); }
+
+  disconnectedCallback() {
+    this.unsubscribe?.();
+    this.unsubscribe = undefined;
+    this.subscribedDevice = undefined;
+    this.configKey = this.attemptedKey = undefined;
+    this.configVersion++;
+  }
+
   setConfig(config) {
     const device = String(config.device || "preview").replaceAll("-", "_");
     if (!/^[a-z0-9_]{1,64}$/.test(device)) throw new Error("Invalid HA Dial device name");
-    this.config = { ...config, device };
+    const next = { ...config, device };
+    if (JSON.stringify(next) !== JSON.stringify(this.config)) this.configVersion++;
+    this.config = next;
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
-      this.shadowRoot.innerHTML = `<style>${HaDialCard.styles}</style><ha-card><div class="stage"><div class="dial" aria-label="HA Dial preview"></div><div class="controls"><button data-action="rotate_left" aria-label="Rotate left">↶</button><button data-action="press" aria-label="Press dial">●</button><button data-action="rotate_right" aria-label="Rotate right">↷</button></div></div></ha-card>`;
+      this.shadowRoot.innerHTML = `<style>${HaDialCard.styles}</style><ha-card><div class="stage"><div class="dial"><img class="frame" src="/ha_dial/dial-frame.png" alt="" draggable="false"><canvas width="240" height="240" tabindex="0" aria-label="HA Dial preview"></canvas><button class="click-chip" data-action="press" aria-label="Click dial"><span>CLICK</span></button></div><button class="spin left" data-action="rotate_left" aria-label="Rotate left"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="sweep" d="M75 79A37 37 0 1 1 86 42"/><path class="head" d="M74 39L96 39L85 59Z"/></svg></button><button class="spin right" data-action="rotate_right" aria-label="Rotate right"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="sweep" d="M75 79A37 37 0 1 1 86 42"/><path class="head" d="M74 39L96 39L85 59Z"/></svg></button><p role="alert" hidden></p></div></ha-card>`;
       this.shadowRoot.addEventListener("click", (event) => {
-        const button = event.target.closest("button");
-        if (button?.dataset.action) this.input(button.dataset.action, button.dataset.item);
+        const action = event.target.closest("button")?.dataset.action;
+        if (action) this.input(action);
+      });
+      const canvas = this.shadowRoot.querySelector("canvas");
+      canvas.addEventListener("click", (event) => this.touch(event));
+      canvas.addEventListener("keydown", (event) => {
+        const action = { ArrowLeft: "rotate_left", ArrowRight: "rotate_right", Enter: "press", Escape: "back", Home: "home" }[event.key];
+        if (action) { event.preventDefault(); this.input(action); }
       });
     }
-    this.render();
+    this.load();
   }
 
-  set hass(hass) {
-    this._hass = hass;
-    if (!this.view) {
-      this.load();
-    } else if (this.view.kind === "control") {
-      const state = hass.states[this.view.entity_id];
-      const available = Boolean(state) && !["unknown", "unavailable"].includes(state.state);
-      const active = available && state.state === "on";
-      const brightness = state?.attributes.brightness;
-      const value = available ? (Number.isFinite(brightness) ? Math.round(brightness * 100 / 255) : (active ? 100 : 0)) : 0;
-      this.view = { ...this.view, value, active, available };
-      this.render();
+  set hass(hass) { this._hass = hass; this.load(); }
+
+  _device() {
+    for (let node = this; node; node = node.parentNode || node.getRootNode?.().host) {
+      if (["HUI-DIALOG-EDIT-CARD", "HUI-DIALOG-CREATE-CARD"].includes(node.tagName) ||
+          (["HUI-CARD", "HUI-SECTION"].includes(node.tagName) && (node.preview || node.hasAttribute?.("preview"))))
+        return this.draftDevice;
     }
+    return this.config.device === "preview" ? this.draftDevice : this.config.device;
+  }
+
+  _definition() {
+    return {
+      template: this.config.template || "", theme: this.config.theme || "ember",
+      pages: this.config.pages || HaDialCard.getStubConfig().pages,
+    };
+  }
+
+  accept(result) {
+    if (result.error) { this.error = result.error; this.render(); return; }
+    if (result.revision < this.lastRevision) return;
+    this.lastRevision = result.revision;
+    this.deployment = result.deployment;
+    this.scene = result.scene;
+    this.error = undefined;
+    this.render();
   }
 
   async load() {
-    if (!this._hass || this.loading) return;
+    if (!this.isConnected || !this._hass || !this.config) return;
+    if (this.loading) { this.needsLoad = true; return; }
     this.loading = true;
     try {
-      this.view = await this._hass.callWS({ type: "ha_dial/view", device: this.config.device });
-      this.render();
-    } finally {
-      this.loading = false;
-    }
+      do {
+        this.needsLoad = false;
+        const device = this._device(), definition = this._definition();
+        const key = `${device}:${JSON.stringify(definition)}`, version = this.configVersion;
+        if (key === this.attemptedKey) continue;
+        this.attemptedKey = key;
+        try {
+          const result = await this._hass.callWS({ type: "ha_dial/configure", device, definition });
+          if (!this.isConnected || version !== this.configVersion) { this.needsLoad = true; continue; }
+          if (this.subscribedDevice !== device) {
+            this.unsubscribe?.();
+            this.lastRevision = -1;
+            this.subscribedDevice = device;
+            const unsubscribe = await this._hass.connection.subscribeMessage((event) => {
+              if (this.isConnected && this._device() === device) this.accept(event);
+            }, { type: "ha_dial/subscribe", device, ...(device.startsWith("preview_") ? { definition } : {}) });
+            if (!this.isConnected || this._device() !== device) { unsubscribe(); continue; }
+            this.unsubscribe = unsubscribe;
+          }
+          this.configKey = key;
+          this.accept(result);
+        } catch (error) {
+          if (version === this.configVersion) { this.error = error.message || String(error); this.render(); }
+        }
+      } while (this.needsLoad && this.isConnected);
+    } finally { this.loading = false; }
   }
 
-  async input(action, item) {
-    if (!this._hass) return;
-    this.view = await this._hass.callWS({
-      type: "ha_dial/input",
-      device: this.config.device,
-      action,
-      ...(item ? { item } : {}),
+  input(action, item) {
+    this.inputQueue = (this.inputQueue || Promise.resolve()).then(async () => {
+      if (!this._hass || !this.configKey || this.error) return;
+      const device = this._device();
+      try {
+        const result = await this._hass.callWS({ type: "ha_dial/input", device, action, ...(item ? { item } : {}) });
+        if (this.isConnected && device === this._device()) this.accept(result);
+      } catch (error) { this.error = error.message || String(error); this.render(); }
     });
-    this.render();
+    return this.inputQueue;
+  }
+
+  touch(event) {
+    if (!this.scene) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - rect.left) * 240 / rect.width, y = (event.clientY - rect.top) * 240 / rect.height;
+    const hit = this.scene.regions.find((region) => (x - region.x) ** 2 + (y - region.y) ** 2 <= region.r ** 2);
+    if (hit) this.input(["back", "home"].includes(hit.id) ? hit.id : hit.id === "control" ? "press" : "touch", hit.id);
   }
 
   render() {
-    const dial = this.shadowRoot?.querySelector(".dial");
-    if (!dial) return;
-    const view = this.view || {
-      kind: "menu",
-      title: "HA Dial",
-      selected: 0,
-      back: false,
-      items: [
-        { id: "lights", label: "Lights", icon: "mdi:lightbulb" },
-      ],
-    };
-    const items = view.items || [];
-    const radial = items.map((item, index) => {
-      const angle = -90 + (360 * index) / Math.max(items.length, 1);
-      const x = 50 + Math.cos((angle * Math.PI) / 180) * 38;
-      const y = 50 + Math.sin((angle * Math.PI) / 180) * 38;
-      const selected = index === view.selected ? " selected" : "";
-      return `<button class="item${selected}" style="left:${x}%;top:${y}%" data-action="touch" data-item="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.label)}"><span>${ICONS[item.icon] || "•"}</span><small>${escapeHtml(item.label)}</small></button>`;
-    }).join("");
-    const centreAction = view.back ? "back" : "press";
-    const centreIcon = view.back ? "‹" : (ICONS[view.icon] || "●");
-    const selectedLabel = view.kind === "control" && view.available === false
-      ? "Unavailable"
-      : view.kind === "control" && view.value != null
-      ? `${view.value}${view.unit || ""}`
-      : items[view.selected]?.label || view.profile || "Turn to choose";
-    dial.innerHTML = `<div class="face"><div class="title">${escapeHtml(view.title)}</div>${radial}<button class="centre" data-action="${centreAction}" aria-label="${view.back ? "Back" : "Press"}"><b>${centreIcon}</b><span>${escapeHtml(selectedLabel)}</span></button><div class="notch"></div></div>`;
+    if (!this.shadowRoot) return;
+    const error = this.shadowRoot.querySelector("[role=alert]");
+    error.hidden = !this.error;
+    error.textContent = this.error || "";
+    let status = this.shadowRoot.querySelector("[role=status]");
+    if (!status) {
+      status = document.createElement("p");
+      status.setAttribute("role", "status");
+      this.shadowRoot.querySelector(".stage").append(status);
+    }
+    status.textContent = ({ preview: "Local preview", waiting: "Waiting for ESPHome device", sent: "Scene sent · awaiting device", applied: "Scene applied on device", failed: "Device deployment failed" })[this.deployment] || "";
+    if (this.scene) {
+      const canvas = this.shadowRoot.querySelector("canvas");
+      canvas.setAttribute("aria-label", this.scene.label || "HA Dial preview");
+      renderScene(canvas, this.scene);
+    }
   }
 
   getCardSize() { return 5; }
-  static getStubConfig() { return { device: "preview" }; }
+  static getConfigElement() { return document.createElement("ha-dial-card-editor"); }
+  static getStubConfig() {
+    return defaultConfig();
+  }
 
   static styles = `
-    ha-card { overflow:hidden; background:radial-gradient(circle at 50% 24%,#3d4248,#16181b 70%); }
-    .stage { min-height:390px; display:grid; place-items:center; padding:22px; box-sizing:border-box; }
-    .dial { width:min(78vw,310px); aspect-ratio:1; border-radius:50%; padding:12px; background:linear-gradient(135deg,#ff9d32,#ee5b12 52%,#9f2e08); box-shadow:0 18px 35px #0009,0 0 0 3px #632406,inset 0 2px 4px #ffd49a; box-sizing:border-box; }
-    .face { position:relative; width:100%; height:100%; border-radius:50%; overflow:hidden; background:radial-gradient(circle at 45% 38%,#303238 0,#111215 56%,#050505 100%); box-shadow:inset 0 0 0 4px #060606,inset 0 0 28px #000; color:#f7f4ef; }
-    .title { position:absolute; z-index:2; top:18%; left:25%; width:50%; text-align:center; font:600 15px/1.2 system-ui,sans-serif; color:#f3a15e; letter-spacing:.08em; text-transform:uppercase; }
-    .item { position:absolute; z-index:3; width:58px; height:58px; translate:-50% -50%; border:1px solid #ffffff20; border-radius:50%; background:#24272dcc; color:white; display:grid; place-items:center; cursor:pointer; box-shadow:0 3px 9px #0009; }
-    .item span { font-size:23px; line-height:1; pointer-events:none; }
-    .item small { position:absolute; top:61px; white-space:nowrap; color:#bbb; font:11px system-ui,sans-serif; pointer-events:none; }
-    .item.selected { background:#e96821; border-color:#ffbc75; box-shadow:0 0 0 3px #ff7a2c44,0 5px 12px #000b; transform:scale(1.08); }
-    .item.selected small { color:#fff; }
-    .centre { position:absolute; z-index:4; left:50%; top:52%; translate:-50% -50%; width:112px; height:112px; border:0; border-radius:50%; background:radial-gradient(circle at 40% 32%,#34373c,#17191c 65%); color:#f7f4ef; box-shadow:inset 0 0 0 1px #ffffff18,0 5px 14px #000b; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; }
-    .centre b { color:#f47a28; font:300 45px/30px system-ui,sans-serif; }
-    .centre span { max-width:90px; font:600 13px/1.15 system-ui,sans-serif; }
-    .notch { position:absolute; bottom:3px; left:50%; translate:-50%; width:8px; height:19px; border-radius:5px; background:#ff862f; box-shadow:0 0 10px #f66; }
-    .controls { display:flex; gap:16px; margin-top:22px; }
-    .controls button { width:52px; height:42px; border:1px solid #ffffff20; border-radius:21px; background:#24272d; color:#f47a28; font:24px system-ui,sans-serif; cursor:pointer; box-shadow:0 4px 10px #0006; }
-    button:focus-visible { outline:3px solid #65bfff; outline-offset:3px; }
+    ha-card { display:block; width:min(100%,360px); margin-inline:auto; overflow:hidden; background:radial-gradient(circle at 50% 24%,#3d4248,#16181b 70%); }
+    .stage { position:relative; width:100%; aspect-ratio:1; display:grid; place-items:center; padding:22px 22px 48px; box-sizing:border-box; }
+    [role=status] { position:absolute; bottom:20px; left:80px; right:80px; margin:0; text-align:center; font-size:11px; line-height:16px; overflow-wrap:anywhere; }
+    .dial { position:relative; width:min(86%,340px); aspect-ratio:472/475; }
+    /* Visible artwork bounds at alpha > 8: (37,1)–(509,476) in the 512 px asset. */
+    .frame { position:absolute; left:-7.839%; top:-.211%; display:block; width:108.475%; height:auto; pointer-events:none; }
+    canvas { position:absolute; left:15.148%; top:15.263%; display:block; width:69.703%; height:auto; aspect-ratio:1; border-radius:50%; }
+    .spin { position:absolute; bottom:16px; width:64px; height:64px; padding:8px; box-sizing:border-box; border:0; border-radius:50%; background:none; color:#ff8b2d; opacity:.38; cursor:pointer; transition:opacity .15s,filter .15s; }
+    .spin.left { left:16px; transform:scaleX(-1); }.spin.right { right:16px; }
+    .spin svg { display:block; width:100%; height:100%; overflow:visible; }
+    .spin .sweep { fill:none; stroke:currentColor; stroke-width:9; stroke-linecap:butt; }
+    .spin .head { fill:currentColor; }
+    .spin:hover,.spin:focus-visible { opacity:.95; filter:drop-shadow(0 0 4px #ff8b2d60); }
+    /* Casa Mia cm-chip dimensions; orange translucent treatment over the M5 mark. */
+    .click-chip { position:absolute; left:50%; top:90.316%; transform:translate(-50%,-50%); display:inline-flex; align-items:center; justify-content:center; gap:4px; box-sizing:border-box; border:0; border-radius:12px; padding:3px 10px; box-shadow:inset 0 0 0 1px currentColor; color:#ff8b2d; background:transparent; opacity:.55; font:500 10px/16px system-ui,sans-serif; letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; cursor:pointer; transition:opacity .15s,box-shadow .15s,filter .15s; }
+    .click-chip span { opacity:0; }
+    .click-chip:hover span,.click-chip:focus-visible span { opacity:1; }
+    .click-chip:hover,.click-chip:focus-visible { opacity:.95; background:color-mix(in srgb,#ff8b2d 28%,#15110f 72%); box-shadow:inset 0 0 0 1px currentColor,0 0 0 3px #ff8b2d59; filter:brightness(1.08); }
+    .spin:active,.click-chip:active { opacity:1; }
+    @media (prefers-reduced-motion:reduce) { .spin,.click-chip { transition:none; } }
+    canvas:focus-visible,button:focus-visible { outline:3px solid #65bfff; outline-offset:3px; }
+    [role=alert] { color:var(--error-color,#ff8080); overflow-wrap:anywhere; max-width:100%; }
   `;
 }
 
 customElements.define("ha-dial-card", HaDialCard);
 window.customCards = window.customCards || [];
-window.customCards.push({ type: "ha-dial-card", name: "HA Dial", description: "HA-managed Dial navigation and preview" });
+window.customCards.push({ type: "ha-dial-card", name: "HA Dial", description: "Configure themed Dial navigation and controls", preview: true });

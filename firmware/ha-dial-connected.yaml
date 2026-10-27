@@ -45,6 +45,8 @@ text_sensor:
 
 sensor:
   - id: !extend dial_encoder
+    on_value:
+      - id: !remove encoder_redraw
     on_clockwise:
       - lambda: id(dial_ui).rotate(1);
     on_anticlockwise:

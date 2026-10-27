@@ -6,7 +6,7 @@ Home Assistant chooses what the Dial controls. The Dial chooses the right intera
 
 Turn it. Press it. Done.
 
-> Status: end-to-end light dimmer prototype and hardware bring-up
+> Status: first deployable page tree with NAV-ORBIT menus and light, switch and cover instruments
 
 The rendering and interaction boundaries are defined in [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -50,7 +50,7 @@ Changing the controlled entity must never require recompiling the firmware.
 
 ## Non-goals
 
-- A multi-page Home Assistant dashboard.
+- A multi-page Lovelace dashboard running on the Dial.
 - Displaying every entity or capability Home Assistant exposes.
 - Replicating the full Lovelace interface on a 240 × 240 screen.
 - Inventing an interface for every possible entity.
@@ -130,80 +130,58 @@ The outer on-screen arc should visually meet the physical encoder surrounding it
 The project contains both halves of the product:
 
 ```text
-Home Assistant card
-└── Dial-shaped editor, preview and test controls
-          │
-Home Assistant integration
-├── navigation tree and current-screen resolution
-├── target and state updates
-└── execution of semantic commands
-          │
-          │ ESPHome native API
-          ▼
-Reusable ESPHome component
-├── hardware support
-├── current-screen state only
-├── control profiles
-├── round-display presentation
-└── encoder, button and touch input
+Card editor template + Home Assistant state
+                         │
+                         ▼
+             HA page tree and navigator
+                         │
+                         ▼
+              HA scene compiler
+                ┌────────┴────────┐
+                ▼                 ▼
+          Card canvas       ESPHome renderer
 ```
 
-The integration owns the complete navigation tree. The device asks Home Assistant to move between screens and retains only the current compact view, while rotation feedback remains local. The card and physical Dial drive the same navigation model.
+The integration owns the complete navigation tree, page themes and scene geometry. The editor supports Jinja templates for reusable tree macros. Menus use `NAV-ORBIT`; controls use `CTL-LIGHT-INSTRUMENT`, `CTL-SWITCH-INSTRUMENT` or `CTL-COVER-INSTRUMENT`. The preview canvas and Dial consume the same resolved scene.
 
 Other Home Assistant tools may use the public protocol in the future, but the project does not depend on them.
 
 ## Protocol model
 
-Home Assistant sends a target descriptor containing only what the Dial needs:
+Home Assistant sends a resolved scene containing only what the Dial needs: final geometry,
+theme colours, compact antialiased text masks and touch regions. The definition and navigation
+tree remain in Home Assistant. For example, the scene's drawing instructions use:
 
 ```json
-{
-  "entity_id": "climate.example_thermostat",
-  "name": "Example thermostat",
-  "profile": "thermostat",
-  "state": "heat",
-  "value": 20.5,
-  "minimum": 7,
-  "maximum": 30,
-  "step": 0.5,
-  "unit": "°C",
-  "available": true
-}
+{"revision":1,"scene":{"version":1,"screen":"home","width":240,"height":240,"background":"#060707",
+ "elements":[{"op":"circle","x":120,"y":120,"r":116,"stroke":"#ff8b2d"}],
+ "regions":[{"id":"light.example","x":120,"y":36,"r":22}]}}
 ```
 
-The Dial returns semantic commands:
+The Dial returns semantic navigation and control intents:
 
 ```json
-{
-  "entity_id": "climate.example_thermostat",
-  "command": "set",
-  "value": 21.0
-}
+{"device":"ha_dial","action":"set_value","value":21.0}
 ```
 
-Home Assistant remains responsible for translating commands into domain actions and checking the current capabilities of the entity.
-
-The exact transport and message schema are not stable until the hardware prototype proves them.
+Home Assistant remains responsible for translating those intents into domain actions.
 
 ## Target for the first usable release
 
-The first usable release supports:
+The current first release supports:
 
 - M5Stack Dial v1.1.
 - Wi-Fi provisioning.
 - Encrypted ESPHome API.
 - OTA updates.
 - Rotary encoder, push button, touch, display and backlight.
-- Idle, focused, picker, unavailable and disconnected states.
-- `dimmer`.
-- `thermostat`.
-- `volume`.
-- `selector`.
-- Runtime target changes without reflashing.
-- Optimistic local feedback followed by HA state reconciliation.
-- An LVGL desktop simulator or equivalent fast UI preview.
+- Multi-level page trees with light, switch and cover controls at the leaves.
+- Per-page Atlas theme selection.
+- `NAV-ORBIT` navigation and `CTL-LIGHT-INSTRUMENT` light controls.
+- HA Jinja templates with state tracking and reusable macros.
+- One resolved scene shared by the dashboard card and ESPHome renderer.
 
-It does not initially include colour selection, covers, album art, NFC, alarms, themes or a general plugin system.
+Other Atlas concepts remain outside this first release.
 
 ## Definition of good
 
@@ -261,14 +239,28 @@ The development host serves the repository to ESPHome and mirrors the integratio
 tools/serve
 ```
 
-On the first deployment, restart Home Assistant manually and then add the HA Dial integration under **Settings → Devices & services**. Choose the light during setup, or use **Configure** on the existing HA Dial integration. The card is registered automatically; add this manual card to a dashboard:
+On the first deployment, restart Home Assistant manually and then add the HA Dial integration under **Settings → Devices & services**. The card is registered automatically; add it to a dashboard, choose the ESPHome device name, and add subpages with per-page themes and light, switch or cover controls. The optional advanced template field supports reusable Jinja macros. This example builds Home → Ground floor → Office → a light:
 
 ```yaml
 type: custom:ha-dial-card
 device: ha_dial
+theme: ember
+template: |
+  {% set ns = namespace(lights=[]) %}
+  {% macro light(entity, label) -%}
+    {% set ns.lights = ns.lights + [{'id': entity, 'label': label,
+      'entity_id': entity, 'profile': 'dimmer', 'style': 'CTL-LIGHT-INSTRUMENT'}] %}
+  {%- endmacro %}
+  {% set _ = light('light.example', 'Desk') %}
+  {{ {'tree': {'id': 'home', 'title': 'Home', 'theme': theme,
+    'style': 'NAV-ORBIT', 'items': [{'id': 'ground', 'label': 'Ground floor',
+    'theme': 'verdant', 'children': [{'id': 'office', 'label': 'Office',
+    'theme': 'cobalt', 'children': ns.lights}]}]}} | tojson }}
 ```
 
-The underscore is the ESPHome service slug; the firmware node name remains `ha-dial`.
+The underscore is the ESPHome service slug; the firmware node name remains `ha-dial`. Dashboard
+editor drafts use a local preview navigator. The saved card compiles and deploys its current scene
+when it is loaded outside the editor.
 Later code changes write a content-based restart marker, including changes made without a
 version bump, and the loaded integration raises a Repair.
 
@@ -284,14 +276,25 @@ ESPHome can consume the component from the same development host:
 external_components:
   - source:
       type: git
-      url: git://192.0.2.10:9419/ha-dial
+      url: git://192.0.2.10:9421/ha-dial
       ref: fake-git-host
     components: [ha_dial]
 ```
 
-For a browser-only preview of the orange-ring Dial and its rotate, press and touch interactions, run `python3 -m http.server` in the repository and open `http://localhost:8000/tools/card-preview.html`.
+For a browser-only view of the shared scene fixtures, run `.venv/bin/python -m http.server` in the
+repository and open `http://localhost:8000/tools/card-preview.html`. Choose a theme and a navigation, light, switch or cover style. Configure and simulate the live navigation tree in the Home Assistant card editor.
 
-After checking the detected serial port, flash it explicitly:
+The HA Dial Git proxy defaults to port **9421**, separate from the shared host's default. Set
+`HA_DIAL_GIT_PORT` when starting `tools/serve` to override it and use that same port in the client's
+Git URL. Each proxy instance serves this repository only.
+
+Deploy to a provisioned device over OTA:
+
+```shell
+tools/flash ha-dial.local ha-dial-connected.yaml
+```
+
+For initial USB installation, check the detected serial port and flash it explicitly:
 
 ```shell
 tools/flash /dev/cu.usbmodem…
@@ -328,3 +331,36 @@ Related projects and resources:
 ## Licence
 
 Licensed under the [MIT License](LICENSE).
+
+
+### Building a page tree
+
+In the visual card editor, expand Home and choose **Add subpage**. Give the new page a title,
+select its controls, and add further subpages the same way. IDs are generated automatically.
+Drag its handle onto another page's title to nest it, or above/below a title to reorder.
+Arrow keys on the handle move it; Left/Right change its nesting. Entity handles reorder controls. Removing a page moves its subpages up one level.
+Each page can override the default theme. Existing `lights` lists remain supported; the editor
+migrates edited rows to `entities`, which accepts light, switch and cover entities.
+
+Switches toggle on press. Covers show supported Open, Stop and Close touch actions; pressing stops
+when supported, and turning sets position only when the cover supports it and reports a position.
+Unavailable controls ignore input. Brightness and cover rotation show the requested value locally and send the final target after
+150 ms of rotary silence. This uses scene version 2 and requires the matching firmware update. The branded card picker preview stays local.
+
+The advanced Jinja template still overrides page rows and supports HA `custom_templates` macros.
+For template leaves, omit profile/style to infer the domain defaults, or use `dimmer` /
+`CTL-LIGHT-INSTRUMENT`, `toggle` / `CTL-SWITCH-INSTRUMENT`, or `position` /
+`CTL-COVER-INSTRUMENT`. Page themes inherit through the compiled tree.
+
+
+### Reconnect and recovery
+
+The HA adapter resends the current scene when ESPHome becomes available. Refreshing a saved card
+also resynchronises it without returning to Home or rewriting the definition. If the API is
+reachable but the display says Waiting for HA, check the ESPHome connection and HA Dial integration
+before treating this as a firmware crash. Native API connectivity and HA scene readiness are
+separate states.
+
+An ordinary hardware restart or power cycle preserves saved network configuration. ESPHome OTA
+already provides safe mode after repeated failed boots, with networking and OTA available for
+recovery. A local maintenance menu and explicit Restart/Safe mode buttons are planned in BACKLOG.md.

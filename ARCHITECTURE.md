@@ -73,6 +73,30 @@ antialiased masks or bitmaps. Device fonts are reserved for the compiled fallbac
 The scene format is independent of its transport encoding. The current JSON service may later be
 replaced or supplemented without changing which layer owns layout.
 
+The original scenes use version 1 JSON with a 240 × 240 size, background colour, drawing
+elements and touch regions. Elements are circles, straight lines, arcs and pre-rendered text masks.
+The masks use packed two-bit coverage; the device expands them directly to pixels. The card uses
+the same mask pixels and rasterises the supplied primitive geometry on its canvas. Neither side
+chooses scene geometry or font metrics.
+
+Messages carry a strictly increasing revision and are bounded to 24 KiB, including the current
+and previous scenes. HA checks the byte limit before sending. The device rejects stale revisions
+before replacing either scene and acknowledges an applied revision after drawing it. The card
+shows whether it is previewing locally, waiting for the device, awaiting acknowledgement or applied.
+Colours are parsed once into compact values on the device. Both renderers use the same integer
+raster contract and RGB565 quantisation, checked against shared resolved-scene fixtures.
+
+The card editor stores a repeatable page definition or an optional Jinja template that returns the
+page tree. HA validates the result, resolves the current page and compiles its scene; template
+definitions are rendered and tracked as their states change. A draft card uses an isolated preview
+navigator. A configured card sends its definition when mounted outside the Lovelace editor, so
+saving the dashboard deploys the resulting scene to the device.
+
+Drafts have separate preview session identifiers, never write the device's saved definition and
+never call entity services. Preview sessions and their template/state subscriptions are removed
+when their card disconnects. Cards receive scene changes through a WebSocket subscription;
+unrelated Home Assistant state updates do not trigger scene requests.
+
 All incoming scenes are validated before replacing the current scene. An invalid or partial scene
 must leave the previous complete scene visible and report the reason.
 
@@ -170,3 +194,34 @@ The prototype predates this contract. Firmware currently calculates positions fo
 items, labels and the name pill. Move those decisions into the HA scene compiler as each area is
 next changed; do not extend the old pattern. The existing local brightness feedback and compiled
 offline screen are intentional and remain device responsibilities.
+
+
+## Domain expansion (2026-10-27)
+
+Light, switch and cover state/capability interpretation and service dispatch live in HA.
+Switches have no continuous input; covers expose only supported actions and position control.
+Their scenes use the existing renderer contract without adding domain behaviour to firmware.
+Scene version 2 supplies numeric digit atlases and percentage gauges. Both renderers use HA's
+fixed-cell digit masks, colours and gauge geometry; firmware may substitute a local requested
+value until HA acknowledges that input sequence. Device fonts are used only in the fallback UI.
+The firmware accepts version 1 scenes during upgrades; version 2 requires updated firmware.
+
+Continuous brightness and cover input updates locally and emits a final absolute target after
+150 ms of rotary silence. Per-detent callbacks must not redraw synchronously: coalesce a burst
+into one deferred display update, including removal of the inherited prototype redraw callback.
+The HA publisher keeps one in-flight and one replaceable latest scene, and entity commands are
+issued before waiting for display delivery. Acknowledgements include the last device input
+sequence, so delayed responses cannot overwrite a newer local adjustment. HA retains the requested
+target across intermediate entity reports until confirmation; unavailable controls cancel it.
+Physical burst/release responsiveness remains an acceptance check, not a consequence of build RAM
+percentages or unit-test success.
+
+
+## Reconnect and resynchronisation (2026-10-27)
+
+A native API connection can precede HA's event subscription. Treat the device's early `ready`
+message as a useful hint, not the sole reconnect mechanism. The HA adapter listens to ESPHome
+availability and service-registration events and resends its current scene when the transport
+becomes available. A saved-card mount also resends without changing the definition or navigation.
+Disconnect events immediately remove the card's applied claim. These are push callbacks, not a
+new polling loop. Transport subscriptions belong to the HA integration's unload lifecycle.

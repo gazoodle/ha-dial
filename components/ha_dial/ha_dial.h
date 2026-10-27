@@ -1,7 +1,9 @@
 #pragma once
 
 #include <array>
+#include <memory>
 #include <string>
+#include "scene.h"
 
 #include "esphome/components/api/custom_api_device.h"
 #include "esphome/components/display/display.h"
@@ -52,6 +54,8 @@ class HaDial : public Component, public api::CustomAPIDevice, public AsyncWebHan
   int pill_width_{0};
   int pill_height_{0};
   std::array<ViewItem, 8> items_{};
+  SceneHistory scenes_;
+  bool control_available_{true};
   size_t item_count_{0};
   size_t selected_{0};
   float value_{0};
@@ -69,6 +73,7 @@ class HaDial : public Component, public api::CustomAPIDevice, public AsyncWebHan
   bool atlas_upload_error_{false};
   size_t atlas_received_{0};
   uint32_t last_rotate_ms_{0};
+  uint64_t input_sequence_{0};
   RAMUniquePtr<uint8_t[]> atlas_frame_;
   display::Display *display_{nullptr};
   font::Font *font_{nullptr};

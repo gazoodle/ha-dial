@@ -3,8 +3,8 @@
     "step": {
       "user": {
         "title": "HA Dial",
-        "description": "Add the HA-managed navigation and Dial preview card.",
-        "data": { "entity_id": "Light" }
+        "description": "Add HA Dial to configure a dashboard card and deploy its scenes to your Dial.",
+        "data": { "entity_id": "Optional fallback light" }
       }
     },
     "abort": { "already_configured": "HA Dial is already set up." }
@@ -12,9 +12,9 @@
   "options": {
     "step": {
       "init": {
-        "title": "Choose the Dial light",
-        "description": "The first prototype uses one light for its live dimmer control.",
-        "data": { "entity_id": "Light" }
+        "title": "Optional fallback light",
+        "description": "Lights are selected in the HA Dial card page tree. This fallback is only used when a card has no definition.",
+        "data": { "entity_id": "Optional fallback light" }
       }
     }
   },

@@ -23,7 +23,7 @@ class HaDialConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     @callback
-    def async_get_options_flow(_config_entry):
+    def async_get_options_flow(config_entry):
         return HaDialOptionsFlow()
 
 
@@ -39,8 +39,8 @@ class HaDialOptionsFlow(config_entries.OptionsFlow):
 
 def _schema(current=None):
     entity = (
-        vol.Required(CONF_ENTITY_ID, default=current)
+        vol.Optional(CONF_ENTITY_ID, default=current)
         if current
-        else vol.Required(CONF_ENTITY_ID)
+        else vol.Optional(CONF_ENTITY_ID)
     )
     return vol.Schema({entity: EntitySelector(EntitySelectorConfig(domain="light"))})

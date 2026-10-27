@@ -4,6 +4,9 @@
 #include <cmath>
 #include <cstring>
 #include <map>
+#include <cstdlib>
+#include <utility>
+#include <memory>
 
 #include "esphome/components/json/json_util.h"
 #include "esphome/core/log.h"
@@ -18,14 +21,6 @@ static constexpr int MAX_PILL_WIDTH = 150;
 static constexpr int MAX_PILL_HEIGHT = 22;
 static constexpr size_t ATLAS_FRAME_BYTES = 240 * 240 * 2;
 static constexpr const char *ATLAS_FRAME_PATH = "/ha-dial/atlas-frame";
-
-static int hex_value(char value) {
-  if (value >= '0' && value <= '9')
-    return value - '0';
-  if (value >= 'a' && value <= 'f')
-    return value - 'a' + 10;
-  return -1;
-}
 
 void HaDial::setup() {
   this->register_service(&HaDial::show_view, "ha_dial_show_view", {"view"});
@@ -97,11 +92,38 @@ void HaDial::loop() {
 }
 
 void HaDial::show_view(std::string view) {
-  if (view.size() > 4096) {
-    ESP_LOGW(TAG, "Ignoring view larger than 4096 bytes");
+  if (view.size() > MAX_VIEW_BYTES) {
+    ESP_LOGW(TAG, "Ignoring view larger than %u bytes", static_cast<unsigned>(MAX_VIEW_BYTES));
     return;
   }
-  const bool valid = json::parse_json(view, [this](JsonObject root) {
+  std::unique_ptr<SceneBuffer> incoming_scene;
+  std::unique_ptr<SceneBuffer> incoming_previous;
+  uint64_t incoming_revision = 0;
+  bool stale = false;
+  const bool valid = json::parse_json(view, [this, &incoming_scene,
+                                             &incoming_previous, &incoming_revision,
+                                             &stale](JsonObject root) {
+    JsonObject scene = root["scene"].as<JsonObject>();
+    if (!scene.isNull()) {
+      incoming_revision = root["revision"] | uint64_t(0);
+      if (incoming_revision == 0 || incoming_revision <= this->scenes_.revision) {
+        stale = true;
+        return false;
+      }
+      incoming_scene = std::make_unique<SceneBuffer>();
+      if (!parse_scene(scene, *incoming_scene))
+        return false;
+      JsonObject previous = root["previous"].as<JsonObject>();
+      if (!previous.isNull()) {
+        incoming_previous = std::make_unique<SceneBuffer>();
+        if (!parse_scene(previous, *incoming_previous))
+          return false;
+      }
+      if (this->scenes_.current == nullptr || this->scenes_.current->screen != incoming_scene->screen) {
+        this->value_dirty_ = false;
+        this->value_pending_ = false;
+      }
+    }
     const char *title = root["title"];
     const char *profile = root["profile"];
     const char *unit = root["unit"];
@@ -131,16 +153,20 @@ void HaDial::show_view(std::string view) {
     if (this->step_ <= 0)
       this->step_ = 1;
     this->has_value_ = incoming_has_value;
+    this->control_available_ = root["available"] | true;
+    if (!this->control_available_) this->value_dirty_ = this->value_pending_ = false;
     if (incoming_has_value) {
-      this->confirmed_value_ = std::clamp(incoming_value, this->minimum_, this->maximum_);
-      this->has_confirmed_value_ = true;
-      if (!this->value_dirty_ && !this->value_pending_) {
-        this->value_ = this->confirmed_value_;
-      } else if (std::fabs(this->confirmed_value_ - this->value_) < 0.5f) {
-        this->value_ = this->confirmed_value_;
-        this->value_dirty_ = false;
-        this->value_pending_ = false;
+      const bool pending = root["pending"] | false;
+      if (!pending) {
+        this->confirmed_value_ = std::clamp(incoming_value, this->minimum_, this->maximum_);
+        this->has_confirmed_value_ = true;
       }
+      const uint64_t acknowledged = root["input_sequence"] | uint64_t(0);
+      if (acknowledged >= this->input_sequence_ && !this->value_dirty_) {
+        this->value_ = incoming_value;
+        this->value_pending_ = pending;
+      }
+      this->input_sequence_ = std::max(this->input_sequence_, acknowledged);
     } else {
       this->has_confirmed_value_ = false;
       this->value_dirty_ = false;
@@ -169,12 +195,19 @@ void HaDial::show_view(std::string view) {
     return true;
   });
   if (!valid) {
-    ESP_LOGW(TAG, "Ignoring invalid view JSON");
+    if (stale) ESP_LOGD(TAG, "Ignoring stale scene revision");
+    else ESP_LOGW(TAG, "Ignoring invalid view JSON");
     return;
+  }
+  if (incoming_scene) {
+    this->scenes_.apply(incoming_revision, std::move(incoming_scene), std::move(incoming_previous));
   }
   this->atlas_received_ = 0;
   if (this->display_ != nullptr)
     this->display_->update();
+  if (incoming_revision != 0)
+    this->fire_homeassistant_event("esphome.ha_dial_scene_status",
+                                  {{"device", this->device_}, {"revision", std::to_string(incoming_revision)}});
 }
 
 void HaDial::draw(display::Display &it) {
@@ -186,6 +219,11 @@ void HaDial::draw(display::Display &it) {
                        Color(((rgb565 >> 11) & 0x1F) * 255 / 31,
                              ((rgb565 >> 5) & 0x3F) * 255 / 63, (rgb565 & 0x1F) * 255 / 31));
     }
+    return;
+  }
+  if (this->scenes_.current != nullptr && this->scenes_.current->valid) {
+    draw_scene(it, *this->scenes_.current,
+               this->has_value_ && (this->value_dirty_ || this->value_pending_) ? this->value_ : -1);
     return;
   }
   it.fill(Color::BLACK);
@@ -242,15 +280,22 @@ void HaDial::draw_pill_(display::Display &it) {
 }
 
 void HaDial::rotate(int direction) {
+  if (this->scenes_.current && !this->has_value_) {
+    this->send_input_(direction < 0 ? "rotate_left" : "rotate_right");
+    return;
+  }
+  if (!this->control_available_) return;
   if (this->item_count_ == 0) {
     if (this->has_value_) {
       this->value_ = std::clamp(this->value_ + (direction < 0 ? -this->step_ : this->step_),
                                 this->minimum_, this->maximum_);
+      ++this->input_sequence_;
       this->value_dirty_ = true;
       this->value_pending_ = false;
       this->last_rotate_ms_ = millis();
-      if (this->display_ != nullptr)
-        this->display_->update();
+      this->defer("rotary-draw", [this]() {
+        if (this->display_ != nullptr) this->display_->update();
+      });
     }
     return;
   }
@@ -268,10 +313,36 @@ void HaDial::press() {
 
 void HaDial::back() {
   this->flush_value_();
+  if (this->scenes_.back()) {
+    this->has_value_ = false;
+    this->value_pending_ = this->value_dirty_ = false;
+    this->item_count_ = 0;
+    if (this->display_ != nullptr)
+      this->display_->update();
+  }
   this->send_input_("back");
 }
 
 void HaDial::touch(int x, int y) {
+  if (this->scenes_.current != nullptr && this->scenes_.current->valid) {
+    for (size_t index = 0; index < this->scenes_.current->region_count; index++) {
+      const auto &region = this->scenes_.current->regions[index];
+      if ((x - region.x) * (x - region.x) + (y - region.y) * (y - region.y) >
+          region.radius * region.radius)
+        continue;
+      if (region.id == "back") {
+        this->back();
+      } else if (region.id == "home") {
+        this->send_input_("home");
+      } else if (region.id == "control") {
+        this->press();
+      } else {
+        this->send_input_("touch", region.id);
+      }
+      return;
+    }
+    return;
+  }
   const int center_distance = (x - 120) * (x - 120) + (y - 120) * (y - 120);
   if (this->has_back_ && center_distance < 45 * 45) {
     this->back();
@@ -303,11 +374,12 @@ void HaDial::send_input_(const std::string &action, const std::string &item,
                          const std::string &value) {
   if (!this->is_connected())
     return;
+  ++this->input_sequence_;
   this->fire_homeassistant_event("esphome.ha_dial_input",
                                  {{"device", this->device_},
                                   {"action", action},
                                   {"item", item},
-                                  {"value", value}});
+                                  {"value", value}, {"sequence", std::to_string(this->input_sequence_)}});
 }
 
 }  // namespace esphome::ha_dial
