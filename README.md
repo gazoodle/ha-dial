@@ -219,6 +219,10 @@ Hardware definitions should begin with M5Stack’s current ESPHome configuration
 
 ## Prototype firmware
 
+Firmware and HA Dial Server now have independent calendar versions. See
+[Versioning](#versioning) for the sources and bump commands. ESPHome exposes **Firmware Version**
+as a diagnostic text sensor; project metadata and the startup screen use the same value.
+
 The first USB prototype displays **Hello** in the centre and moves a pointer around the edge as the encoder turns. It deliberately has no Wi-Fi, Home Assistant API or device-specific configuration yet.
 
 The connected prototype is `firmware/ha-dial-connected.yaml`. It adds the reusable external component, native API, OTA updates, encoder button and FT5x06 touch input. The HA integration binds its navigation to one configured light: turning sets brightness, pressing toggles power, and external state changes return to both the card and Dial. The base hardware test remains network-free.
@@ -239,7 +243,7 @@ The development host serves the repository to ESPHome and mirrors the integratio
 tools/serve
 ```
 
-On the first deployment, restart Home Assistant manually and then add the HA Dial integration under **Settings → Devices & services**. The card is registered automatically; add it to a dashboard, choose the ESPHome device name, and add subpages with per-page themes and light, switch or cover controls. The optional advanced template field supports reusable Jinja macros. This example builds Home → Ground floor → Office → a light:
+On the first deployment, restart Home Assistant manually, then follow [Getting started](#getting-started). Add **HA Dial Server** once for all Dials; each **HA Dial** dashboard card configures one Dial. Later integration updates raise a restart Repair. The optional advanced template field supports reusable Jinja macros. This example builds Home → Ground floor → Office → a light:
 
 ```yaml
 type: custom:ha-dial-card
@@ -353,14 +357,140 @@ For template leaves, omit profile/style to infer the domain defaults, or use `di
 `CTL-COVER-INSTRUMENT`. Page themes inherit through the compiled tree.
 
 
-### Reconnect and recovery
+## Getting started
 
-The HA adapter resends the current scene when ESPHome becomes available. Refreshing a saved card
-also resynchronises it without returning to Home or rewriting the definition. If the API is
-reachable but the display says Waiting for HA, check the ESPHome connection and HA Dial integration
-before treating this as a firmware crash. Native API connectivity and HA scene readiness are
-separate states.
+The firmware and HA custom integration must already be installed. On the first integration
+installation, restart HA once so it can load the custom integration. Later integration updates
+raise a restart Repair. Each Dial needs a distinct ESPHome device name.
 
-An ordinary hardware restart or power cycle preserves saved network configuration. ESPHome OTA
-already provides safe mode after repeated failed boots, with networking and OTA available for
-recovery. A local maintenance menu and explicit Restart/Safe mode buttons are planned in BACKLOG.md.
+1. **Join Wi-Fi.** On the Dial's Needs Wi-Fi screen, find its setup network, password and
+   portal address. Join that network and enter your Wi-Fi credentials in the portal. If the
+   portal does not open automatically, use the address displayed on the Dial. The Dial shows
+   its selected network while connecting, never the network password.
+2. **Add the ESPHome device to HA.** Once Wi-Fi connects, use the displayed IP in HA under
+   **Settings → Devices & services → Add integration → ESPHome**. On the same LAN/subnet,
+   automatic discovery is expected when mDNS multicast is allowed. Across subnets/VLANs,
+   manual addition is normal unless mDNS is forwarded. In the ESPHome device's options,
+   enable **Allow the device to perform Home Assistant actions** so it can send input events.
+3. **Add HA Dial Server once.** Under **Settings → Devices & services → Add integration**,
+   choose **HA Dial Server**. It manages screen definitions, navigation and controls for all
+   your Dials. This is separate from adding each physical device through ESPHome. The server
+   waits for a card to supply a screen; an API connection alone is not a configured Dial.
+4. **Refresh your browser.** Refresh the HA page after adding the server. This made the card
+   appear in the verified first-run walkthrough; adding the integration did not require an
+   HA restart.
+5. **Add the HA Dial card.** Open your dashboard, choose **Edit dashboard → Add card**, search
+   for **HA Dial** and choose it. Select your installed Dial from the **Dial device** dropdown;
+   **Preview** keeps the simulation local. The list uses compatible ESPHome screen actions,
+   excluding unrelated devices. An unavailable saved target remains selected and labelled.
+6. **Configure and save.** Expand Home, add a light, switch or cover, and add subpages if
+   needed. Save the card and finish editing the dashboard. The saved card sends its screen
+   to the Dial; editor drafts stay local. Check the card's deployment status and the physical
+   screen, then test one deliberate control action. Use one saved card per Dial to avoid
+   different cards sending competing definitions.
+
+The Dial distinguishes Wi-Fi, ESPHome API connectivity and receipt of an HA screen. A waiting
+screen with the API connected asks you to add HA Dial Server and then its dashboard card.
+Unconfigured Dials do not receive a placeholder menu from a ready event. On connection loss,
+the compiled setup interface replaces the cached scene. Touch faults have a separate message.
+
+### Preview size
+
+Set **Preview zoom (%)** in the card editor from 100% to 300% to enlarge the Dial on the
+dashboard. The preview fits the available card width; give the card more dashboard columns
+when necessary. YAML uses `zoom: 200` for twice the default maximum width. This changes
+only the browser preview size; the physical Dial and resolved scene stay at 240 × 240.
+
+### What resets and removals retain
+
+Screen definitions live in HA. Runtime scenes on the Dial are volatile; a device factory reset
+cannot erase HA's definitions or the configuration stored in a dashboard card.
+
+| Action | Result |
+| --- | --- |
+| Ordinary Dial restart or HA restart | Preserves Wi-Fi and saved HA definitions. HA resends the screen after reconnection. |
+| Local Wi-Fi reset | Clears the Dial's saved network credentials. HA definitions and dashboard cards remain. |
+| ESPHome Factory Reset button | Erases all ESPHome preferences, including provisioned Wi-Fi. HA definitions and dashboard cards remain. |
+| Remove a Dial's ESPHome integration entry | Removes its connection from HA. HA Dial Server definitions and cards remain. |
+| Remove HA Dial Server | Deletes the server's saved definitions for **all Dials**. Device Wi-Fi and dashboard cards remain. |
+| Remove a dashboard card | Removes that card's configuration. The last saved definition remains in HA Dial Server, so the Dial can keep working without an open dashboard. |
+
+**To change one Dial's setup**, edit its card, remove unwanted pages/controls, and save the new
+configuration. This replaces its saved definition without affecting other Dials.
+
+With the paired 0.4.0 firmware, server unload also clears the live device screen and shows
+setup guidance even if ESPHome stays connected. A later complete scene replaces that guidance.
+If the clear cannot be delivered, HA logs the failure; a disconnected Dial uses its local
+fallback interface. Older firmware needs the matching update for this explicit clear command.
+
+**To start the server completely fresh**, first remove old cards or change their target to
+Preview on every relevant dashboard, then remove HA Dial Server and add it again. A saved
+card opened after reinstalling the server can send its configuration again. Leave an old card
+in place only if that restoration is intended. Card commands are rejected while the server is
+unloaded, so they cannot recreate its deleted definitions before it is re-added.
+
+### Recovery
+
+To change or clear saved Wi-Fi locally, hold the front button for 5–60 seconds and release.
+The screen asks **Reset Wi-Fi?** Press briefly to confirm, turn to cancel, or wait 15 seconds.
+The hold does not send a control press. Ordinary short presses act on release.
+
+A failed connection reopens the standard ESPHome recovery portal after 30 seconds; driver
+failure reasons are shown when available. Wi-Fi and API reboot timeouts are disabled so setup
+remains available while HA is unreachable. Reopening the portal and the displayed layout
+still require failure-path checks on the physical Dial.
+
+HA's ESPHome device tools expose **Restart**, **Restart in Safe Mode** and **Factory Reset**.
+Safe Mode and Factory Reset are disabled by default. Restart preserves settings; Safe Mode
+reboots with networking and OTA for recovery. Factory Reset erases the device preferences and
+requires Wi-Fi provisioning again. Neither recovery route removes HA dashboard cards.
+
+The HA adapter resends the current scene when ESPHome becomes available. Refreshing a saved
+card also resynchronises it without returning Home or changing its saved definition. If the
+API is reachable but no screen arrives, check HA Dial Server and the card's deployment status.
+
+A firmware-owned local Settings menu and its availability policy remain planned. The baseline
+uses ESPHome's [standard captive portal](https://esphome.io/components/captive_portal/).
+Improv Serial/BLE remain alternatives to investigate after the baseline is verified on hardware.
+
+## Versioning
+
+The integration and firmware follow Casa Mia's numbering independently: `YYYY.M.R-bN` for
+private builds and `YYYY.M.R` for releases. The month is unpadded, as in HA. Both were migrated
+from 0.x to their own `2026.10.1-b1` build on 2026-10-29; matching initial numbers do not couple
+future changes.
+
+| Component | Canonical version | Changelog |
+| --- | --- | --- |
+| HA Dial Server, including its card | `pyproject.toml` | `CHANGELOG.md` |
+| Firmware | `firmware/version.yaml` | `firmware/CHANGELOG.md` |
+
+Before editing a component's runtime files, bump that component:
+
+```shell
+.venv/bin/python tools/versioning.py bump integration
+.venv/bin/python tools/versioning.py bump firmware
+```
+
+The command increments the build only if HEAD already contains the current version. Repeated
+edits in the same uncommitted build keep its number. Commit the version with the work before
+starting the next build cycle. A private build increments bN even if the month changes. After
+a release, the next build advances the release number in the same month, or starts the new
+month's release 1 at b1. Add that build's notes under the generated changelog heading; breaking
+changes come first and explain what the user must do.
+
+The tool stamps the integration manifest from `pyproject.toml`; do not edit the manifest's
+version by hand. The card cache key and restart Repair use that installed manifest. Firmware
+uses its version substitution for the ESPHome project identity, startup screen and diagnostic
+**Firmware Version** text sensor. The sensor publishes once at boot; it does not poll.
+
+```shell
+.venv/bin/python tools/versioning.py check integration
+.venv/bin/python tools/versioning.py check firmware
+.venv/bin/python tools/versioning.py sync integration
+```
+
+Compile/deploy tools check the relevant version and metadata before proceeding. Only promote
+a release when the owner requests it, using `release integration` or `release firmware` in
+place of `bump`. This removes bN, uses the current month if it changed, and combines the build
+notes. It does not create a Git tag, publish or deploy anything.

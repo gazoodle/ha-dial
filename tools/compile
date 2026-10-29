@@ -8,9 +8,10 @@ case "$config" in
   ha-dial.yaml|ha-dial-connected.yaml) ;;
   *) echo "usage: tools/compile [ha-dial.yaml|ha-dial-connected.yaml]" >&2; exit 2 ;;
 esac
+"$repo/.venv/bin/python" "$repo/tools/versioning.py" check firmware
 mkdir -p "$work/firmware" "$work/components/ha_dial"
 cp "$repo/firmware/ha-dial.yaml" "$repo/firmware/ha-dial-connected.yaml" \
-  "$repo/firmware/pointer.h" "$work/firmware/"
+  "$repo/firmware/pointer.h" "$repo/firmware/version.yaml" "$work/firmware/"
 cp "$repo/components/ha_dial/"*.py "$repo/components/ha_dial/"*.h \
   "$repo/components/ha_dial/"*.cpp "$work/components/ha_dial/"
 cd "$work"

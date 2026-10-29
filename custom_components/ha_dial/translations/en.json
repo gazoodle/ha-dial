@@ -2,30 +2,33 @@
   "config": {
     "step": {
       "user": {
-        "title": "HA Dial",
-        "description": "Add HA Dial to configure a dashboard card and deploy its scenes to your Dial.",
-        "data": { "entity_id": "Optional fallback light" }
+        "title": "HA Dial Server",
+        "description": "Add one HA Dial Server for all your Dials. Each physical Dial must first be added through the ESPHome integration. Enable Allow the device to perform Home Assistant actions in its ESPHome options so the Dial can send input events.\n\nAfter adding the server, refresh your browser. Open a dashboard, choose Edit dashboard → Add card → HA Dial, select your Dial from the dropdown, add its controls and save.\n\nExisting dashboard cards can send their saved setup again when opened. Removing HA Dial Server deletes its saved screen definitions, but leaves dashboard cards unchanged."
       }
     },
-    "abort": { "already_configured": "HA Dial is already set up." }
+    "abort": {
+      "already_configured": "HA Dial Server is already set up. One server manages all your Dials; add another HA Dial dashboard card to configure another Dial."
+    }
   },
   "options": {
     "step": {
       "init": {
         "title": "Optional fallback light",
         "description": "Lights are selected in the HA Dial card page tree. This fallback is only used when a card has no definition.",
-        "data": { "entity_id": "Optional fallback light" }
+        "data": {
+          "entity_id": "Optional fallback light"
+        }
       }
     }
   },
   "issues": {
     "restart_required": {
-      "title": "Restart Home Assistant to finish updating HA Dial",
+      "title": "Restart Home Assistant to finish updating HA Dial Server",
       "fix_flow": {
         "step": {
           "confirm": {
             "title": "Restart Home Assistant",
-            "description": "HA Dial was updated from {from_version} to {to_version}, but Home Assistant is still running {from_version}. Restart Home Assistant to load the update."
+            "description": "HA Dial Server was updated from {from_version} to {to_version}, but Home Assistant is still running {from_version}. Restart Home Assistant to load the update, then refresh your browser."
           }
         }
       }

@@ -31,6 +31,7 @@ def dial(monkeypatch):
         spec = importlib.util.spec_from_file_location(
             full_name, package.__path__[0] + f"/{name}.py"
         )
+        assert spec is not None and spec.loader is not None
         value = importlib.util.module_from_spec(spec)
         monkeypatch.setitem(sys.modules, full_name, value)
         spec.loader.exec_module(value)
@@ -141,9 +142,11 @@ def integration(dial):
         dial.package.__path__[0] + "/__init__.py",
         submodule_search_locations=dial.package.__path__,
     )
+    assert spec is not None and spec.loader is not None
     dial.package.__file__ = spec.origin
     spec.loader.exec_module(dial.package)
     data = {
+        "active": True,
         "navigators": {},
         "definitions": {},
         "definition_sources": {},

@@ -50,4 +50,22 @@ int main() {
   assert(history.current->screen == "parent");
   assert(history.apply(3, std::make_unique<SceneBuffer>(), nullptr));
   assert(!history.previous);
+  assert(history.apply(4, nullptr, nullptr));
+  assert(!history.current && !history.previous);
+  assert(!history.apply(3, std::make_unique<SceneBuffer>(), nullptr));
+  assert(history.apply(5, std::make_unique<SceneBuffer>(), nullptr));
+  uint64_t clear_revision = 0;
+  assert(!ArduinoJson::deserializeJson(document, "{\"revision\":6,\"clear\":true}"));
+  assert(parse_clear_request(document.as<JsonObject>(), history.revision, clear_revision));
+  assert(history.apply(clear_revision, nullptr, nullptr));
+  assert(!parse_clear_request(document.as<JsonObject>(), history.revision, clear_revision));
+  for (const char *invalid : {"{}", "{\"clear\":true}", "{\"clear\":1,\"revision\":7}",
+                             "{\"clear\":true,\"revision\":\"7\"}",
+                             "{\"clear\":true,\"revision\":-1}",
+                             "{\"clear\":true,\"revision\":7,\"scene\":{}}",
+                             "{\"clear\":true,\"revision\":7,\"previous\":{}}"}) {
+    assert(!ArduinoJson::deserializeJson(document, invalid));
+    assert(!parse_clear_request(document.as<JsonObject>(), history.revision, clear_revision));
+    assert(clear_revision == 6);
+  }
 }

@@ -12,8 +12,8 @@ STYLES = {"NAV-ORBIT", *(value[1] for value in CONTROL_TYPES.values())}
 
 
 def build_definition(hass, pages: list, default_theme: str) -> dict:
-    if not isinstance(pages, list) or not pages or len(pages) > 64:
-        raise ValueError("Add between 1 and 64 pages")
+    if not isinstance(pages, list) or not pages:
+        raise ValueError("Add at least one page")
     by_id = {}
     for page in pages:
         if not isinstance(page, dict):
@@ -124,12 +124,7 @@ def validate_definition(definition: dict) -> None:
     ):
         raise ValueError("Root page needs a title of at most 64 characters")
 
-    count = 0
-
-    def check_page(page: dict, depth: int) -> None:
-        nonlocal count
-        if depth > 8:
-            raise ValueError("Page tree cannot exceed 8 levels")
+    def check_page(page: dict) -> None:
         if page.get("theme", "ember") not in THEMES:
             raise ValueError("Unknown page theme")
         if page.get("style", "NAV-ORBIT") != "NAV-ORBIT":
@@ -139,9 +134,6 @@ def validate_definition(definition: dict) -> None:
             raise ValueError("Each page must have at most 8 items")
         ids: set[str] = set()
         for item in items:
-            count += 1
-            if count > 64:
-                raise ValueError("Page tree cannot exceed 64 items")
             if not isinstance(item, dict):
                 raise TypeError("Each page item must be an object")
             if (
@@ -182,7 +174,6 @@ def validate_definition(definition: dict) -> None:
                         "theme": item.get("theme", page.get("theme", "ember")),
                         "style": item.get("style", page.get("style", "NAV-ORBIT")),
                     },
-                    depth + 1,
                 )
             else:
                 entity = item.get("entity_id")
@@ -207,7 +198,7 @@ def validate_definition(definition: dict) -> None:
                 if item.get("style", style) != style:
                     raise ValueError(f"{domain.title()} controls must use {style}")
 
-    check_page(tree, 1)
+    check_page(tree)
 
 
 def leaf_items(tree: dict):

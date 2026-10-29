@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -58,6 +59,15 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"Home Assistant config folder does not exist: {config}")
 
     destination = config / "custom_components" / "ha_dial"
+    subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).with_name("versioning.py")),
+            "check",
+            "integration",
+        ],
+        check=True,
+    )
     status = install(SOURCE, destination)
     _LOGGER.info("HA Dial integration: %s at %s", status, destination)
     if status == "installed":

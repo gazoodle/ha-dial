@@ -18,15 +18,18 @@ def test_pages_empty_layers_and_validation(dial):
         definition.build_definition(
             hass, pages + [{"id": "loop", "title": "Loop", "parent": "loop"}], "ember"
         )
-    with pytest.raises(ValueError, match="8 levels"):
-        definition.build_definition(
-            hass,
-            [
-                {"id": str(i), "title": "Demo", "parent": str(i - 1) if i else ""}
-                for i in range(9)
-            ],
-            "ember",
-        )
+    deep = definition.build_definition(
+        hass,
+        [
+            {"id": str(i), "title": "Demo", "parent": str(i - 1) if i else ""}
+            for i in range(9)
+        ],
+        "ember",
+    )
+    page = deep["tree"]
+    for i in range(1, 9):
+        page = page["items"][0] if "items" in page else page["children"][0]
+        assert page["id"] == str(i)
 
 
 def test_navigation_ids_survive_reordering_and_long_root(dial):

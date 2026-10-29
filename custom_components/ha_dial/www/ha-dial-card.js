@@ -23,7 +23,9 @@ class HaDialCard extends HTMLElement {
   setConfig(config) {
     const device = String(config.device || "preview").replaceAll("-", "_");
     if (!/^[a-z0-9_]{1,64}$/.test(device)) throw new Error("Invalid HA Dial device name");
-    const next = { ...config, device };
+    const zoom = config.zoom ?? 100;
+    if (!Number.isFinite(zoom) || zoom < 100 || zoom > 300) throw new Error("Preview zoom must be between 100 and 300 percent");
+    const next = { ...config, device, zoom };
     if (JSON.stringify(next) !== JSON.stringify(this.config)) this.configVersion++;
     this.config = next;
     if (!this.shadowRoot) {
@@ -40,6 +42,7 @@ class HaDialCard extends HTMLElement {
         if (action) { event.preventDefault(); this.input(action); }
       });
     }
+    this.shadowRoot.querySelector("ha-card").style.setProperty("--dial-card-width", `${360 * zoom / 100}px`);
     this.load();
   }
 
@@ -143,17 +146,17 @@ class HaDialCard extends HTMLElement {
     }
   }
 
-  getCardSize() { return 5; }
+  getCardSize() { return Math.ceil(5 * (this.config?.zoom ?? 100) / 100); }
   static getConfigElement() { return document.createElement("ha-dial-card-editor"); }
   static getStubConfig() {
     return defaultConfig();
   }
 
   static styles = `
-    ha-card { display:block; width:min(100%,360px); margin-inline:auto; overflow:hidden; background:radial-gradient(circle at 50% 24%,#3d4248,#16181b 70%); }
+    ha-card { display:block; width:min(100%,var(--dial-card-width,360px)); margin-inline:auto; overflow:hidden; background:radial-gradient(circle at 50% 24%,#3d4248,#16181b 70%); }
     .stage { position:relative; width:100%; aspect-ratio:1; display:grid; place-items:center; padding:22px 22px 48px; box-sizing:border-box; }
     [role=status] { position:absolute; bottom:20px; left:80px; right:80px; margin:0; text-align:center; font-size:11px; line-height:16px; overflow-wrap:anywhere; }
-    .dial { position:relative; width:min(86%,340px); aspect-ratio:472/475; }
+    .dial { position:relative; width:86%; aspect-ratio:472/475; }
     /* Visible artwork bounds at alpha > 8: (37,1)–(509,476) in the 512 px asset. */
     .frame { position:absolute; left:-7.839%; top:-.211%; display:block; width:108.475%; height:auto; pointer-events:none; }
     canvas { position:absolute; left:15.148%; top:15.263%; display:block; width:69.703%; height:auto; aspect-ratio:1; border-radius:50%; }

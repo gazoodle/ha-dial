@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
+import { webcrypto } from "node:crypto";
+
+// Ordinary HTTP exposes getRandomValues but not randomUUID.
+Object.defineProperty(globalThis, "crypto", { configurable: true, value: { getRandomValues: webcrypto.getRandomValues.bind(webcrypto) } });
 
 class Element {
-  constructor(tag = "div") { this.tag = tag; this.isConnected = false; this.elements = {}; this.children = []; this.dataset = {}; this.events = {}; this.classes = new Set(); this.classList = { add: (...names) => names.forEach((name) => this.classes.add(name)), remove: (...names) => names.forEach((name) => this.classes.delete(name)), contains: (name) => this.classes.has(name) }; }
+  constructor(tag = "div") { this.style = { setProperty(name, value) { this[name] = value; } }; this.tag = tag; this.isConnected = false; this.elements = {}; this.children = []; this.dataset = {}; this.events = {}; this.classes = new Set(); this.classList = { add: (...names) => names.forEach((name) => this.classes.add(name)), remove: (...names) => names.forEach((name) => this.classes.delete(name)), contains: (name) => this.classes.has(name) }; }
   set textContent(value) { this.firstChild = { textContent: value }; }
   get textContent() { return this.firstChild?.textContent; }
   focus() {}
@@ -15,12 +19,15 @@ class Element {
   hasPointerCapture(id) { return this.pointer === id; }
   releasePointerCapture() { this.pointer = undefined; }
   setAttribute(name, value) { this[name] = value; }
-  append(...nodes) { this.children.push(...nodes); }
+  append(...nodes) { for (const node of nodes) { node.parentNode = this; this.children.push(node); } }
+  contains(node) { return this === node || this.children.some((child) => child.contains(node)); }
+  remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((node) => node !== this); this.parentNode = undefined; }
   replaceChildren() { this.children = []; }
   querySelectorAll(selector) {
+    if (selector === ".tree ha-form") return this.querySelector(".tree").querySelectorAll("ha-form");
     const result = [];
     const visit = (node) => {
-      if ((selector === "details[open]" && node.tag === "details" && node.open) || (selector === "ha-form" && node.tag === "ha-form")) result.push(node);
+      if (((selector === "details" || selector === "details[open]" && node.open) && node.tag === "details") || (selector === "ha-form" && node.tag === "ha-form")) result.push(node);
       for (const child of node.children) visit(child);
     };
     visit(this); return result;
@@ -43,13 +50,32 @@ vm.runInThisContext(fs.readFileSync("custom_components/ha_dial/www/ha-dial-card.
 const Editor = classes.get("ha-dial-card-editor"), Card = classes.get("ha-dial-card");
 const editor = new Editor(); editor.setConfig({}); editor.hass = {};
 assert.equal(editor.config.pages.length, 1);
-editor.addPage("home");
+const deviceOptions = () => editor.querySelector(".settings").schema[0].selector.select.options;
+assert.deepEqual(deviceOptions(), [{value:"preview",label:"Preview"}]);
+const dialServices = { demo_dial_ha_dial_show_view: {}, other_dial_ha_dial_show_view: {}, unrelated_restart: {} };
+editor.hass = { services: { esphome: dialServices } };
+assert.deepEqual(deviceOptions(), [
+  {value:"preview",label:"Preview"}, {value:"demo_dial",label:"demo-dial"}, {value:"other_dial",label:"other-dial"},
+]);
+const deviceSchema = editor.querySelector(".settings").schema;
+editor.hass = { services: { esphome: dialServices }, states: {} };
+assert.equal(editor.querySelector(".settings").schema, deviceSchema, "unrelated state changes do not rebuild the selector");
+editor.setConfig({device:"demo-dial"});
+assert.equal(deviceOptions()[1].value, "demo-dial", "existing hyphenated device names remain selected");
+editor.hass = { services: { esphome: {other_dial_ha_dial_show_view:{}} } };
+assert.deepEqual(deviceOptions().at(-1), {value:"demo-dial",label:"demo-dial (unavailable)"});
+assert.equal(editor.config.device, "demo-dial", "discovery changes must not retarget the card");
+editor.querySelector(".settings").events["value-changed"]({stopPropagation(){},detail:{value:{device:"other_dial"}}});
+assert.equal(editor.lastEvent.detail.config.device, "other_dial");
+editor.setConfig({});
+editor.querySelector(".tree").children[0].children[1].children.find((node) => node.textContent === "Add subpage").events.click();
 const child = editor.config.pages[1];
 assert.equal(child.parent, "home");
 assert(child.id.startsWith("page_"));
+assert.equal(editor.lastEvent.detail.config.pages[1].id, child.id);
 editor.addPage(child.id);
 const treeForms = editor.querySelector(".tree").querySelectorAll("ha-form");
-assert.equal(treeForms.length, 6);
+assert.equal(treeForms.length, 4, "a closed grandchild has no controls");
 assert(treeForms.every((form) => !form.schema.some((field) => field.name === "parent")));
 assert.deepEqual(treeForms[1].schema[0].selector.entity.filter.domain, ["light", "switch", "cover"]);
 const grandchild = editor.config.pages[2];
@@ -92,11 +118,59 @@ assert(!editor.querySelector(".tree").classList.contains("dragging"));
 assert.equal(window.customCards[0].preview, true);
 assert(Card.styles.includes(".frame"));
 // Removing a page preserves its children by moving them up one level.
-const childRow = editor.querySelector(".tree").children[0].children.at(-1).children[0];
-childRow.children.find((node) => node.textContent === "Remove page").events.click();
+const childRow = editor.querySelector(".tree").children[0].children[1].children.at(-1).children[0];
+childRow.children[1].children.find((node) => node.textContent === "Remove page").events.click();
 assert.equal(editor.config.pages.length, 2);
 assert.equal(editor.config.pages[1].parent, "home");
 
+// The complete four-level definition stays data; only expanded pages mount forms.
+const large = new Editor();
+const pages = [{id:"home",title:"Home",parent:""}];
+const branch = (parent, depth) => {
+  if (depth === 4) return;
+  for (let n = 1; n <= [5,6,5,6][depth]; n++) {
+    const id = `${parent}_${n}`;
+    pages.push({id,title:id,parent}); branch(id, depth + 1);
+  }
+};
+branch("home", 0);
+assert.equal(pages.length, 1086);
+large.setConfig({pages}); large.hass = {states:{}};
+const largeTree = large.querySelector(".tree");
+assert.equal(largeTree.querySelectorAll("ha-form").length, 2);
+assert.equal(largeTree.querySelectorAll("details").length, 6);
+const toggle = (row, open) => { row.open = open; row.events.toggle(); };
+const first = largeTree.querySelectorAll("details")[1];
+toggle(first, true);
+assert.equal(largeTree.querySelectorAll("ha-form").length, 4);
+assert.equal(largeTree.querySelectorAll("details").length, 12);
+const nested = first.querySelectorAll("details")[1];
+toggle(nested, true);
+const titleForm = nested.querySelectorAll("ha-form")[0];
+titleForm.events["value-changed"]({stopPropagation(){},detail:{value:{title:"Edited"}}});
+toggle(first, false);
+assert.equal(largeTree.querySelectorAll("ha-form").length, 2);
+const hiddenHass = titleForm.hass;
+large.hass = {states:{"light.example":{}}};
+assert.equal(titleForm.hass, hiddenHass, "unmounted forms receive no HA updates");
+toggle(first, true);
+assert.equal(largeTree.querySelectorAll("ha-form").length, 6, "descendant expansion survives collapse");
+assert.equal(first.querySelectorAll("ha-form")[2].data.title, "Edited");
+large.renderTree();
+assert.equal(largeTree.querySelectorAll("ha-form").length, 6, "rebuild preserves expansion");
+toggle(largeTree.children[0], false);
+large.renderTree();
+assert.equal(largeTree.querySelectorAll("ha-form").length, 0, "a closed root stays closed");
+assert.equal(large.config.pages.length, 1086, "unmounting never removes configuration");
+
+const zoomCard = new Card();
+zoomCard.setConfig({device:"preview",zoom:200});
+assert.equal(zoomCard.shadowRoot.querySelector("ha-card").style["--dial-card-width"], "720px");
+assert.equal(zoomCard.getCardSize(), 10);
+assert(!("zoom" in zoomCard._definition()), "zoom is presentation only");
+zoomCard.setConfig({device:"preview"});
+assert.equal(zoomCard.shadowRoot.querySelector("ha-card").style["--dial-card-width"], "360px");
+for (const zoom of [99,301,NaN,Infinity,"200"]) assert.throws(() => zoomCard.setConfig({zoom}), /Preview zoom/);
 const card = new Card(); card.setConfig({ device: "demo_dial" });
 assert(!card.shadowRoot.innerHTML.includes('class="controls"'));
 assert(card.shadowRoot.innerHTML.includes('class="click-chip"'));

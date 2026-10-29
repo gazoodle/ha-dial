@@ -2,6 +2,36 @@ Read `AGENTS.core.md` before working in this repository.
 
 # Project instructions
 
+## Independent versions — Casa Mia rules (2026-10-29)
+
+Firmware and HA Dial Server have separate versions. Before changing runtime code, run
+`.venv/bin/python tools/versioning.py bump firmware` or `bump integration`; run both when
+both components change. The tool bumps only when HEAD already contains that component's
+current version: one build per deployment, not per edit. Commit the version with its changes
+before beginning the next build cycle; never commit without the owner's instruction.
+
+Use Casa Mia's `YYYY.M.R-bN` private builds and `YYYY.M.R` releases, with an unpadded month.
+A private build increments N even across a month change. After a release, the next build
+increments R in the same month, or starts the new month's release 1 at b1. Only the owner
+requests/promotes releases; never run `release`, tag or publish one on your own.
+
+The canonical sources are `pyproject.toml` (integration) and `firmware/version.yaml`
+(firmware). Never hand-edit the generated integration manifest version or put a firmware
+version literal in C++. `sync integration` regenerates the manifest. The firmware substitution
+feeds its project metadata, Firmware Version text sensor and compiled startup screen.
+
+Add notes under the component's version heading in `CHANGELOG.md` or `firmware/CHANGELOG.md`.
+Breaking changes go first, with the user action required. Build/deploy checks reject an
+unbumped runtime change or mismatched metadata. These rules replace the earlier 0.x bumps.
+Why: the owner requested Casa Mia's numbering and bump rules with independently identifiable
+firmware and integration builds, rather than relying on ESPHome compilation timestamps.
+
+## Verify flash targets (2026-10-29)
+
+Verify the intended device's identity before uploading firmware. Never assume a connected USB
+serial device is the Dial; use the confirmed network target for OTA when the Dial is on Wi-Fi.
+Why: an agent selected an unrelated USB stick on 2026-10-29 and incorrectly reported a Dial flash.
+
 Read `ARCHITECTURE.md` before changing rendering, navigation, input handling or the HA/card/device
 protocol. Its ownership and dependency boundaries are project rules.
 

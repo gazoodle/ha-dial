@@ -1,4 +1,5 @@
 #include "ha_dial.h"
+#include <esp_wifi.h>
 
 #include <algorithm>
 #include <cmath>
@@ -23,6 +24,18 @@ static constexpr size_t ATLAS_FRAME_BYTES = 240 * 240 * 2;
 static constexpr const char *ATLAS_FRAME_PATH = "/ha-dial/atlas-frame";
 
 void HaDial::setup() {
+  if (esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &HaDial::network_event_, this,
+                                          &this->wifi_handler_) != ESP_OK ||
+      esp_event_handler_instance_register(IP_EVENT, ESP_EVENT_ANY_ID, &HaDial::network_event_, this,
+                                          &this->ip_handler_) != ESP_OK) {
+    ESP_LOGE(TAG, "Could not subscribe to network status events");
+    this->status_set_error();
+  }
+  this->set_timeout("startup", 0, [this]() {
+    if (this->display_ != nullptr) this->display_->update();
+    this->started_ = true;
+    this->network_changed_ = true;
+  });
   this->register_service(&HaDial::show_view, "ha_dial_show_view", {"view"});
   auto *server = web_server_base::global_web_server_base;
   if (server != nullptr) {
@@ -33,6 +46,10 @@ void HaDial::setup() {
 }
 
 void HaDial::on_shutdown() {
+  if (this->wifi_handler_ != nullptr)
+    esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, this->wifi_handler_);
+  if (this->ip_handler_ != nullptr)
+    esp_event_handler_instance_unregister(IP_EVENT, ESP_EVENT_ANY_ID, this->ip_handler_);
   if (this->web_server_started_ && web_server_base::global_web_server_base != nullptr)
     web_server_base::global_web_server_base->deinit();
 }
@@ -83,7 +100,20 @@ void HaDial::handleRequest(AsyncWebServerRequest *request) {
 }
 
 void HaDial::loop() {
+  if (this->network_changed_.exchange(false)) {
+    // ESPHome applies driver events on its main loop before this deferred redraw.
+    this->set_timeout("network-draw", 100, [this]() {
+      if (this->display_ != nullptr) this->display_->update();
+    });
+  }
   const bool connected = this->is_connected();
+  if (connected != this->was_connected_) {
+    if (!connected) {
+      this->scene_received_ = false;
+      this->value_dirty_ = this->value_pending_ = false;
+    }
+    if (this->display_ != nullptr) this->display_->update();
+  }
   if (connected && !this->was_connected_)
     this->send_input_("ready");
   this->was_connected_ = connected;
@@ -100,10 +130,15 @@ void HaDial::show_view(std::string view) {
   std::unique_ptr<SceneBuffer> incoming_previous;
   uint64_t incoming_revision = 0;
   bool stale = false;
+  bool clear_requested = false;
   const bool valid = json::parse_json(view, [this, &incoming_scene,
                                              &incoming_previous, &incoming_revision,
-                                             &stale](JsonObject root) {
+                                             &stale, &clear_requested](JsonObject root) {
     JsonObject scene = root["scene"].as<JsonObject>();
+    if (!root["clear"].isNull()) {
+      clear_requested = parse_clear_request(root, this->scenes_.revision, incoming_revision);
+      return clear_requested;
+    }
     if (!scene.isNull()) {
       incoming_revision = root["revision"] | uint64_t(0);
       if (incoming_revision == 0 || incoming_revision <= this->scenes_.revision) {
@@ -201,6 +236,12 @@ void HaDial::show_view(std::string view) {
   }
   if (incoming_scene) {
     this->scenes_.apply(incoming_revision, std::move(incoming_scene), std::move(incoming_previous));
+    this->scene_received_ = this->is_connected();
+  }
+  if (clear_requested) {
+    this->scenes_.apply(incoming_revision, nullptr, nullptr);
+    this->scene_received_ = false;
+    this->value_dirty_ = this->value_pending_ = false;
   }
   this->atlas_received_ = 0;
   if (this->display_ != nullptr)
@@ -211,6 +252,10 @@ void HaDial::show_view(std::string view) {
 }
 
 void HaDial::draw(display::Display &it) {
+  if (this->reset_confirmation_) {
+    this->draw_setup_(it);
+    return;
+  }
   if (this->atlas_received_ == ATLAS_FRAME_BYTES && !this->atlas_upload_error_) {
     for (size_t pixel = 0; pixel < 240 * 240; pixel++) {
       const uint16_t rgb565 = static_cast<uint16_t>(this->atlas_frame_[pixel * 2]) << 8 |
@@ -219,6 +264,10 @@ void HaDial::draw(display::Display &it) {
                        Color(((rgb565 >> 11) & 0x1F) * 255 / 31,
                              ((rgb565 >> 5) & 0x3F) * 255 / 63, (rgb565 & 0x1F) * 255 / 31));
     }
+    return;
+  }
+  if (!this->ready_()) {
+    this->draw_setup_(it);
     return;
   }
   if (this->scenes_.current != nullptr && this->scenes_.current->valid) {
@@ -280,6 +329,12 @@ void HaDial::draw_pill_(display::Display &it) {
 }
 
 void HaDial::rotate(int direction) {
+  if (this->reset_confirmation_) {
+    this->reset_confirmation_ = false;
+    if (this->display_ != nullptr) this->display_->update();
+    return;
+  }
+  if (!this->ready_()) return;
   if (this->scenes_.current && !this->has_value_) {
     this->send_input_(direction < 0 ? "rotate_left" : "rotate_right");
     return;
@@ -307,11 +362,26 @@ void HaDial::rotate(int direction) {
 }
 
 void HaDial::press() {
+  if (this->reset_confirmation_) {
+    this->reset_confirmation_ = false;
+    ESP_LOGW(TAG, "Clearing saved Wi-Fi at the device owner's request");
+    auto *wifi = wifi::global_wifi_component;
+    wifi->save_wifi_sta("", "");
+    wifi->disable();
+    wifi->clear_sta();
+    wifi->enable();
+    this->scene_received_ = false;
+    this->wifi_failure_ = 0;
+    this->network_changed_ = true;
+    return;
+  }
+  if (!this->ready_()) return;
   this->flush_value_();
   this->send_input_("press", this->item_count_ == 0 ? "" : this->items_[this->selected_].id);
 }
 
 void HaDial::back() {
+  if (!this->ready_() || this->reset_confirmation_) return;
   this->flush_value_();
   if (this->scenes_.back()) {
     this->has_value_ = false;
@@ -324,6 +394,7 @@ void HaDial::back() {
 }
 
 void HaDial::touch(int x, int y) {
+  if (!this->ready_() || this->reset_confirmation_) return;
   if (this->scenes_.current != nullptr && this->scenes_.current->valid) {
     for (size_t index = 0; index < this->scenes_.current->region_count; index++) {
       const auto &region = this->scenes_.current->regions[index];

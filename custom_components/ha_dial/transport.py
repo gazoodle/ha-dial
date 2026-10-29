@@ -1,10 +1,50 @@
 """Resynchronise scenes from ESPHome lifecycle events, without polling."""
 
+import asyncio
+import json
+import logging
+
 from homeassistant.const import EVENT_SERVICE_REGISTERED
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import DOMAIN
-from .runtime import _is_preview, _navigator, _push
+from .runtime import _is_preview, _navigator, _next_revision, _push
+
+_LOGGER = logging.getLogger(__name__)
+
+
+async def async_clear_views(hass: HomeAssistant) -> None:
+    async def clear(device):
+        if _is_preview(device):
+            return
+        async_dispatcher_send(
+            hass,
+            f"{DOMAIN}_scene_{device}",
+            {"error": "HA Dial Server is restarting or has been removed"},
+        )
+        service = f"{device}_ha_dial_show_view"
+        if not hass.services.has_service("esphome", service):
+            return
+        try:
+            async with asyncio.timeout(2):
+                await hass.services.async_call(
+                    "esphome",
+                    service,
+                    {
+                        "view": json.dumps(
+                            {"revision": _next_revision(hass, device), "clear": True}
+                        )
+                    },
+                    blocking=True,
+                )
+        except (HomeAssistantError, TimeoutError) as error:
+            _LOGGER.warning("Could not clear HA Dial display for %s: %s", device, error)
+
+    await asyncio.gather(
+        *(clear(device) for device in hass.data[DOMAIN].get("navigators", {}))
+    )
 
 
 def watch_transports(hass: HomeAssistant, owner) -> None:

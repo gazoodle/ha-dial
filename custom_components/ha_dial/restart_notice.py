@@ -28,9 +28,9 @@ async def async_check_restart(
     if ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_ID) is None:
         persistent_notification.async_create(
             hass,
-            f"HA Dial code was updated from {loaded_version or 'unknown'} to {to_version}. "
+            f"HA Dial Server code was updated from {loaded_version or 'unknown'} to {to_version}. "
             "Restart Home Assistant to load it.",
-            title="HA Dial: restart Home Assistant",
+            title="HA Dial Server: restart Home Assistant",
             notification_id=NOTIFICATION_ID,
         )
     ir.async_create_issue(

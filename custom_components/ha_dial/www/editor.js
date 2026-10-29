@@ -1,13 +1,9 @@
 export function defaultConfig() {
-  return { device: "preview", theme: "ember", pages: [{ id: "home", title: "Home", parent: "", lights: [] }], template: "" };
+  return { device: "preview", zoom: 100, theme: "ember", pages: [{ id: "home", title: "Home", parent: "", lights: [] }], template: "" };
 }
 
 const THEMES = ["ember", "verdant", "cobalt", "rose", "acid", "alloy"];
 const THEME_SELECTOR = { select: { options: THEMES } };
-const EDITOR_SCHEMA = [
-  { name: "device", selector: { text: {} } },
-  { name: "theme", selector: THEME_SELECTOR },
-];
 
 class HaDialEditor extends HTMLElement {
   setConfig(config) {
@@ -25,9 +21,9 @@ class HaDialEditor extends HTMLElement {
   }
 
   addPage(parent) {
-    const id = "page_" + crypto.randomUUID().replaceAll("-", "").slice(0, 12);
+    const id = "page_" + Array.from(crypto.getRandomValues(new Uint32Array(2))).join("_");
     this.changed({ ...this.config, pages: [...this.config.pages, { id, title: "New page", parent, entities: [] }] });
-    this.renderTree();
+    this.renderTree(parent);
   }
 
   render() {
@@ -57,12 +53,31 @@ class HaDialEditor extends HTMLElement {
     const settings = this.querySelector(".settings"), advanced = this.querySelector(".advanced");
     for (const form of [settings, advanced]) {
       form.hass = this._hass; form.data = this.config;
-      form.computeLabel = (field) => ({ device: "Dial device", theme: "Default page theme", template: "Template" })[field.name] || field.name;
-      form.computeHelper = (field) => ({ device: "ESPHome device name. Use preview for local simulation.", template: "Return a tree object or JSON. Jinja macros and HA custom_templates are supported; pages and theme are available as variables." })[field.name];
+      form.computeLabel = (field) => ({ device: "Dial device", theme: "Default page theme", zoom: "Preview zoom (%)", template: "Template" })[field.name] || field.name;
+      form.computeHelper = (field) => ({ device: "Choose an installed Dial, or Preview for local simulation. Add new Dials through the ESPHome integration.", zoom: "Enlarge the dashboard preview within the available width. The device screen is unchanged.", template: "Return a tree object or JSON. Jinja macros and HA custom_templates are supported; pages and theme are available as variables." })[field.name];
     }
-    settings.schema = EDITOR_SCHEMA;
+    const services = this._hass.services?.esphome;
+    if (!this.settingsSchema || services !== this.deviceServices || this.config.device !== this.deviceSelection) {
+      const suffix = "_ha_dial_show_view";
+      const selected = this.config.device.replaceAll("-", "_");
+      const devices = Object.keys(services || {}).filter((name) => name.endsWith(suffix))
+        .map((name) => name.slice(0, -suffix.length)).filter((device) => /^[a-z0-9_]{1,64}$/.test(device) && device !== "preview" && !device.startsWith("preview_")).sort();
+      const options = [{ value: "preview", label: "Preview" }, ...devices.map((device) => ({
+        value: device === selected ? this.config.device : device, label: device.replaceAll("_", "-"),
+      }))];
+      if (selected !== "preview" && !devices.includes(selected))
+        options.push({ value: this.config.device, label: `${this.config.device} (unavailable)` });
+      this.settingsSchema = [
+        { name: "device", selector: { select: { mode: "dropdown", options } } },
+        { name: "theme", selector: THEME_SELECTOR },
+        { name: "zoom", selector: { number: { min: 100, max: 300, step: 25, mode: "slider" } } },
+      ];
+      this.deviceServices = services;
+      this.deviceSelection = this.config.device;
+    }
+    settings.schema = this.settingsSchema;
     advanced.schema = [{ name: "template", selector: { template: {} } }];
-    const key = JSON.stringify(this.config.pages);
+    const key = this.config.pages === this.treePages ? this.treeKey : JSON.stringify(this.config.pages);
     if (key !== this.treeKey) this.renderTree();
     else for (const form of this.querySelectorAll(".tree ha-form")) form.hass = this._hass;
   }
@@ -160,78 +175,121 @@ class HaDialEditor extends HTMLElement {
     return handle;
   }
 
-  renderTree() {
+  renderTree(openPage) {
     const tree = this.querySelector(".tree");
-    const opened = new Set([...tree.querySelectorAll("details[open]")].map((node) => node.dataset.id));
-    tree.replaceChildren();
     const pages = this.config.pages;
+    const byId = new Map(pages.map((page) => [page.id, page]));
+    const childrenByParent = new Map();
+    for (const page of pages) {
+      if (!childrenByParent.has(page.parent)) childrenByParent.set(page.parent, []);
+      childrenByParent.get(page.parent).push(page);
+    }
+    this.openPages ||= new Set(pages.filter((page) => !page.parent).map((page) => page.id));
+    for (const node of tree.querySelectorAll("details")) {
+      if (node.open) this.openPages.add(node.dataset.id);
+      else this.openPages.delete(node.dataset.id);
+    }
+    if (openPage) this.openPages.add(openPage);
+    for (const id of this.openPages) if (!byId.has(id)) this.openPages.delete(id);
+    tree.replaceChildren();
     const button = (label, callback) => {
       const node = document.createElement("button"); node.type = "button";
       node.textContent = label; node.addEventListener("click", callback); return node;
     };
     const rendered = new Set();
     const row = (page, container) => {
+      page = byId.get(page.id);
       if (rendered.has(page.id)) return;
       rendered.add(page.id);
       const details = document.createElement("details"), summary = document.createElement("summary");
-      details.dataset.id = page.id; details.open = !page.parent || opened.has(page.id);
+      details.dataset.id = page.id; details.open = this.openPages.has(page.id);
       summary.textContent = page.title || "Untitled page";
       summary.dataset.kind = "page"; summary.dataset.id = page.id;
       if (page.parent) summary.append(this.handle({ kind: "page", id: page.id }, "Move " + page.title));
       details.append(summary);
-      const form = document.createElement("ha-form");
-      form.hass = this._hass; form.data = { ...page, entities: [...(page.lights || []), ...(page.entities || [])] };
-      form.schema = [
-        { name: "title", required: true, selector: { text: {} } },
-        { name: "theme", selector: THEME_SELECTOR },
-      ];
-      form.computeLabel = (field) => ({ title: "Page title", parent: "Parent page", theme: "Page theme", entities: "Controls" })[field.name];
-      form.computeHelper = (field) => field.name === "theme" ? "Leave empty to use the default theme." : undefined;
-      form.addEventListener("value-changed", (event) => {
-        event.stopPropagation();
-        const updated = { ...page, ...event.detail.value }; delete updated.lights;
-        if (!updated.theme) delete updated.theme;
-        this.changed({ ...this.config, pages: this.config.pages.map((item) => item.id === page.id ? updated : item) });
-        page = updated;
-        summary.firstChild.textContent = updated.title || "Untitled page";
-        this.treeKey = JSON.stringify(this.config.pages);
+      const body = document.createElement("div");
+      const populate = () => {
+        const form = document.createElement("ha-form");
+        form.hass = this._hass; form.data = { ...page, entities: [...(page.lights || []), ...(page.entities || [])] };
+        form.schema = [
+          { name: "title", required: true, selector: { text: {} } },
+          { name: "theme", selector: THEME_SELECTOR },
+        ];
+        form.computeLabel = (field) => ({ title: "Page title", parent: "Parent page", theme: "Page theme", entities: "Controls" })[field.name];
+        form.computeHelper = (field) => field.name === "theme" ? "Leave empty to use the default theme." : undefined;
+        form.addEventListener("value-changed", (event) => {
+          event.stopPropagation();
+          const updated = { ...page, ...event.detail.value }; delete updated.lights;
+          if (!updated.theme) delete updated.theme;
+          this.changed({ ...this.config, pages: this.config.pages.map((item) => item.id === page.id ? updated : item) });
+          page = updated;
+          byId.set(page.id, updated);
+          summary.firstChild.textContent = updated.title || "Untitled page";
+          this.treeKey = JSON.stringify(this.config.pages);
+          this.treePages = this.config.pages;
+        });
+        const controls = document.createElement("div");
+        for (const entity of [...(page.lights || []), ...(page.entities || [])]) {
+          const control = document.createElement("div"); control.className = "entity";
+          control.dataset.kind = "entity"; control.dataset.page = page.id; control.dataset.id = entity;
+          const label = document.createElement("span"); label.textContent = this._hass.states?.[entity]?.attributes.friendly_name || entity;
+          control.append(this.handle({ kind: "entity", page: page.id, id: entity }, "Move " + label.textContent), label,
+            button("Remove", () => this.setEntities(page.id, this.entities(page.id).filter((id) => id !== entity))));
+          controls.append(control);
+        }
+        const add = document.createElement("ha-form");
+        add.hass = this._hass; add.data = {};
+        add.schema = [{ name: "entity", selector: { entity: { filter: { domain: ["light", "switch", "cover"] } } } }];
+        add.computeLabel = () => "Add control";
+        add.addEventListener("value-changed", (event) => {
+          event.stopPropagation();
+          const entity = event.detail.value.entity;
+          if (entity && !this.entities(page.id).includes(entity)) this.setEntities(page.id, [...this.entities(page.id), entity]);
+        });
+        body.append(form, controls, add, button("Add subpage", () => { details.open = true; this.addPage(page.id); }));
+        if (page.parent) body.append(button("Remove page", () => {
+          const currentPages = this.config.pages;
+          const children = currentPages.filter((candidate) => candidate.parent === page.id);
+          this.changed({ ...this.config, pages: currentPages.filter((candidate) => candidate.id !== page.id).map((candidate) => children.includes(candidate) ? { ...candidate, parent: page.parent } : candidate) });
+          this.renderTree();
+        }));
+        const children = document.createElement("div"); children.className = "children";
+        for (const child of childrenByParent.get(page.id) || []) row(child, children);
+        body.append(children);
+        details.append(body);
+      };
+      details.addEventListener("toggle", () => {
+        if (!tree.contains(details)) return;
+        if (details.open) {
+          this.openPages.add(page.id);
+          if (!body.children.length) populate();
+        } else {
+          this.openPages.delete(page.id);
+          for (const nested of body.querySelectorAll("details")) rendered.delete(nested.dataset.id);
+          body.replaceChildren();
+          body.remove();
+        }
       });
-      const controls = document.createElement("div");
-      for (const entity of [...(page.lights || []), ...(page.entities || [])]) {
-        const control = document.createElement("div"); control.className = "entity";
-        control.dataset.kind = "entity"; control.dataset.page = page.id; control.dataset.id = entity;
-        const label = document.createElement("span"); label.textContent = this._hass.states?.[entity]?.attributes.friendly_name || entity;
-        control.append(this.handle({ kind: "entity", page: page.id, id: entity }, "Move " + label.textContent), label,
-          button("Remove", () => this.setEntities(page.id, this.entities(page.id).filter((id) => id !== entity))));
-        controls.append(control);
-      }
-      const add = document.createElement("ha-form");
-      add.hass = this._hass; add.data = {};
-      add.schema = [{ name: "entity", selector: { entity: { filter: { domain: ["light", "switch", "cover"] } } } }];
-      add.computeLabel = () => "Add control";
-      add.addEventListener("value-changed", (event) => {
-        event.stopPropagation();
-        const entity = event.detail.value.entity;
-        if (entity && !this.entities(page.id).includes(entity)) this.setEntities(page.id, [...this.entities(page.id), entity]);
-      });
-      details.append(form, controls, add, button("Add subpage", () => { details.open = true; this.addPage(page.id); }));
-      if (page.parent) details.append(button("Remove page", () => {
-        const currentPages = this.config.pages;
-        const children = currentPages.filter((candidate) => candidate.parent === page.id);
-        this.changed({ ...this.config, pages: currentPages.filter((candidate) => candidate.id !== page.id).map((candidate) => children.includes(candidate) ? { ...candidate, parent: page.parent } : candidate) });
-        this.renderTree();
-      }));
-      const children = document.createElement("div"); children.className = "children";
-      for (const child of pages.filter((candidate) => candidate.parent === page.id)) row(child, children);
-      details.append(children); container.append(details);
+      container.append(details);
+      if (details.open) populate();
     };
     if (!pages.length) tree.append(button("Add Home page", () => {
       this.changed({ ...this.config, pages: defaultConfig().pages });
       this.renderTree();
     }));
-    for (const page of pages.filter((page) => !page.parent)) row(page, tree);
-    for (const page of pages) if (!rendered.has(page.id)) row(page, tree);
+    // Find disconnected roots without mounting descendants of collapsed pages.
+    const reachable = new Set();
+    const roots = [];
+    const visit = (page) => {
+      if (reachable.has(page.id)) return;
+      reachable.add(page.id);
+      for (const child of childrenByParent.get(page.id) || []) visit(child);
+    };
+    for (const page of pages) if (!page.parent || !byId.has(page.parent)) { roots.push(page); visit(page); }
+    for (const page of pages) if (!reachable.has(page.id)) { roots.push(page); visit(page); }
+    for (const page of roots) row(page, tree);
     this.treeKey = JSON.stringify(pages);
+    this.treePages = pages;
   }
 }
 

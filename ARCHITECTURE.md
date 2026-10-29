@@ -52,6 +52,12 @@ scene element identifiers or raw coordinates supplied by the hardware.
 Firmware also owns a small compiled fallback interface for provisioning, disconnected and fault
 states. That interface is not part of the HA scene and must remain usable without HA.
 
+First-run status uses ESP-IDF network events to redraw after ESPHome applies its connection
+state; it adds no network polling. Wi-Fi association, API connectivity and a scene received in
+the current API connection are separate facts. A cached scene is hidden while disconnected.
+The front button sends a short press on release; a five-second hold opens a local Wi-Fi reset
+confirmation and never sends the current control action. Reset preserves HA-owned definitions.
+
 ### The card owns preview and editing
 
 The card draws the resolved scene on a 240 × 240 canvas. It places that canvas over the existing
@@ -225,3 +231,26 @@ availability and service-registration events and resends its current scene when 
 becomes available. A saved-card mount also resends without changing the definition or navigation.
 Disconnect events immediately remove the card's applied claim. These are push callbacks, not a
 new polling loop. Transport subscriptions belong to the HA integration's unload lifecycle.
+
+## Server lifecycle and saved definitions (2026-10-29)
+
+One HA Dial Server integration manages all Dials. Its internal `ha_dial` domain and the card's
+type remain stable. The server persists definitions in HA so a dashboard need not stay open.
+An ordinary reload/restart restores them. Removing the server deletes its definitions store;
+unloaded server commands reject card requests, and teardown waits for in-flight saves.
+
+On unload, the server sends a revision-checked `{"revision": N, "clear": true}` envelope
+through the existing view transport. Firmware releases both cached scenes, cancels local
+pending feedback and returns to its compiled setup interface while the API can remain
+connected. The clear revision is a barrier: older in-flight scenes cannot restore the display.
+Clear delivery is bounded and failures are logged; input and scene publishing stop during
+unload. This requires the paired 0.4.0 firmware. Acknowledging a clear must not renew the card's
+applied-screen claim while the server is offline.
+
+Dashboard cards are separate durable configuration. Removing the server does not delete them;
+opening a saved card after reinstalling the server explicitly resends its definition. Removing
+a card does not erase the server's last saved definition. Device factory reset affects ESPHome
+preferences, not either HA-owned copy. These boundaries must be explained during setup.
+
+A Dial with neither a saved definition nor an explicitly configured fallback remains in the
+compiled onboarding interface. Its ready/input events must not create a placeholder screen.

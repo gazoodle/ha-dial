@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import math
 import re
 from datetime import timedelta
+from functools import wraps
 from pathlib import Path
 
 import voluptuous as vol
@@ -26,7 +26,7 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 
-from .const import CARD_URL, DEVICE_EVENT, DOMAIN, VERSION
+from .const import CARD_URL, DEFINITIONS_KEY, DEVICE_EVENT, DOMAIN
 from .deployment import manifest_version, revision
 from .navigator import Navigator
 from .protocol import device_payload
@@ -60,6 +60,21 @@ DEVICE_RE = re.compile(r"^[a-z0-9_]{1,64}$")
 DEVICE_SCHEMA = vol.All(str, vol.Match(DEVICE_RE))
 
 
+def _require_server(handler):
+    @wraps(handler)
+    async def checked(hass, connection, msg):
+        if not hass.data.get(DOMAIN, {}).get("active"):
+            connection.send_error(
+                msg["id"],
+                "not_loaded",
+                "Add HA Dial Server in Settings / Devices & services first",
+            )
+            return
+        await handler(hass, connection, msg)
+
+    return checked
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     state = hass.data.setdefault(
         DOMAIN,
@@ -70,6 +85,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "registered": False,
         },
     )
+    state["active"] = False
+    state["unloading"] = False
+    if entry.title == "HA Dial":
+        hass.config_entries.async_update_entry(entry, title="HA Dial Server")
     light_entity = entry.options.get(CONF_ENTITY_ID, entry.data.get(CONF_ENTITY_ID))
     light_state = hass.states.get(light_entity) if light_entity else None
     state.update(
@@ -105,7 +124,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     from .transport import watch_transports
 
     watch_transports(hass, entry)
-    url = f"{CARD_URL}?v={VERSION}"
+    url = f"{CARD_URL}?v={LOADED_VERSION}"
     frontend.add_extra_js_url(hass, url)
     entry.async_on_unload(lambda: frontend.remove_extra_js_url(hass, url))
 
@@ -113,9 +132,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     def device_input(event: Event) -> None:
         device = event.data.get("device")
         action = event.data.get("action")
-        if not isinstance(device, str) or DEVICE_RE.fullmatch(device) is None:
+        if (
+            not state["active"]
+            or not isinstance(device, str)
+            or DEVICE_RE.fullmatch(device) is None
+        ):
             return
         if not isinstance(action, str) or action not in INPUTS:
+            return
+        if device not in state["definition_sources"] and not light_entity:
             return
         item = event.data.get("item")
         value = event.data.get("value")
@@ -153,6 +178,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     @callback
     def scene_status(event: Event) -> None:
+        if not state["active"]:
+            return
         device = event.data.get("device")
         try:
             received = int(event.data.get("revision", 0))
@@ -191,7 +218,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     from homeassistant.helpers.storage import Store
 
-    store = Store(hass, 1, f"{DOMAIN}_definitions")
+    store = Store(hass, 1, DEFINITIONS_KEY)
     saved_definitions = await store.async_load() or {}
     if not isinstance(saved_definitions, dict):
         _LOGGER.error("Ignoring invalid stored HA Dial definitions")
@@ -231,22 +258,45 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(
         async_track_time_interval(hass, check_restart, timedelta(seconds=30))
     )
+    state["active"] = True
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     state = hass.data.get(DOMAIN, {})
+    state["active"] = False
+    state["unloading"] = True
     workers = list(state.get("scene_workers", {}).values())
     for worker in workers:
         worker.cancel()
     await asyncio.gather(*workers, return_exceptions=True)
+    # Finish an in-flight save before teardown or deletion of the definitions store.
+    async with state.setdefault("definition_lock", asyncio.Lock()):
+        pass
     for tracker in state.get("template_trackers", {}).values():
         tracker.async_remove()
     state.get("template_trackers", {}).clear()
     for unsubscribe in state.get("definition_unsubs", {}).values():
         unsubscribe()
     state.get("definition_unsubs", {}).clear()
+    from .transport import async_clear_views
+
+    await async_clear_views(hass)
     return True
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    from homeassistant.helpers.storage import Store
+
+    state = hass.data.get(DOMAIN, {})
+    state["active"] = False
+    state["unloading"] = True
+    async with state.setdefault("definition_lock", asyncio.Lock()):
+        await Store(hass, 1, DEFINITIONS_KEY).async_remove()
+        state["stored_definitions"] = {}
+    _LOGGER.info(
+        "Removed HA Dial Server's saved definitions; dashboard cards are unchanged"
+    )
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -260,6 +310,7 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     }
 )
 @websocket_api.async_response
+@_require_server
 async def _ws_view(hass, connection, msg) -> None:
     connection.send_result(
         msg["id"],
@@ -277,6 +328,7 @@ async def _ws_view(hass, connection, msg) -> None:
     }
 )
 @websocket_api.async_response
+@_require_server
 async def _ws_input(hass, connection, msg) -> None:
     if msg.get("value") is not None and not math.isfinite(msg["value"]):
         connection.send_error(msg["id"], "invalid_format", "Value must be finite")
@@ -301,14 +353,10 @@ async def _ws_input(hass, connection, msg) -> None:
     }
 )
 @websocket_api.async_response
+@_require_server
 async def _ws_configure(hass, connection, msg) -> None:
     source = msg["definition"]
     device = msg["device"]
-    if len(json.dumps(source)) > 65536:
-        connection.send_error(
-            msg["id"], "invalid_format", "Definition exceeds 65536 bytes"
-        )
-        return
     if not isinstance(source.get("template", ""), str) or not isinstance(
         source.get("theme", "ember"), str
     ):
@@ -340,10 +388,26 @@ async def _ws_configure(hass, connection, msg) -> None:
     device_payload(candidate.current(), None, 0)
     if not _is_preview(device):
         async with state.setdefault("definition_lock", asyncio.Lock()):
+            if not state["active"]:
+                connection.send_error(
+                    msg["id"], "not_loaded", "HA Dial Server was unloaded"
+                )
+                return
             stored = {**state.get("stored_definitions", {}), device: source}
             await state["definition_store"].async_save(stored)
             state["stored_definitions"] = stored
-    navigator = await _install_definition(hass, device, source, definition, push=True)
+            if not state["active"]:
+                connection.send_error(
+                    msg["id"], "not_loaded", "HA Dial Server was unloaded"
+                )
+                return
+            navigator = await _install_definition(
+                hass, device, source, definition, push=True
+            )
+    else:
+        navigator = await _install_definition(
+            hass, device, source, definition, push=True
+        )
     connection.send_result(msg["id"], _scene_result(hass, device, navigator.current()))
 
 
@@ -355,6 +419,7 @@ async def _ws_configure(hass, connection, msg) -> None:
     }
 )
 @websocket_api.async_response
+@_require_server
 async def _ws_subscribe(hass, connection, msg) -> None:
     device = msg["device"]
     state = hass.data[DOMAIN]

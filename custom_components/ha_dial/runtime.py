@@ -67,6 +67,8 @@ async def _input(
     push: bool = True,
     input_sequence: int | None = None,
 ) -> dict:
+    if hass.data[DOMAIN].get("unloading"):
+        return _navigator(hass, device).current()
     sequences = hass.data[DOMAIN].setdefault("input_sequences", {})
     if input_sequence is not None:
         if action != "ready" and input_sequence <= sequences.get(device, -1):
@@ -108,10 +110,17 @@ async def _input(
     return navigator.current()
 
 
+def _next_revision(hass: HomeAssistant, device: str) -> int:
+    revisions = hass.data[DOMAIN].setdefault("revisions", {})
+    revisions[device] = max(time_ns() // 1_000_000, revisions.get(device, 0) + 1)
+    return revisions[device]
+
+
 async def _push(hass: HomeAssistant, device: str, view: dict) -> None:
     state = hass.data[DOMAIN]
-    revisions = state.setdefault("revisions", {})
-    revisions[device] = max(time_ns() // 1_000_000, revisions.get(device, 0) + 1)
+    if state.get("unloading"):
+        return
+    revision = _next_revision(hass, device)
     service = f"{device}_ha_dial_show_view"
     connected = (
         not _is_preview(device)
@@ -128,7 +137,7 @@ async def _push(hass: HomeAssistant, device: str, view: dict) -> None:
         state.setdefault("pending_scenes", {})[device] = (
             view,
             _navigator(hass, device).previous(),
-            revisions[device],
+            revision,
             state.get("input_sequences", {}).get(device, 0),
         )
         workers = state.setdefault("scene_workers", {})
@@ -184,8 +193,6 @@ def _scene_result(hass: HomeAssistant, device: str, view: dict) -> dict:
 
 
 def _render_definition(hass: HomeAssistant, source: dict) -> dict:
-    if len(json.dumps(source)) > 65536:
-        raise ValueError("Definition exceeds 65536 bytes")
     if not isinstance(source.get("template", ""), str):
         raise TypeError("Template must be text")
     if source.get("theme", "ember") not in THEMES:

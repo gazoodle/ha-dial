@@ -55,5 +55,6 @@ struct SceneHistory {
 };
 
 bool parse_scene(JsonObject source, SceneBuffer &target);
+bool parse_clear_request(JsonObject source, uint64_t applied_revision, uint64_t &revision);
 void draw_scene(display::Display &it, const SceneBuffer &scene, float local_value = -1);
 }  // namespace esphome::ha_dial

@@ -1,14 +1,18 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <memory>
 #include <string>
 #include "scene.h"
+#include "setup_state.h"
+#include <esp_event.h>
 
 #include "esphome/components/api/custom_api_device.h"
 #include "esphome/components/display/display.h"
 #include "esphome/components/font/font.h"
 #include "esphome/components/web_server_base/web_server_base.h"
+#include "esphome/components/wifi/wifi_component.h"
 #include "esphome/core/component.h"
 #include "esphome/core/helpers.h"
 
@@ -32,6 +36,8 @@ class HaDial : public Component, public api::CustomAPIDevice, public AsyncWebHan
   void set_device(const std::string &device) { this->device_ = device; }
   void set_display(display::Display *display) { this->display_ = display; }
   void set_font(font::Font *font) { this->font_ = font; }
+  void set_touchscreen(Component *touchscreen) { this->touchscreen_ = touchscreen; }
+  void request_wifi_reset();
 
   void show_view(std::string view);
   void draw(display::Display &display);
@@ -41,6 +47,9 @@ class HaDial : public Component, public api::CustomAPIDevice, public AsyncWebHan
   void back();
 
  protected:
+  static void network_event_(void *arg, esp_event_base_t base, int32_t event, void *data);
+  void draw_setup_(display::Display &display);
+  bool ready_() const;
   void flush_value_();
   void draw_pill_(display::Display &display);
   void send_input_(const std::string &action, const std::string &item = "",
@@ -69,6 +78,13 @@ class HaDial : public Component, public api::CustomAPIDevice, public AsyncWebHan
   bool value_pending_{false};
   bool has_back_{false};
   bool was_connected_{false};
+  bool scene_received_{false};
+  bool reset_confirmation_{false};
+  bool started_{false};
+  std::atomic<bool> network_changed_{false};
+  std::atomic<int> wifi_failure_{0};
+  esp_event_handler_instance_t wifi_handler_{nullptr};
+  esp_event_handler_instance_t ip_handler_{nullptr};
   bool web_server_started_{false};
   bool atlas_upload_error_{false};
   size_t atlas_received_{0};
@@ -77,6 +93,7 @@ class HaDial : public Component, public api::CustomAPIDevice, public AsyncWebHan
   RAMUniquePtr<uint8_t[]> atlas_frame_;
   display::Display *display_{nullptr};
   font::Font *font_{nullptr};
+  Component *touchscreen_{nullptr};
 };
 
 }  // namespace esphome::ha_dial

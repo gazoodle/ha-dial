@@ -1,37 +1,62 @@
 # Backlog
 
-## P0 — Make first-run setup self-explanatory
+## P0 — Finish and verify onboarding
 
-Observed on 2026-10-26: the first physical-device setup required repeated AP checks,
-serial monitoring, mDNS inspection and a diagnostic reflash. The device accepted captive-
-portal credentials, closed its AP, but neither appeared in Home Assistant nor explained
-whether Wi-Fi association had failed. This is too painful for a normal installation.
+### Confirmed on hardware / in HA (2026-10-29)
 
-Design and test an initial UX with explicit states:
+- Factory reset, Wi-Fi provisioning and manual ESPHome addition across subnets were completed
+  by the owner. Same-subnet discovery is expected when mDNS is allowed; across subnets manual
+  IP entry is normal unless mDNS is forwarded.
+- A browser refresh after adding the integration made the card visible; no HA restart was
+  needed for that step. Integration code updates still use the existing restart Repair.
+- Version 0.3.10's Dial dropdown and Add subpage fix work in the live editor. The physical
+  Dial's waiting screen was also confirmed useful.
 
-1. **Starting** — hardware and firmware identity.
-2. **Needs Wi-Fi** — show the fallback SSID, password and portal address on-screen.
-3. **Connecting** — show the selected SSID without exposing its password.
-4. **Wi-Fi failed** — show a useful reason when available and reopen provisioning.
-5. **Connected to Wi-Fi** — show the assigned IP address and that HA discovery is pending.
-6. **Waiting for HA** — explain that the ESPHome device must be added separately from the
-   HA Dial custom integration.
-7. **Ready** — replace setup information with the configured navigation screen.
+### Implemented in 0.4.0 — paired deployment completed, HA restart pending
 
-Acceptance criteria:
+On 2026-10-29, the verified Wi-Fi Dial received the expected firmware build and HA's installed
+files/restart marker were verified against source. Complete the restart Repair and browser
+refresh before checking the new server behaviour. No real definitions were deleted or
+recovery buttons invoked during deployment.
 
-- A new device can be installed without opening a serial monitor.
-- Failed credentials never leave the device with neither a working station connection nor
-  an available recovery AP.
-- A documented physical gesture clears saved Wi-Fi and reopens provisioning.
-- The screen distinguishes Wi-Fi, API and HA-navigation connectivity.
-- HA can be added manually using the on-screen IP when mDNS discovery cannot cross a VLAN.
-- Provisioning, incorrect-password, unavailable-network, isolated-VLAN and reboot recovery
-  paths are tested on the physical Dial v1.1.
-- Touch-controller failure is shown separately and does not obscure network status.
+- Rename the shared integration to **HA Dial Server**; retain the **HA Dial** dashboard card.
+  One server manages every Dial. Keep internal IDs stable and preserve customised entry titles.
+- Show the complete ESPHome → server → browser refresh → card → first control sequence in
+  setup and README.md. Remove the optional legacy light field from the initial server form.
+- Explain both remaining steps on the API-connected device screen: add HA Dial Server, then
+  add the HA Dial card to a dashboard. Do not send a placeholder menu to unconfigured Dials.
+- Fix unexpected restoration after server removal. The source was HA's separate definitions
+  store: it was reloaded on setup and had no removal hook. Ordinary reloads retain it; removing
+  the server deletes it. Unloaded card commands cannot recreate it. Saved dashboard cards are
+  independent and can intentionally resend their configuration after the server is re-added.
+- Clear the live device screen on server unload even while ESPHome stays connected. A newer
+  clear revision prevents delayed older scenes from restoring it; stop input/publication during
+  unload and report failed clear delivery. This requires the paired 0.4.0 firmware.
+- Document exactly what restart, Wi-Fi reset, factory reset, ESPHome removal, server removal
+  and card removal retain. Provide a clear fresh-start procedure and warn that server removal
+  clears definitions for all Dials. Do not remove real definitions during deployment.
+- Add native ESPHome Restart and Restart in Safe Mode buttons alongside Factory Reset.
 
-Investigate ESPHome Improv Serial/BLE as a second provisioning route, but keep the captive
-portal as the dependency-free baseline unless testing proves it unreliable.
+### Physical acceptance still open
+
+- Deploy and verify the revised server setup, naming and device wording.
+- Repeat server removal/reinstallation with old cards retargeted to Preview: no old definition
+  should restore. Then deliberately retarget/open a saved card and verify intentional restoration.
+  Back up configurations and agree the reset scope before removing the real server.
+- Check incorrect passwords and unavailable networks: the recovery AP must return, its address
+  and credentials must remain readable, and no serial monitor should be needed.
+- Check the five-second hold, cancellation, confirmation and persistence of the local Wi-Fi
+  reset. Entering recovery must never activate the current control.
+- Check ordinary reboot/reconnect, native Restart and Safe Mode recovery. Ordinary recovery
+  preserves settings. The screen must distinguish Wi-Fi, API and HA scene readiness.
+- Check touch reliability/fault reporting separately from network state.
+- Measure physical rotary burst/release behaviour for brightness and cover position: immediate
+  local feedback, prompt final target and no old queued commands after release. Unit tests alone
+  do not close this acceptance check.
+
+Investigate Improv Serial/BLE only after the standard captive-portal baseline is verified.
+Local Settings, its cog and force-on/off policy remain a separate design task. Onboarding is
+not complete until the whole factory-reset-to-first-control flow works without chat guidance.
 
 ## Camera thumbnail screen
 
@@ -108,10 +133,15 @@ determine device memory use.
 
 ## Review implementation limits against measurements (2026-10-27)
 
-The current caps are provisional implementation guardrails, not agreed product limits or measured
-hardware ceilings: 24 KiB messages, 64 scene elements, 16 touch regions, eight NAV-ORBIT items,
-eight tree levels, 64 total tree items/pages and 64 KiB definition input. Review each separately.
-Keep the architectural current/previous scene cache and validation at trust boundaries.
+Stress testing concluded on 2026-10-29 at five menu levels (branching 5/6/5/6/5),
+5,586 pages including Home and approximately 406 KB of YAML. The owner found the physical
+Dial fast and the demand-loaded card editor usable; saving was sluggish. The cause of save
+latency was not profiled. Further scale testing is deferred until a credible use case needs it.
+The arbitrary HA whole-tree count, depth and definition-size caps have been removed.
+
+Remaining device budgets are provisional guardrails, not measured hardware ceilings:
+24 KiB messages, 64 scene elements and 16 touch regions. Eight NAV-ORBIT items is a style
+constraint. Keep the architectural current/previous scene cache and trust-boundary validation.
 
 - Measure peak free heap and largest allocation during JSON parsing, atomic replacement and mask
   drawing, including old and incoming scenes, plus render and input latency on the actual Dial.
@@ -178,3 +208,42 @@ The USB capture during HA reconnect diagnosis included repeated
 physical touch reliability separately from scene delivery; direct native-API scene drawing and
 acknowledgement succeeded during the same investigation. Include this fault in the proposed
 on-device diagnostics rather than leaving it visible only in a serial log.
+
+## Other ESPHome components on the same device — post-v1 (2026-10-27)
+
+Explore using HA Dial alongside other ESPHome components and attached hardware in the same
+device. Check configuration, pin and resource conflicts, and how their entities can appear in
+Dial pages through Home Assistant. Preserve the existing ESPHome configuration route.
+
+Consider whether a concrete use case needs the Dial to control local hardware while HA is
+unavailable. If so, design ownership and state reconciliation on reconnect before changing the
+current HA-owned control architecture.
+
+## Automatic home explorer (2026-10-27)
+
+Offer a card mode that generates Dial navigation from HA floors, areas and entities, so a
+usable home can be explored without hand-authoring a page tree. Keep the tree in HA and send
+only the current and previous scenes to the device. Adapt the hierarchy to the installation:
+start with areas when there are no floors, group large rooms by function, and provide a route to
+unassigned entities. Design a rotary list or pagination so the orbit limit never hides items.
+
+Investigate selectable sources: HA's automatic-dashboard visibility and primary entities, the
+existing entities exposed to Assist, and an explicitly chosen favourites-only view. Assist
+exposure is voice curation, not Dial authorisation; do not change exposure settings. Decide how
+hidden entities, diagnostics, configuration entities, unsupported controls and explicit
+favourites interact, and explain omissions in the card. Use entity capabilities for controls;
+require deliberate interaction for consequential actions.
+
+Explore a per-Dial starting area, favourites, recent items, remembered selection, topic views and
+pinning discovered entities to a curated page. Update navigation on HA changes and return to a
+surviving ancestor if the current item disappears. Compare the current Apple Watch and Wear OS
+companion apps and HA's Home dashboard, and test navigation on the physical Dial at realistic
+installation sizes. Expansion of control profiles is a dependency for useful coverage.
+
+### Needs attention: optional Casa Mia Sensor Watch
+
+Explore a home-screen entry showing non-nominal watched sensors, using the existing Casa Mia
+Sensor Watch list service and level-change events rather than duplicating its judgement or
+polling. Show severity, value, explanation and age as space permits; support its group filter and
+distinguish all clear from unavailable. Consider links to the relevant area or control. Keep Casa
+Mia optional and verify the service contract before implementation.

@@ -1,6 +1,18 @@
+packages:
+  version: !include version.yaml
+
 esphome:
   name: ha-dial
   friendly_name: HA Dial
+  project:
+    name: ha-dial.firmware
+    version: "${firmware_version}"
+  on_boot:
+    priority: -100
+    then:
+      - text_sensor.template.publish:
+          id: dial_firmware_version
+          state: "${firmware_version}"
   includes:
     - pointer.h
 
@@ -12,6 +24,13 @@ esp32:
 
 logger:
   hardware_uart: USB_SERIAL_JTAG
+
+text_sensor:
+  - platform: template
+    id: dial_firmware_version
+    name: Firmware Version
+    entity_category: diagnostic
+    update_interval: never
 
 i2c:
   - id: internal_i2c

@@ -35,6 +35,16 @@ static Color blend_scene_colour(const Color &front, const Color &back, int level
   return Color(blend(front.r, back.r), blend(front.g, back.g), blend(front.b, back.b));
 }
 
+bool parse_clear_request(JsonObject source, uint64_t applied_revision, uint64_t &revision) {
+  if (!source["clear"].is<bool>() || !source["clear"].as<bool>() ||
+      !source["scene"].isNull() || !source["previous"].isNull() ||
+      !source["revision"].is<uint64_t>()) return false;
+  const uint64_t incoming = source["revision"].as<uint64_t>();
+  if (incoming <= applied_revision) return false;
+  revision = incoming;
+  return true;
+}
+
 bool parse_scene(JsonObject source, SceneBuffer &target) {
     target.element_count = target.region_count = 0;
     target.valid = false;

@@ -6,29 +6,43 @@ external_components:
     components: [ha_dial]
 
 wifi:
+  reboot_timeout: 0s
   ap:
+    ap_timeout: 30s
     ssid: "HA Dial Setup"
     password: "ha-dial-setup"
 
 captive_portal:
 
 api:
+  reboot_timeout: 0s
   custom_services: true
   homeassistant_services: true
 
 ota:
   - platform: esphome
 
+button:
+  - platform: restart
+    name: Restart
+  - platform: safe_mode
+    name: Restart in Safe Mode
+    disabled_by_default: true
+  - platform: factory_reset
+    name: Factory Reset
+    disabled_by_default: true
+
 font:
   - id: !extend hello_font
-    size: 18
-    glyphs: " !%()+,-./0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz<"
+    size: 14
+    glyphs: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
 
 ha_dial:
   id: dial_ui
   device: ha_dial
   display: round_display
   font: hello_font
+  touchscreen: dial_touch
 
 display:
   - id: !extend round_display
@@ -61,8 +75,15 @@ binary_sensor:
       mode:
         input: true
         pullup: true
-    on_press:
-      - lambda: id(dial_ui).press();
+    on_click:
+      - min_length: 30ms
+        max_length: 500ms
+        then:
+          - lambda: id(dial_ui).press();
+      - min_length: 5s
+        max_length: 60s
+        then:
+          - lambda: id(dial_ui).request_wifi_reset();
 
 switch:
   - platform: gpio
