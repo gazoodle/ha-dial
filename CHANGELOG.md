@@ -1,5 +1,14 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b2
+
+- Requires paired b2 firmware for signed/decimal local feedback and the gated local settings page; restart HA after deployment and refresh the browser.
+- Add modal page/entity editors, 21 HA domains, two Atlas families with all eight navigation layouts and Instrument/Editorial presentations, and read-only sensor variants.
+- Add MDI icons, Crisp/Smooth masks, border/colour/size controls and validated CSS-like declarations.
+- Add event-driven state/numeric/template/logical visibility with nearest surviving ancestor navigation.
+- Add explicit lock/alarm confirmations and keep PIN-protected actions unavailable; drafts remain isolated.
+- Add a root-only, selectable settings cog gated by the persisted ESPHome Show Settings switch.
+
 ## 2026.10.1-b1
 
 - Rename the shared integration HA Dial Server and explain first-run setup and recovery.

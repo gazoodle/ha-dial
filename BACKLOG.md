@@ -153,10 +153,11 @@ constraint. Keep the architectural current/previous scene cache and trust-bounda
 
 ## Next UX pieces (2026-10-27)
 
-- Add per-page Crisp/Smooth rasterisation, with the same resolved output in card and firmware.
-- Resolve HA icon overrides and floor/area/domain defaults into compact shared masks.
-- Add backend-evaluated page visibility using supported HA conditions, excluding browser/user
-  conditions. On removal of the current page, return to its nearest visible ancestor.
+- Implemented 2026-10-30: per-page/entity Crisp/Smooth coverage for shared HA-generated text, digits and icons; primitives retain the shared pixel raster.
+- Implemented 2026-10-30: MDI selection and entity icon overrides/defaults as shared masks. Automatic floor/area icon defaults remain open.
+- Implemented 2026-10-30: per-page/entity state, numeric-state, template and logical visibility,
+  with nearest surviving ancestor navigation. Time/device/browser conditions and state durations
+  are rejected explicitly; use an HA helper/template sensor. Verify live editor interactions.
 - Expose a supported automation/script action for selecting or replacing a definition. Reactive
   Jinja macros already provide dynamic trees; keep stable IDs and preserve valid navigation.
 - Implemented 2026-10-27: HA-supplied numeric masks/gauge geometry replace the legacy light
@@ -185,8 +186,14 @@ the cog, but must not trigger the current control while entering Settings.
   factory reset separate; ordinary recovery preserves Wi-Fi and saved definitions.
 - Add native ESPHome Restart and Safe mode buttons for HA/device tools too.
 
+Implemented 2026-10-30: persisted Show Settings HA switch, root-only rotary-selectable cog,
+local IP/version/uptime/RSSI/API/HA/touch diagnostics, offline access when enabled, and local
+back behaviour. Both component builds deployed as b2; HA restart Repair/browser refresh and
+physical acceptance remain. QR links, local name/network editing and expanded recovery tools
+remain open. The physical Wi-Fi reset remains available independently of the cog policy.
+
 Existing OTA safe mode handles repeated boot failures; it does not repair a lost HA application
-handshake. Agree the Settings flow and force-on/off behaviour before implementing them.
+handshake. The initial diagnostic flow and persisted on/off policy are implemented; validate them physically before extending maintenance actions.
 
 ## Stock firmware and first-flash experience (2026-10-27)
 

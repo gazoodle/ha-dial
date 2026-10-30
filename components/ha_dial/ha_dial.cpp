@@ -131,9 +131,11 @@ void HaDial::show_view(std::string view) {
   uint64_t incoming_revision = 0;
   bool stale = false;
   bool clear_requested = false;
+  bool incoming_settings = false;
   const bool valid = json::parse_json(view, [this, &incoming_scene,
                                              &incoming_previous, &incoming_revision,
-                                             &stale, &clear_requested](JsonObject root) {
+                                             &stale, &clear_requested, &incoming_settings](JsonObject root) {
+    incoming_settings = root["settings"] | false;
     JsonObject scene = root["scene"].as<JsonObject>();
     if (!root["clear"].isNull()) {
       clear_requested = parse_clear_request(root, this->scenes_.revision, incoming_revision);
@@ -243,15 +245,21 @@ void HaDial::show_view(std::string view) {
     this->scene_received_ = false;
     this->value_dirty_ = this->value_pending_ = false;
   }
+  this->settings_active_ = this->settings_enabled_ && !clear_requested && incoming_settings;
   this->atlas_received_ = 0;
   if (this->display_ != nullptr)
     this->display_->update();
   if (incoming_revision != 0)
     this->fire_homeassistant_event("esphome.ha_dial_scene_status",
-                                  {{"device", this->device_}, {"revision", std::to_string(incoming_revision)}});
+                                  {{"device", this->device_}, {"revision", std::to_string(incoming_revision)},
+                                   {"settings_enabled", this->settings_enabled_ ? "true" : "false"}});
 }
 
 void HaDial::draw(display::Display &it) {
+  if (local_screen(this->reset_confirmation_, this->settings_active_, this->settings_enabled_) == LocalScreen::SETTINGS) {
+    this->draw_settings_(it);
+    return;
+  }
   if (this->reset_confirmation_) {
     this->draw_setup_(it);
     return;
@@ -272,7 +280,7 @@ void HaDial::draw(display::Display &it) {
   }
   if (this->scenes_.current != nullptr && this->scenes_.current->valid) {
     draw_scene(it, *this->scenes_.current,
-               this->has_value_ && (this->value_dirty_ || this->value_pending_) ? this->value_ : -1);
+               this->has_value_ && (this->value_dirty_ || this->value_pending_) ? this->value_ : std::numeric_limits<float>::quiet_NaN());
     return;
   }
   it.fill(Color::BLACK);
@@ -329,6 +337,7 @@ void HaDial::draw_pill_(display::Display &it) {
 }
 
 void HaDial::rotate(int direction) {
+  if (this->dismiss_settings_()) return;
   if (this->reset_confirmation_) {
     this->reset_confirmation_ = false;
     if (this->display_ != nullptr) this->display_->update();
@@ -362,6 +371,7 @@ void HaDial::rotate(int direction) {
 }
 
 void HaDial::press() {
+  if (this->dismiss_settings_()) return;
   if (this->reset_confirmation_) {
     this->reset_confirmation_ = false;
     ESP_LOGW(TAG, "Clearing saved Wi-Fi at the device owner's request");
@@ -375,12 +385,16 @@ void HaDial::press() {
     this->network_changed_ = true;
     return;
   }
-  if (!this->ready_()) return;
+  if (!this->ready_()) {
+    if (this->settings_enabled_) { this->settings_active_ = true; if (this->display_ != nullptr) this->display_->update(); }
+    return;
+  }
   this->flush_value_();
   this->send_input_("press", this->item_count_ == 0 ? "" : this->items_[this->selected_].id);
 }
 
 void HaDial::back() {
+  if (this->dismiss_settings_()) return;
   if (!this->ready_() || this->reset_confirmation_) return;
   this->flush_value_();
   if (this->scenes_.back()) {
@@ -394,6 +408,7 @@ void HaDial::back() {
 }
 
 void HaDial::touch(int x, int y) {
+  if (this->dismiss_settings_()) return;
   if (!this->ready_() || this->reset_confirmation_) return;
   if (this->scenes_.current != nullptr && this->scenes_.current->valid) {
     for (size_t index = 0; index < this->scenes_.current->region_count; index++) {
@@ -449,6 +464,7 @@ void HaDial::send_input_(const std::string &action, const std::string &item,
   this->fire_homeassistant_event("esphome.ha_dial_input",
                                  {{"device", this->device_},
                                   {"action", action},
+                                  {"settings_enabled", this->settings_enabled_ ? "true" : "false"},
                                   {"item", item},
                                   {"value", value}, {"sequence", std::to_string(this->input_sequence_)}});
 }

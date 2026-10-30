@@ -13,8 +13,13 @@ int main() {
     auto scene = std::make_unique<SceneBuffer>();
     assert(parse_scene(source, *scene));
     auto display = std::make_unique<esphome::display::Display>();
-    draw_scene(*display, *scene, source["test_local_value"] | -1.0f);
+    draw_scene(*display, *scene, source["test_local_value"] | std::numeric_limits<float>::quiet_NaN());
     std::cout.write(reinterpret_cast<const char *>(display->pixels.data()), display->pixels.size());
+    const int version = source["version"];
+    source["version"] = 4;
+    auto unknown = std::make_unique<SceneBuffer>();
+    assert(!parse_scene(source, *unknown));
+    source["version"] = version;
     source["width"] = 241;
     auto invalid = std::make_unique<SceneBuffer>();
     assert(!parse_scene(source, *invalid));
@@ -28,7 +33,7 @@ int main() {
       element["pixels"] = "00";
       assert(!parse_scene(source, *invalid));
       element["pixels"] = pixels;
-      element["value"] = 1000;
+      element["value"] = element["characters"].isNull() ? 1000 : 1000000;
       assert(!parse_scene(source, *invalid));
       element["value"] = 72;
     }

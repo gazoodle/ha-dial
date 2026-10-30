@@ -254,3 +254,25 @@ preferences, not either HA-owned copy. These boundaries must be explained during
 
 A Dial with neither a saved definition nor an explicitly configured fallback remains in the
 compiled onboarding interface. Its ready/input events must not create a placeholder screen.
+
+## Appearance, conditional definitions and local settings (2026-10-29)
+
+The editor stores page/entity overrides and a bounded CSS-like declaration vocabulary. HA
+validates the options, resolves visibility from state/template events and compiles all layout,
+icons and glyphs. Editor dialogs are mounted on demand. Hidden nodes remain in saved source;
+removing a current page returns to its nearest surviving ancestor. Conditions are not security
+rules. Unsupported condition types fail explicitly. Primitives retain the shared pixel raster;
+Crisp/Smooth selects binary or antialiased coverage for HA-generated masks.
+
+Scene v3 extends numeric masks with an explicit twelve-character glyph catalogue, decimal
+precision and bounded scaled integer values. HA provides glyph dimensions and gauge ranges;
+card and firmware apply the same signed/decimal local value without choosing fonts or layout.
+NaN denotes absent local feedback, so negative values are legitimate. Existing v1/v2 scenes
+retain their numeric contract and remain accepted by firmware.
+
+Show Settings is an ESPHome config switch, persisted on the device and reported with input
+and revision-checked scene acknowledgements. HA adds one root-only selectable cog without
+consuming a normal orbit destination. The selected settings view requests the compiled local
+diagnostic interface; its geometry and network details belong to the existing firmware-owned
+maintenance UI exception. The local policy gates it even if HA sends a settings request.
+Disabling closes the page. Recovery input remains independent of this optional menu entry.

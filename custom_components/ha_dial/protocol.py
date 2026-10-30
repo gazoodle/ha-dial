@@ -13,6 +13,7 @@ def device_payload(
         "input_sequence": input_sequence,
         "scene": compile_scene(view),
         "back": bool(previous),
+        "settings": view.get("kind") == "settings",
     }
     if previous:
         payload["previous"] = compile_scene(previous)

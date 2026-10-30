@@ -94,6 +94,17 @@ switch:
     restore_mode: ALWAYS_ON
     internal: true
 
+  - platform: template
+    name: Show Settings
+    icon: mdi:cog
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: id(dial_ui).set_settings_enabled(true);
+    turn_off_action:
+      - lambda: id(dial_ui).set_settings_enabled(false);
+
 touchscreen:
   - platform: ft5x06
     id: dial_touch

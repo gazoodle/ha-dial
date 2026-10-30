@@ -3,12 +3,8 @@
 from __future__ import annotations
 
 THEMES = {"ember", "verdant", "cobalt", "rose", "acid", "alloy"}
-CONTROL_TYPES = {
-    "light": ("dimmer", "CTL-LIGHT-INSTRUMENT", "mdi:lightbulb"),
-    "switch": ("toggle", "CTL-SWITCH-INSTRUMENT", "mdi:toggle-switch"),
-    "cover": ("position", "CTL-COVER-INSTRUMENT", "mdi:blinds"),
-}
-STYLES = {"NAV-ORBIT", *(value[1] for value in CONTROL_TYPES.values())}
+from .appearance import validate_options
+from .catalogue import CONTROL_TYPES, NAV_STYLES, STYLES, control_styles
 
 
 def build_definition(hass, pages: list, default_theme: str) -> dict:
@@ -25,6 +21,7 @@ def build_definition(hass, pages: list, default_theme: str) -> dict:
             raise ValueError("Page ids must be unique")
         if not isinstance(title, str) or not title or len(title) > 64:
             raise ValueError("Each page needs a title of at most 64 characters")
+        validate_options(page)
         theme = page.get("theme", default_theme)
         if theme not in THEMES:
             raise ValueError(f"Unknown theme on page {page_id}")
@@ -37,6 +34,9 @@ def build_definition(hass, pages: list, default_theme: str) -> dict:
             raise ValueError(f"Page {page_id} can select at most 8 controls")
         by_id[page_id] = {**page, "theme": theme, "lights": lights}
 
+    children_by_parent = {}
+    for page in by_id.values():
+        children_by_parent.setdefault(page.get("parent"), []).append(page)
     roots = [page for page in by_id.values() if not page.get("parent")]
     if len(roots) != 1:
         raise ValueError(
@@ -47,39 +47,49 @@ def build_definition(hass, pages: list, default_theme: str) -> dict:
         page_id = page["id"]
         if page_id in ancestors:
             raise ValueError("Page parent links cannot contain a cycle")
-        children = [item for item in by_id.values() if item.get("parent") == page_id]
+        children = children_by_parent.get(page_id, [])
         items = [
             {
                 "id": child["id"],
                 "label": child["title"],
                 "theme": child["theme"],
-                "style": "NAV-ORBIT",
+                "style": child.get("style", "NAV-ORBIT"),
+                **{
+                    key: child[key]
+                    for key in ("appearance", "css", "conditions")
+                    if key in child
+                },
                 "icon": child.get("icon", "mdi:folder"),
                 "children": make_page(child, ancestors | {page_id})["items"],
             }
             for child in children
         ]
-        for entity_id in page["lights"]:
+        for entity in page["lights"]:
+            options = entity if isinstance(entity, dict) else {"entity_id": entity}
+            entity_id = options.get("entity_id")
+            validate_options(options)
             if (
                 not isinstance(entity_id, str)
                 or entity_id.partition(".")[0] not in CONTROL_TYPES
                 or not entity_id.partition(".")[2]
             ):
-                raise ValueError(
-                    f"Page {page_id} must select light, switch or cover entities"
-                )
+                raise ValueError(f"Page {page_id} must select a supported HA entity")
             profile, style, icon = CONTROL_TYPES[entity_id.partition(".")[0]]
             state = hass.states.get(entity_id)
             label = state.attributes.get("friendly_name") if state else None
             items.append(
                 {
-                    "id": entity_id,
-                    "label": label
+                    **options,
+                    "id": options.get("id", entity_id),
+                    "label": options.get("label")
+                    or label
                     or entity_id.split(".", 1)[1].replace("_", " ").title(),
-                    "icon": state.attributes.get("icon", icon) if state else icon,
+                    "icon": options.get("icon")
+                    or (state.attributes.get("icon", icon) if state else icon),
                     "entity_id": entity_id,
+                    "label_override": bool(options.get("label")),
                     "profile": profile,
-                    "style": style,
+                    "style": options.get("style", style),
                 }
             )
         if len(items) > 8:
@@ -88,7 +98,12 @@ def build_definition(hass, pages: list, default_theme: str) -> dict:
             "id": page_id,
             "title": page["title"],
             "theme": page["theme"],
-            "style": "NAV-ORBIT",
+            "style": page.get("style", "NAV-ORBIT"),
+            **{
+                key: page[key]
+                for key in ("appearance", "css", "conditions")
+                if key in page
+            },
             "items": items,
         }
 
@@ -127,8 +142,9 @@ def validate_definition(definition: dict) -> None:
     def check_page(page: dict) -> None:
         if page.get("theme", "ember") not in THEMES:
             raise ValueError("Unknown page theme")
-        if page.get("style", "NAV-ORBIT") != "NAV-ORBIT":
-            raise ValueError("Navigation pages must use NAV-ORBIT")
+        validate_options(page)
+        if page.get("style", "NAV-ORBIT") not in NAV_STYLES:
+            raise ValueError("Unknown navigation style")
         items = page.get("items", [])
         if not isinstance(items, list) or len(items) > 8:
             raise ValueError("Each page must have at most 8 items")
@@ -145,14 +161,17 @@ def validate_definition(definition: dict) -> None:
             if item["id"] in ids:
                 raise ValueError("Item ids must be unique within each page")
             ids.add(item["id"])
-            if item["id"] in {"back", "home", "control"}:
-                raise ValueError("Item ids back, home and control are reserved")
+            if item["id"] in {"back", "home", "control", "__settings"}:
+                raise ValueError(
+                    "Item ids back, home, control and __settings are reserved"
+                )
             if (
                 not isinstance(item.get("label"), str)
                 or not item["label"]
                 or len(item["label"]) > 64
             ):
                 raise ValueError("Each item needs a label of at most 64 characters")
+            validate_options(item)
             children = item.get("children")
             default_style = (
                 "NAV-ORBIT" if children is not None else "CTL-LIGHT-INSTRUMENT"
@@ -166,8 +185,8 @@ def validate_definition(definition: dict) -> None:
                     raise ValueError("Item children must be a list")
                 if item.get("entity_id"):
                     raise ValueError("An item cannot be both a menu and a control")
-                if item.get("style", "NAV-ORBIT") != "NAV-ORBIT":
-                    raise ValueError("Nested pages must use NAV-ORBIT")
+                if item.get("style", "NAV-ORBIT") not in NAV_STYLES:
+                    raise ValueError("Unknown navigation style")
                 check_page(
                     {
                         "items": children,
@@ -195,7 +214,7 @@ def validate_definition(definition: dict) -> None:
                     raise ValueError(
                         f"{domain.title()} controls must use the {profile} profile"
                     )
-                if item.get("style", style) != style:
+                if item.get("style", style) not in control_styles(domain):
                     raise ValueError(f"{domain.title()} controls must use {style}")
 
     check_page(tree)

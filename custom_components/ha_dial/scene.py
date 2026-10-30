@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from math import cos, pi, sin
 
-from .assets import _number_mask, _text_mask
+from .appearance import appearance
+from .assets import _number_mask, _text_mask, icon_mask
+from .catalogue import CONTROL_TYPES
+from .control_layout import control_layout
+from .navigation_layout import navigation_layout
 
 MAX_VIEW_BYTES = 24576
 
@@ -74,18 +78,36 @@ def _point(cx: int, cy: int, radius: int, degrees: float) -> tuple[float, float]
 def compile_scene(view: dict) -> dict:
     """Return bounded, pixel-positioned drawing instructions for both renderers."""
     theme = THEMES.get(view.get("theme", "ember"), THEMES["ember"])
-    items = view.get("items", [])[:8]
+    theme = dict(theme)
+    options = appearance(view)
+    for key, target in {
+        "background": "bg",
+        "accent": "primary",
+        "surface": "surface",
+        "secondary": "secondary",
+        "text": "text",
+        "quiet": "quiet",
+        "grid": "grid",
+    }.items():
+        if key in options:
+            theme[target] = options[key]
+    raster = options["raster"]
+    items = view.get("items", [])
     selected = view.get("selected", 0)
-    elements = [
-        {
-            "op": "circle",
-            "x": 120,
-            "y": 120,
-            "r": 116,
-            "stroke": theme["primary"],
-            "width": 2,
-        }
-    ]
+    elements = (
+        [
+            {
+                "op": "circle",
+                "x": 120,
+                "y": 120,
+                "r": 116,
+                "stroke": theme["primary"],
+                "width": options["border-width"],
+            }
+        ]
+        if options["outer-border"]
+        else []
+    )
     regions = [{"id": "back", "x": 90, "y": 158, "r": 16}] if view.get("back") else []
     regions.append({"id": "home", "x": 150, "y": 158, "r": 16})
 
@@ -99,8 +121,40 @@ def compile_scene(view: dict) -> dict:
             "stroke": colour,
         }
 
-    if view.get("style", "NAV-ORBIT").startswith("CTL-"):
+    extended = view.get("kind") in {"control", "settings"} and (
+        view.get("domain", "light") not in {"light", "switch", "cover"}
+        or view.get("style", "").endswith("-EDITORIAL")
+        or view.get("confirmation")
+    )
+    if extended:
+        body, targets = control_layout(
+            {
+                **view,
+                "_raster": raster,
+                "_font_size": options["font-size"],
+                "_icon_size": options["icon-size"],
+            },
+            theme,
+        )
+        elements.extend(body)
+        regions = (
+            targets
+            + ([{"id": "back", "x": 90, "y": 212, "r": 16}] if view.get("back") else [])
+            + [{"id": "home", "x": 150, "y": 212, "r": 16}]
+        )
+    elif view.get("style", "NAV-ORBIT").startswith("CTL-"):
         domain = view.get("domain", "light")
+        elements.append(
+            {
+                "op": "icon",
+                "x": 120,
+                "y": 65,
+                "size": options["icon-size"],
+                "icon": view.get("icon")
+                or CONTROL_TYPES.get(domain, (None, None, "mdi:information"))[2],
+                "colour": theme["primary"],
+            }
+        )
         value = view.get("value", 0)
         available = view.get("available", True)
         active = available and view.get("active", False)
@@ -165,7 +219,11 @@ def compile_scene(view: dict) -> dict:
                 },
                 {
                     **(
-                        {"op": "number", "value": round(value), **_number_mask(30)}
+                        {
+                            "op": "number",
+                            "value": round(value),
+                            **_number_mask(30, raster),
+                        }
                         if available
                         and domain != "switch"
                         and view.get("position_known", True)
@@ -233,19 +291,29 @@ def compile_scene(view: dict) -> dict:
                 )
                 regions.append({"id": action, "x": x, "y": 211, "r": 19})
     else:
-        elements.append(
-            {
-                "op": "circle",
-                "x": 120,
-                "y": 120,
-                "r": 55,
-                "stroke": theme["grid"],
-                "fill": theme["surface"],
-            }
+        if view.get("style", "NAV-ORBIT") not in {
+            "NAV-ROLODEX",
+            "NAV-RIBBON",
+            "NAV-BREADCRUMB",
+        }:
+            elements.append(
+                {
+                    "op": "circle",
+                    "x": 120,
+                    "y": 120,
+                    "r": 55,
+                    "stroke": theme["grid"],
+                    "fill": theme["surface"],
+                }
+            )
+        menu_items = [item for item in items if not item.get("settings")]
+        visible, ornaments, nav_positions = navigation_layout(
+            view, menu_items, selected, options, theme
         )
-        for index, item in enumerate(items):
-            angle = index * 360 / max(1, len(items))
-            x, y = _point(120, 120, 84, angle)
+        elements.extend(ornaments)
+        rolodex = view.get("style") == "NAV-ROLODEX"
+        for index, item, x, y in visible:
+            angle = index * 360 / max(1, len(menu_items))
             active = index == selected
             ink = theme["secondary"] if active else theme["text"]
             elements.extend(
@@ -261,68 +329,57 @@ def compile_scene(view: dict) -> dict:
                     },
                 ]
             )
-            domain = item.get("entity_id", "").partition(".")[0]
-            if domain == "switch":
-                elements.extend(
-                    [
-                        {
-                            "op": "circle",
-                            "x": round(x),
-                            "y": round(y),
-                            "r": 7,
-                            "stroke": ink,
-                        },
-                        line(x, y - 9, x, y, ink),
-                    ]
+            elements.append(
+                {
+                    "op": "icon",
+                    "x": round(x),
+                    "y": round(y),
+                    "icon": item.get("icon")
+                    or CONTROL_TYPES.get(
+                        item.get("entity_id", "").partition(".")[0],
+                        (None, None, "mdi:folder"),
+                    )[2],
+                    "size": options["icon-size"],
+                    "colour": ink,
+                }
+            )
+            if rolodex:
+                elements.append(
+                    {
+                        "op": "mask",
+                        "x": 140,
+                        "y": round(y),
+                        "text": item["label"],
+                        "size": 7,
+                        "colour": ink,
+                    }
                 )
-            elif domain == "cover":
-                elements.extend(
-                    [
-                        line(x - 6, y - 6, x + 6, y - 6, ink),
-                        line(x - 6, y, x + 6, y, ink),
-                        line(x - 6, y + 6, x + 6, y + 6, ink),
-                    ]
+            if view.get("style") == "NAV-POINTER" and active:
+                elements.append(
+                    line(
+                        *_point(120, 120, 57, angle),
+                        *_point(120, 120, 66, angle),
+                        theme["primary"],
+                    )
                 )
-            elif domain == "light":
-                elements.extend(
-                    [
-                        {
-                            "op": "circle",
-                            "x": round(x),
-                            "y": round(y - 2),
-                            "r": 4,
-                            "stroke": ink,
-                        },
-                        line(x - 3, y + 3, x + 3, y + 3, ink),
-                        line(x - 2, y + 6, x + 2, y + 6, ink),
-                    ]
-                )
-            else:
-                elements.extend(
-                    [
-                        line(x - 6, y - 5, x + 6, y - 5, ink),
-                        line(x + 6, y - 5, x + 6, y + 5, ink),
-                        line(x + 6, y + 5, x - 6, y + 5, ink),
-                        line(x - 6, y + 5, x - 6, y - 5, ink),
-                        line(x, y - 5, x, y + 5, ink),
-                    ]
-                )
-            regions.append({"id": item["id"], "x": round(x), "y": round(y), "r": 22})
+            regions.append({"id": item["id"], "x": round(x), "y": round(y), "r": 20})
         elements.extend(
             [
                 {
                     "op": "mask",
                     "x": 120,
-                    "y": 108,
+                    "y": nav_positions["title"],
                     "text": view.get("title", "Home").upper()[:14],
-                    "size": 11,
+                    "size": options["font-size"],
                     "colour": theme["text"],
                 },
                 {
                     "op": "mask",
                     "x": 120,
-                    "y": 128,
-                    "text": items[selected % len(items)]["label"]
+                    "y": nav_positions["label"] or 193,
+                    "text": ""
+                    if not nav_positions["label"]
+                    else items[selected % len(items)]["label"]
                     if items
                     else "NO DESTINATIONS",
                     "size": 7,
@@ -331,12 +388,48 @@ def compile_scene(view: dict) -> dict:
             ]
         )
 
+    settings_item = next((item for item in items if item.get("settings")), None)
+    if settings_item:
+        settings_y = nav_positions["cog"]
+        active = selected == len(items) - 1
+        elements.extend(
+            [
+                {
+                    "op": "circle",
+                    "x": 120,
+                    "y": settings_y,
+                    "r": 15,
+                    "fill": theme["surface"],
+                    "stroke": theme["primary"] if active else theme["quiet"],
+                },
+                {
+                    "op": "icon",
+                    "x": 120,
+                    "y": settings_y,
+                    "size": 18,
+                    "icon": "mdi:cog",
+                    "colour": theme["secondary"] if active else theme["text"],
+                },
+            ]
+        )
+        regions.append({"id": "__settings", "x": 120, "y": settings_y, "r": 17})
+    footer_y = (
+        212
+        if extended
+        else nav_positions["footer"]
+        if not view.get("style", "NAV-ORBIT").startswith("CTL-")
+        else 158
+    )
+    if not extended:
+        for region in regions:
+            if region["id"] in {"back", "home"}:
+                region["y"] = footer_y
     for x in (90, 150):
         elements.append(
             {
                 "op": "circle",
                 "x": x,
-                "y": 158,
+                "y": footer_y,
                 "r": 14,
                 "stroke": theme["quiet"],
                 "fill": theme["surface"],
@@ -344,28 +437,43 @@ def compile_scene(view: dict) -> dict:
         )
     elements.extend(
         [
-            line(95, 158, 85, 158, theme["primary"]),
-            line(85, 158, 89, 154, theme["primary"]),
-            line(85, 158, 89, 162, theme["primary"]),
-            line(145, 158, 150, 153, theme["primary"]),
-            line(150, 153, 155, 158, theme["primary"]),
-            line(147, 156, 147, 163, theme["primary"]),
-            line(153, 156, 153, 163, theme["primary"]),
-            line(147, 163, 153, 163, theme["primary"]),
+            line(95, footer_y, 85, footer_y, theme["primary"]),
+            line(85, footer_y, 89, footer_y - 4, theme["primary"]),
+            line(85, footer_y, 89, footer_y + 4, theme["primary"]),
+            line(145, footer_y, 150, footer_y - 5, theme["primary"]),
+            line(150, footer_y - 5, 155, footer_y, theme["primary"]),
+            line(147, footer_y - 2, 147, footer_y + 5, theme["primary"]),
+            line(153, footer_y - 2, 153, footer_y + 5, theme["primary"]),
+            line(147, footer_y + 5, 153, footer_y + 5, theme["primary"]),
         ]
     )
     for element in elements:
-        if element["op"] == "mask":
+        if element["op"] == "icon":
+            element["background"] = (
+                theme["surface"] if view.get("kind") == "menu" else theme["bg"]
+            )
+            element.update(
+                icon_mask(
+                    element.pop("icon"),
+                    element.pop("size"),
+                    element.pop("colour"),
+                    raster,
+                )
+            )
+        elif element["op"] == "mask":
             element.update(
                 _text_mask(
-                    element.pop("text"), element.pop("size"), element.pop("colour")
+                    element.pop("text"),
+                    element.pop("size"),
+                    element.pop("colour"),
+                    raster,
                 )
             )
             element["background"] = (
                 theme["surface"] if view.get("kind") == "menu" else theme["bg"]
             )
     return {
-        "version": 2,
+        "version": 3 if any(e.get("characters") for e in elements) else 2,
         "width": 240,
         "height": 240,
         "background": theme["bg"],

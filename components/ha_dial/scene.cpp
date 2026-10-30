@@ -48,7 +48,7 @@ bool parse_clear_request(JsonObject source, uint64_t applied_revision, uint64_t 
 bool parse_scene(JsonObject source, SceneBuffer &target) {
     target.element_count = target.region_count = 0;
     target.valid = false;
-    if (((source["version"] | 0) != 1 && (source["version"] | 0) != 2) || (source["width"] | 0) != 240 ||
+    if (((source["version"] | 0) != 1 && (source["version"] | 0) != 2 && (source["version"] | 0) != 3) || (source["width"] | 0) != 240 ||
         (source["height"] | 0) != 240 || !valid_colour(source["background"]))
       return false;
     const char *screen = source["screen"];
@@ -95,6 +95,9 @@ bool parse_scene(JsonObject source, SceneBuffer &target) {
       } else if ((strcmp(operation, "arc") == 0 || strcmp(operation, "gauge") == 0)) {
         element.op = strcmp(operation, "gauge") == 0 ? 'g' : 'a';
         element.value = input["value"] | 0;
+        element.minimum = input["minimum"] | 0.0f;
+        element.maximum = input["maximum"] | 100.0f;
+        if (!std::isfinite(element.minimum) || !std::isfinite(element.maximum) || element.minimum >= element.maximum) return false;
         if (element.op == 'g' && (element.value < 0 || element.value > 100)) return false;
         element.start = input["start"] | 0;
         element.end = input["end"] | 0;
@@ -104,13 +107,18 @@ bool parse_scene(JsonObject source, SceneBuffer &target) {
       } else if ((strcmp(operation, "mask") == 0 || strcmp(operation, "number") == 0)) {
         element.op = strcmp(operation, "number") == 0 ? 'n' : 'm';
         element.value = input["value"] | -1;
-        if (element.op == 'n' && (element.value < 0 || element.value > 999 || !element.has_stroke)) return false;
+        const char *characters = input["characters"] | "0123456789";
+        if (strcmp(characters, "0123456789.-") == 0) element.glyphs = 12;
+        else if (strcmp(characters, "0123456789") != 0) return false;
+        element.precision = input["precision"] | 0;
+        if (element.precision < 0 || element.precision > 2 || (element.precision && element.glyphs != 12)) return false;
+        if (element.op == 'n' && (!element.has_stroke || (element.glyphs == 10 && (element.value < 0 || element.value > 999)) || (element.glyphs == 12 && (element.value < -999999 || element.value > 999999)))) return false;
         element.mask_width = input["width"] | 0;
         element.mask_height = input["height"] | 0;
         const char *colour = input["colour"] | "";
         const char *background = input["background"] | target.background.c_str();
         const char *pixels = input["pixels"];
-        const size_t expected = static_cast<size_t>(element.mask_width) * element.mask_height * (element.op == 'n' ? 10 : 1);
+        const size_t expected = static_cast<size_t>(element.mask_width) * element.mask_height * (element.op == 'n' ? element.glyphs : 1);
         const size_t packed_length = ((expected + 3) / 4) * 2;
         if (element.mask_width <= 0 || element.mask_width > (element.op == 'n' ? 32 : 120) || element.mask_height <= 0 ||
             element.mask_height > 32 || pixels == nullptr || strlen(pixels) != packed_length ||
@@ -149,6 +157,7 @@ bool parse_scene(JsonObject source, SceneBuffer &target) {
 
 void draw_scene(display::Display &it, const SceneBuffer &scene, float local_value) {
   Raster raster([&it](int x, int y, Color colour) { it.draw_pixel_at(x, y, colour); });
+  const bool local = std::isfinite(local_value);
   const Color background = scene_colour(scene.background, Color::BLACK);
   it.fill(background);
     for (size_t index = 0; index < scene.element_count; index++) {
@@ -163,9 +172,9 @@ void draw_scene(display::Display &it, const SceneBuffer &scene, float local_valu
             raster.circle(element.x, element.y, std::max(0, element.radius - width), stroke);
         }
       } else if (element.op == 'a' || element.op == 'g') {
-        const int value = local_value >= 0 ? static_cast<int>(std::floor(local_value + 0.5f)) : element.value;
+        const int value = local ? static_cast<int>(std::floor((local_value - element.minimum) * 100 / (element.maximum - element.minimum) + 0.5f)) : element.value;
         const int end = element.op == 'g' ? element.start + static_cast<int>(std::floor((element.end - element.start) * std::clamp(value, 0, 100) / 100.0 + 0.5)) : element.end;
-        const Color stroke = element.op == 'g' && local_value >= 0 && element.has_fill ? element.fill : element.stroke;
+        const Color stroke = element.op == 'g' && local && element.has_fill ? element.fill : element.stroke;
         for (int thickness = 0; thickness < element.width; thickness++) {
           const int radius = std::max(1, element.radius + thickness - element.width / 2);
           int previous_x = 0, previous_y = 0;
@@ -185,14 +194,23 @@ void draw_scene(display::Display &it, const SceneBuffer &scene, float local_valu
         raster.line(element.x, element.y, element.x2, element.y2,
                 element.stroke);
       } else if (element.op == 'm' || element.op == 'n') {
-        const std::string digits = element.op == 'n' ? std::to_string(std::clamp(local_value >= 0 ? static_cast<int>(std::floor(local_value + 0.5f)) : element.value, 0, 999)) : "";
+        std::string digits;
+        if (element.op == 'n') {
+          if (element.glyphs == 12) {
+            const int scale = element.precision == 2 ? 100 : element.precision == 1 ? 10 : 1;
+            const double value = local ? std::clamp(static_cast<double>(local_value), -999999.0 / scale, 999999.0 / scale) : static_cast<double>(element.value) / scale;
+            char buffer[20];
+            snprintf(buffer, sizeof(buffer), "%.*f", element.precision, value == 0 ? 0.0 : value);
+            digits = buffer;
+          } else digits = std::to_string(std::clamp(local ? static_cast<int>(std::floor(local_value + 0.5f)) : element.value, 0, 999));
+        }
         const int draw_width = element.mask_width * (element.op == 'n' ? digits.size() : 1);
-        const Color colour = element.op == 'n' && local_value >= 0 ? element.stroke : element.colour;
+        const Color colour = element.op == 'n' && local ? element.stroke : element.colour;
         const int left = element.x - draw_width / 2;
         const int top = element.y - element.mask_height / 2;
         for (int pixel = 0; pixel < draw_width * element.mask_height; pixel++) {
           const int column = pixel % draw_width, row = pixel / draw_width;
-          const int source_pixel = element.op == 'n' ? (digits[column / element.mask_width] - '0') * element.mask_width * element.mask_height + row * element.mask_width + column % element.mask_width : pixel;
+          const int source_pixel = element.op == 'n' ? (digits[column / element.mask_width] == '.' ? 10 : digits[column / element.mask_width] == '-' ? 11 : digits[column / element.mask_width] - '0') * element.mask_width * element.mask_height + row * element.mask_width + column % element.mask_width : pixel;
           const size_t packed_index = static_cast<size_t>(source_pixel / 4) * 2;
           const int packed = hex_value(element.pixels[packed_index]) * 16 +
                              hex_value(element.pixels[packed_index + 1]);

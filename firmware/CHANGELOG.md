@@ -1,5 +1,12 @@
 # HA Dial firmware changelog
 
+## 2026.10.1-b2
+
+- Accept scene v3 signed/decimal glyph feedback and normalised gauge ranges, retaining v1/v2 support.
+- Guard restored settings callbacks until UI startup, retain power-hold setup order and give reset confirmation priority over settings input.
+- Add persistent Show Settings config switch, root settings handshake and local IP/version/uptime/network/touch diagnostics.
+- Keep settings available from the offline fallback only when enabled; disabling closes it, and physical Wi-Fi recovery remains independent.
+
 ## 2026.10.1-b1
 
 - Add network/API/HA setup guidance, local confirmed Wi-Fi reset and native restart/recovery buttons.

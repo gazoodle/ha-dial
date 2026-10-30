@@ -85,6 +85,7 @@ void HaDial::draw_setup_(display::Display &it) {
       case SetupScreen::READY:
         return;
     }
+    if (this->settings_enabled_) lines[5] = "Press: Settings / hold 5s";
     const int failure = this->wifi_failure_;
     if (!wifi->is_connected() && failure != 0 && screen != SetupScreen::NEEDS_WIFI) {
       lines[4] = failure == WIFI_REASON_NO_AP_FOUND ? "Network not found" :
@@ -109,4 +110,44 @@ void HaDial::draw_setup_(display::Display &it) {
     it.print(120, 211, this->font_, ORANGE, display::TextAlign::CENTER, "Touch fault");
 }
 
+}  // namespace esphome::ha_dial
+
+namespace esphome::ha_dial {
+void HaDial::set_settings_enabled(bool enabled) {
+  this->settings_enabled_ = enabled;
+  if (!enabled) this->settings_active_ = false;
+  // A restored template switch can run before display/API component setup.
+  if (!this->started_) return;
+  this->send_input_("ready");
+  if (this->display_ != nullptr) this->display_->update();
+}
+
+bool HaDial::dismiss_settings_() {
+  if (local_screen(this->reset_confirmation_, this->settings_active_, this->settings_enabled_) != LocalScreen::SETTINGS)
+    return false;
+  this->settings_active_ = false;
+  this->scenes_.back();
+  this->send_input_("back");
+  if (this->display_ != nullptr) this->display_->update();
+  return true;
+}
+
+void HaDial::draw_settings_(display::Display &it) {
+  auto *wifi = wifi::global_wifi_component;
+  char ip_buffer[network::IP_ADDRESS_BUFFER_SIZE];
+  const std::string address = wifi->is_connected() ? wifi->get_ip_addresses()[0].str_to(ip_buffer) : "Wi-Fi offline";
+  std::array<std::string, 6> lines = {
+    address, FIRMWARE_VERSION,
+    "Up " + std::to_string(millis() / 60000) + "m / " + std::to_string(wifi->wifi_rssi()) + "dBm",
+    std::string("API ") + (this->is_connected() ? "on" : "off") + " / HA " + (this->scene_received_ ? "scene" : "waiting"),
+    this->touchscreen_ != nullptr && (this->touchscreen_->is_failed() || this->touchscreen_->status_has_warning()) ? "Touch fault" : "Touch ready",
+    "Press / turn: Back"
+  };
+  it.fill(Color::BLACK);
+  it.circle(120, 120, 116, ORANGE);
+  if (this->font_ == nullptr) return;
+  it.print(120, 35, this->font_, ORANGE, display::TextAlign::CENTER, "Settings");
+  for (size_t index = 0; index < lines.size(); ++index)
+    it.print(120, 65 + index * 24, this->font_, Color::WHITE, display::TextAlign::CENTER, lines[index].c_str());
+}
 }  // namespace esphome::ha_dial

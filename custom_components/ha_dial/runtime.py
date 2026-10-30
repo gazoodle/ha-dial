@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from time import time_ns
 
 from homeassistant.const import ATTR_FRIENDLY_NAME
@@ -28,6 +29,7 @@ from .definition import THEMES, build_definition, leaf_items, validate_definitio
 from .navigator import Navigator
 from .protocol import device_payload
 from .scene import compile_scene
+from .visibility import filter_definition
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,7 +45,14 @@ def _navigator(hass: HomeAssistant, device: str) -> Navigator:
         state["navigators"][device] = Navigator(
             light_entity, light_name, state.get("definitions", {}).get(device)
         )
-    return state["navigators"][device]
+    navigator = state["navigators"][device]
+    navigator.settings_enabled = state.get("settings_enabled", {}).get(
+        state.get("definition_sources", {}).get(device, {}).get("preview_of", device)
+        if _is_preview(device)
+        else device,
+        False,
+    )
+    return navigator
 
 
 def _is_preview(device: str) -> bool:
@@ -53,9 +62,14 @@ def _is_preview(device: str) -> bool:
 def _sync_control(hass: HomeAssistant, navigator: Navigator) -> None:
     view = navigator.current()
     if view.get("kind") == "control":
-        navigator.sync(
-            **control_state(view["entity_id"], hass.states.get(view["entity_id"]))
+        properties = control_state(
+            view["entity_id"], hass.states.get(view["entity_id"])
         )
+        properties["confirm"] = view.get("domain") in {
+            "lock",
+            "alarm_control_panel",
+        } or view.get("confirm", False)
+        navigator.sync(**properties)
 
 
 async def _input(
@@ -193,24 +207,36 @@ def _scene_result(hass: HomeAssistant, device: str, view: dict) -> dict:
 
 
 def _render_definition(hass: HomeAssistant, source: dict) -> dict:
+    preview_of = source.get("preview_of")
+    if preview_of is not None and (
+        not isinstance(preview_of, str)
+        or re.fullmatch(r"[a-z0-9_]{1,64}", preview_of) is None
+    ):
+        raise ValueError("Preview source must identify a valid Dial device")
     if not isinstance(source.get("template", ""), str):
         raise TypeError("Template must be text")
     if source.get("theme", "ember") not in THEMES:
         raise ValueError("Unknown default theme")
     if not source.get("template"):
-        return build_definition(
-            hass, source.get("pages", []), source.get("theme", "ember")
+        return filter_definition(
+            hass,
+            build_definition(
+                hass, source.get("pages", []), source.get("theme", "ember")
+            ),
         )
     from homeassistant.helpers.template import Template
 
-    return _template_definition(
-        Template(source["template"], hass).async_render(
-            variables={
-                "theme": source.get("theme", "ember"),
-                "pages": source.get("pages", []),
-            },
-            parse_result=True,
-        )
+    return filter_definition(
+        hass,
+        _template_definition(
+            Template(source["template"], hass).async_render(
+                variables={
+                    "theme": source.get("theme", "ember"),
+                    "pages": source.get("pages", []),
+                },
+                parse_result=True,
+            )
+        ),
     )
 
 
@@ -255,6 +281,9 @@ async def _install_definition(
     navigator = Navigator(
         state.get("light_entity"), state.get("light_name", "Light"), definition
     )
+    navigator.settings_enabled = state.get("settings_enabled", {}).get(
+        source.get("preview_of", device) if _is_preview(device) else device, False
+    )
     state["definitions"][device] = definition
     state["definition_sources"][device] = source
     state["navigators"][device] = navigator
@@ -275,6 +304,11 @@ async def _install_definition(
 
     @callback
     def template_changed(_event, updates) -> None:
+        if (
+            state.get("unloading")
+            or state["definition_sources"].get(device) is not source
+        ):
+            return
         result = updates[-1].result
         if isinstance(result, TemplateError):
             _LOGGER.error("HA Dial template failed for device %s: %s", device, result)
@@ -283,7 +317,7 @@ async def _install_definition(
             )
             return
         try:
-            updated = _template_definition(result)
+            updated = filter_definition(hass, _template_definition(result))
         except (TypeError, ValueError, json.JSONDecodeError) as error:
             _LOGGER.warning(
                 "Ignoring invalid HA Dial template update for %s: %s", device, error
@@ -298,6 +332,9 @@ async def _install_definition(
         updated_navigator = Navigator(
             state.get("light_entity"), state.get("light_name", "Light"), updated
         )
+        updated_navigator.settings_enabled = state.get("settings_enabled", {}).get(
+            device, False
+        )
         if current:
             updated_navigator.restore(current)
         if updated_navigator.control is not None:
@@ -306,6 +343,46 @@ async def _install_definition(
         state["navigators"][device] = updated_navigator
         _watch_definition_entities(hass, device, updated)
         hass.async_create_task(_push(hass, device, updated_navigator.current()))
+
+    condition_trackers = state.setdefault("condition_trackers", {})
+    if old_tracker := condition_trackers.pop(device, None):
+        old_tracker.async_remove()
+    condition_sources = definition.get("_condition_templates", [])
+    if condition_sources:
+
+        @callback
+        def conditions_changed(_event, _updates):
+            if (
+                state.get("unloading")
+                or state["definition_sources"].get(device) is not source
+            ):
+                return
+            try:
+                updated = _render_definition(hass, source)
+                current = state["navigators"].get(device)
+                replacement = Navigator(definition=updated)
+                replacement.settings_enabled = state.get("settings_enabled", {}).get(
+                    device, False
+                )
+                if current:
+                    replacement.restore(current)
+                _sync_control(hass, replacement)
+                state["navigators"][device] = replacement
+                state["definitions"][device] = updated
+                _watch_definition_entities(hass, device, updated)
+                hass.async_create_task(_push(hass, device, replacement.current()))
+            except (TemplateError, ValueError, TypeError) as error:
+                _LOGGER.error("HA Dial visibility failed: %s", error)
+                async_dispatcher_send(
+                    hass, f"{DOMAIN}_scene_{device}", {"error": str(error)}
+                )
+
+        condition_trackers[device] = async_track_template_result(
+            hass,
+            [TrackTemplate(Template(text, hass), {}) for text in condition_sources],
+            conditions_changed,
+        )
+        condition_trackers[device].async_refresh()
 
     if source.get("template"):
         tracker = async_track_template_result(

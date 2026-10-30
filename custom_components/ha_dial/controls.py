@@ -3,6 +3,8 @@
 from homeassistant.components.cover import CoverEntityFeature
 from homeassistant.core import State
 
+from .domain_controls import extended_command, extended_state
+
 
 def control_state(entity_id: str, state: State | None) -> dict:
     domain = entity_id.partition(".")[0]
@@ -39,6 +41,11 @@ def control_state(entity_id: str, state: State | None) -> dict:
         if isinstance(position, (int, float)):
             value = round(position)
         continuous = bool(features & CoverEntityFeature.SET_POSITION) and position_known
+    extra = (
+        extended_state(domain, state, available)
+        if domain not in {"light", "switch", "cover"}
+        else {}
+    )
     return {
         "value": max(0, min(100, value)),
         "active": bool(active),
@@ -48,15 +55,36 @@ def control_state(entity_id: str, state: State | None) -> dict:
         "actions": actions,
         "position_known": position_known,
         "state": state.state if available and state is not None else "unavailable",
+        **extra,
     }
 
 
 def control_command(
     view: dict, action: str, item: str | None
 ) -> tuple[str, str, dict] | None:
-    if not view.get("available"):
+    if not view.get("available") or action not in {
+        "press",
+        "touch",
+        "rotate_left",
+        "rotate_right",
+        "set_value",
+    }:
         return None
     domain = view["entity_id"].partition(".")[0]
+    if (
+        action in {"press", "touch"}
+        and (view.get("confirm") or domain in {"lock", "alarm_control_panel"})
+        and not view.get("_confirmed")
+    ):
+        return None
+    if view.get("confirmation") and not view.get("_confirmed"):
+        return None
+    if domain not in {"light", "switch", "cover"}:
+        return extended_command(
+            view,
+            "touch" if view.get("_confirmed") else action,
+            view.get("_confirmed") or item,
+        )
     data = {"entity_id": view["entity_id"]}
     if action in {"rotate_left", "rotate_right", "set_value"} and view.get(
         "continuous"
@@ -70,6 +98,8 @@ def control_command(
                 {**data, "position": round(view["value"])},
             )
     if domain == "cover":
+        if view.get("_confirmed"):
+            action, item = "touch", view["_confirmed"]
         command = "stop" if action == "press" else item if action == "touch" else None
         if command in view.get("actions", []):
             return domain, f"{command}_cover", data
@@ -81,7 +111,41 @@ def control_command(
 def preview_feedback(control: dict, action: str, item: str | None) -> None:
     """Simulate cover results without calling services from a draft card."""
     command = control_command(control, action, item)
-    if command is None or command[0] != "cover":
+    if command is None:
+        return
+    if command[0] != "cover":
+        domain, service, data = command
+        if domain == "climate" and service == "set_hvac_mode":
+            control["state"] = data["hvac_mode"]
+        elif domain == "fan" and service == "set_preset_mode":
+            control["detail"] = data["preset_mode"]
+        elif domain in {"select", "input_select"}:
+            control["state"] = data["option"]
+        elif domain == "lock":
+            control["state"] = "locked" if service == "lock" else "unlocked"
+        elif domain == "alarm_control_panel":
+            control["state"] = (
+                "disarmed"
+                if service == "alarm_disarm"
+                else service.replace("alarm_arm_", "armed_")
+            )
+        elif domain == "media_player" and service == "media_play_pause":
+            control["state"] = "paused" if control["state"] == "playing" else "playing"
+        elif domain == "media_player" and service == "volume_mute":
+            control["muted"] = data["is_volume_muted"]
+        elif domain == "timer":
+            control["state"] = {"start": "active", "pause": "paused", "cancel": "idle"}[
+                service
+            ]
+        elif domain == "vacuum":
+            control["state"] = {
+                "start": "cleaning",
+                "pause": "paused",
+                "stop": "idle",
+                "return_to_base": "returning",
+            }[service]
+        elif domain in {"scene", "button", "input_button"}:
+            control["detail"] = "Preview action only"
         return
     service = command[1]
     if service in {"open_cover", "close_cover"}:

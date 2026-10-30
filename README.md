@@ -494,3 +494,88 @@ Compile/deploy tools check the relevant version and metadata before proceeding. 
 a release when the owner requests it, using `release integration` or `release firmware` in
 place of `bump`. This removes bN, uses the current month if it changed, and combines the build
 notes. It does not create a Git tag, publish or deploy anything.
+
+## Atlas editors, appearance and visibility
+
+Each page has **Appearance & conditions**; each entity has **Edit**. The modal is created
+only when opened, keeping large navigation trees light. Existing entity strings remain
+valid; an edited entity becomes an object with `entity_id` and its overrides.
+
+This build implements two Atlas families: Navigation (**Orbit**, **Pointer**, **Rolodex**, **Petals**, **Constellation**, **Compass**, **Ribbon**, **Breadcrumb**)
+and Domain controls (**Instrument**, **Editorial**). The entity selector offers light,
+switch, cover, climate, media player, fan, alarm, lock, vacuum, sensor, binary sensor,
+weather, timer, calendar, scene, select/input select, number/input number and button/input
+button. Sensor presentation variants include energy, air quality, water, vehicle and data.
+The watch faces, cameras, ambient screens and historic chart families are not implemented.
+
+Rotary controls use the entity's current limits and step. Media/fan/cover/vacuum actions
+respect reported capabilities. Sensors, binary sensors, weather and calendars are read-only;
+calendar shows the current event, rather than fetching future agenda entries. Access and alarm
+actions require explicit confirmation. PIN-protected actions are unavailable; no PIN is stored.
+Draft previews never call entity services. Changing visibility does not provide access control.
+
+The icon picker uses the bundled Material Design Icons font, rendered in HA as a small
+mask shared with the card and Dial. It needs no icon download on the device. **Crisp** uses
+binary text/digit/icon coverage; **Smooth** uses antialiased coverage. Drawing primitives
+keep the shared pixel raster contract. Appearance options are compiled by HA, not browser CSS.
+
+The structured controls and **Advanced style** edit the same settings. Supported declarations:
+
+```css
+outer-border: off;
+border-width: 2;
+accent: #ff8b2d;
+background: #060707;
+text: #fff7eb;
+icon-size: 18px;
+font-size: 11px;
+orbit-radius: 84px;
+raster: smooth;
+```
+
+Additional colour keys are `surface`, `secondary`, `quiet` and `grid`. Values must be
+`#RRGGBB`. Border width is 1–4, icon size 12–28, title size 6–16 and orbit radius 70–90.
+Unknown properties fail validation. Entity overrides can be written directly:
+
+```yaml
+pages:
+  - id: home
+    title: Home
+    style: NAV-POINTER
+    appearance:
+      outer-border: false
+      raster: crisp
+    entities:
+      - entity_id: climate.example
+        label: Heating
+        icon: mdi:thermometer
+        style: CTL-THERMOSTAT-EDITORIAL
+        conditions:
+          - condition: state
+            entity_id: input_boolean.example
+            state: "on"
+```
+
+Use HA's [condition selector](https://www.home-assistant.io/docs/blueprint/selectors/#condition-selector)
+on any page or entity. Supported visibility conditions are `state`, `numeric_state`,
+`template`, `and`, `or` and `not`, including nested groups. Conditions are ANDed at the
+outer level. HA tracks their state/template dependencies by events, including hidden
+branches, and returns to a surviving ancestor if the current page disappears. The root
+remains present with an empty list when its conditions fail. Time/device/browser conditions
+and state `for` durations are rejected; put those rules in an HA template/helper sensor.
+
+### Optional local settings
+
+The Dial exposes an ESPHome **Show Settings** configuration switch in HA. It defaults off
+and restores its last value on reboot. When enabled, **Settings** joins the root menu's
+rotary selection and appears as a cog in a reserved inner/top position; it does not reduce the eight normal
+orbit destinations. It is absent from sub-pages. Rolodex reserves a top position for it.
+
+The firmware-owned page shows IP, firmware version, uptime, Wi-Fi signal, API/HA status and
+touch health. Press or turn to return. With HA unavailable, a short press on the fallback
+screen opens Settings when enabled. Turning the switch off closes the page and removes the
+cog. The independent physical Wi-Fi recovery gesture is retained even when Settings is off.
+
+Deploy paired firmware before this server build. Scene v3 adds signed/decimal local numeric
+feedback; the firmware still accepts v1/v2 scenes. Integration updates require the restart
+Repair, then a browser refresh. Dashboard definitions and device Wi-Fi are preserved.

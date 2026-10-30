@@ -1,5 +1,6 @@
 // Pixel raster contract mirrored by the firmware and checked with shared scenes.
-export function rasterize(scene, localValue = -1) {
+export function rasterize(scene, localValue = NaN) {
+  const local = Number.isFinite(localValue);
   const data = new Uint8ClampedArray(240 * 240 * 4);
   const colours = new Map();
   const colour = (value) => {
@@ -51,9 +52,9 @@ export function rasterize(scene, localValue = -1) {
       if (element.stroke) for (let width = 0; width < (element.width || 1); width++)
         circle(element.x, element.y, Math.max(0, element.r - width), element.stroke);
     } else if (element.op === "arc" || element.op === "gauge") {
-      const value = localValue >= 0 ? Math.round(localValue) : element.value;
+      const value = local ? Math.round((localValue - (element.minimum ?? 0)) * 100 / ((element.maximum ?? 100) - (element.minimum ?? 0))) : element.value;
       const end = element.op === "gauge" ? element.start + Math.round((element.end - element.start) * Math.max(0, Math.min(100, value)) / 100) : element.end;
-      const stroke = element.op === "gauge" && localValue >= 0 ? (element.fill || element.stroke) : element.stroke;
+      const stroke = element.op === "gauge" && local ? (element.fill || element.stroke) : element.stroke;
       for (let width = 0; width < element.width; width++) {
         const radius = Math.max(1, element.r + width - Math.floor(element.width / 2));
         let previous;
@@ -67,9 +68,10 @@ export function rasterize(scene, localValue = -1) {
     } else if (element.op === "line") {
       line(element.x1, element.y1, element.x2, element.y2, element.stroke);
     } else if (element.op === "mask" || element.op === "number") {
-      const digits = element.op === "number" ? String(Math.max(0, Math.min(999, localValue >= 0 ? Math.round(localValue) : element.value))) : "";
+      const scale = 10 ** (element.precision || 0);
+      const digits = element.op !== 'number' ? '' : element.characters ? (local ? Math.max(-999999 / scale, Math.min(999999 / scale, localValue)) : element.value / scale).toFixed(element.precision || 0) : String(Math.max(0, Math.min(999, local ? Math.round(localValue) : element.value)));
       const drawWidth = element.width * (element.op === "number" ? digits.length : 1);
-      const ink = element.op === "number" && localValue >= 0 ? element.stroke : element.colour;
+      const ink = element.op === "number" && local ? element.stroke : element.colour;
       const front = ink.match(/[\da-f]{2}/gi).map((part) => parseInt(part, 16));
       const back = (element.background || scene.background).match(/[\da-f]{2}/gi).map((part) => parseInt(part, 16));
       const palette = Array.from({ length: 4 }, (_, level) => "#" + front.map((value, index) =>
@@ -77,7 +79,7 @@ export function rasterize(scene, localValue = -1) {
       const left = element.x - Math.floor(drawWidth / 2), top = element.y - Math.floor(element.height / 2);
       for (let index = 0; index < drawWidth * element.height; index++) {
         const column = index % drawWidth, row = Math.floor(index / drawWidth);
-        const source = element.op === "number" ? Number(digits[Math.floor(column / element.width)]) * element.width * element.height + row * element.width + column % element.width : index;
+        const source = element.op === "number" ? (element.characters ? element.characters.indexOf(digits[Math.floor(column / element.width)]) : Number(digits[Math.floor(column / element.width)])) * element.width * element.height + row * element.width + column % element.width : index;
         const packed = parseInt(element.pixels.slice(Math.floor(source / 4) * 2, Math.floor(source / 4) * 2 + 2), 16);
         const level = (packed >> (6 - (source % 4) * 2)) & 3;
         if (level) pixel(left + column, top + row, palette[level]);

@@ -128,6 +128,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     frontend.add_extra_js_url(hass, url)
     entry.async_on_unload(lambda: frontend.remove_extra_js_url(hass, url))
 
+    def update_settings_flag(device, flag):
+        if not isinstance(flag, str) or flag not in {"true", "false"}:
+            return False
+        enabled = flag == "true"
+        policies = state.setdefault("settings_enabled", {})
+        changed = policies.get(device, False) != enabled
+        policies[device] = enabled
+        if navigator := state["navigators"].get(device):
+            navigator.settings_enabled = enabled
+            if (
+                not enabled
+                and navigator.control
+                and navigator.control.get("kind") == "settings"
+            ):
+                navigator.control = None
+        if changed and state["active"]:
+            for preview, source in state["definition_sources"].items():
+                if _is_preview(preview) and source.get("preview_of") == device:
+                    hass.async_create_task(
+                        _push(hass, preview, _navigator(hass, preview).current())
+                    )
+        return changed
+
     @callback
     def device_input(event: Event) -> None:
         device = event.data.get("device")
@@ -140,6 +163,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             return
         if not isinstance(action, str) or action not in INPUTS:
             return
+        update_settings_flag(device, event.data.get("settings_enabled"))
         if device not in state["definition_sources"] and not light_entity:
             return
         item = event.data.get("item")
@@ -178,7 +202,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     @callback
     def scene_status(event: Event) -> None:
-        if not state["active"]:
+        if state.get("unloading"):
             return
         device = event.data.get("device")
         try:
@@ -189,6 +213,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             device
         ):
             return
+        changed = update_settings_flag(device, event.data.get("settings_enabled"))
+        if not state["active"]:
+            if changed:
+                state.setdefault("settings_resync", set()).add(device)
+            return
+        if changed:
+            hass.async_create_task(
+                _push(hass, device, _navigator(hass, device).current())
+            )
         state.setdefault("deployment_status", {})[device] = "applied"
         async_dispatcher_send(
             hass,
@@ -259,6 +292,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         async_track_time_interval(hass, check_restart, timedelta(seconds=30))
     )
     state["active"] = True
+    for device in state.pop("settings_resync", set()):
+        await _push(hass, device, _navigator(hass, device).current())
     return True
 
 
@@ -276,6 +311,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     for tracker in state.get("template_trackers", {}).values():
         tracker.async_remove()
     state.get("template_trackers", {}).clear()
+    for tracker in state.get("condition_trackers", {}).values():
+        tracker.async_remove()
+    state.get("condition_trackers", {}).clear()
     for unsubscribe in state.get("definition_unsubs", {}).values():
         unsubscribe()
     state.get("definition_unsubs", {}).clear()
@@ -445,6 +483,8 @@ async def _ws_subscribe(hass, connection, msg) -> None:
     def remove():
         unsubscribe()
         if _is_preview(device):
+            if tracker := state.get("condition_trackers", {}).pop(device, None):
+                tracker.async_remove()
             if tracker := state.get("template_trackers", {}).pop(device, None):
                 tracker.async_remove()
             if watch := state.get("definition_unsubs", {}).pop(device, None):

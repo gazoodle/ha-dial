@@ -181,10 +181,10 @@ def test_mixed_domain_tree_and_template_defaults(dial):
         definition.validate_definition({"tree": tree})
         view = nav_type(definition={"tree": tree}).input("press")
         assert view["style"] == definition.CONTROL_TYPES[domain][1]
-    with pytest.raises(ValueError, match="light, switch or cover"):
+    with pytest.raises(ValueError, match="supported HA entity"):
         definition.build_definition(
             hass,
-            [{"id": "root", "title": "Home", "entities": ["sensor.demo"]}],
+            [{"id": "root", "title": "Home", "entities": ["camera.demo"]}],
             "ember",
         )
     with pytest.raises(ValueError, match="lists"):

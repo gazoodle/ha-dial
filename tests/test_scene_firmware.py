@@ -65,6 +65,77 @@ def examples(scene):
             )
             yield {**resolved, "test_local_value": value}
 
+    for style in (
+        "NAV-POINTER",
+        "NAV-ROLODEX",
+        "NAV-PETALS",
+        "NAV-CONSTELLATION",
+        "NAV-COMPASS",
+        "NAV-RIBBON",
+        "NAV-BREADCRUMB",
+    ):
+        for raster in ("crisp", "smooth"):
+            yield scene.compile_scene(
+                {
+                    "kind": "menu",
+                    "id": "root",
+                    "title": "Example home",
+                    "style": style,
+                    "selected": 8,
+                    "appearance": {"raster": raster},
+                    "items": [
+                        *(
+                            {"id": f"p{n}", "label": f"Page {n}", "icon": "mdi:folder"}
+                            for n in range(8)
+                        ),
+                        {
+                            "id": "__settings",
+                            "label": "Settings",
+                            "icon": "mdi:cog",
+                            "settings": True,
+                        },
+                    ],
+                }
+            )
+    for domain, style, value in [
+        ("climate", "THERMOSTAT", 21.5),
+        ("media_player", "MEDIA", 42),
+        ("sensor", "AIR", 84),
+        ("lock", "LOCK", 0),
+        ("select", "SELECTOR", 1),
+    ]:
+        for variant in ("INSTRUMENT", "EDITORIAL"):
+            resolved = scene.compile_scene(
+                {
+                    "kind": "control",
+                    "id": domain,
+                    "domain": domain,
+                    "title": "Example " + domain,
+                    "style": f"CTL-{style}-{variant}",
+                    "icon": "mdi:star",
+                    "value": value,
+                    "minimum": 0,
+                    "maximum": 100,
+                    "step": 0.5 if domain == "climate" else 1,
+                    "available": True,
+                    "active": True,
+                    "continuous": domain in {"climate", "media_player", "select"},
+                    "state": "locked" if domain == "lock" else "on",
+                    "detail": "Example status",
+                    "options": ["Quiet", "Normal", "Boost"]
+                    if domain == "select"
+                    else [],
+                    "actions": ["unlock"] if domain == "lock" else [],
+                    "confirmation": "unlock" if domain == "lock" else None,
+                    "back": True,
+                }
+            )
+
+            yield resolved
+            if domain == "climate":
+                for local in (-5.5, 0, 21.5, 21.6):
+                    yield {**resolved, "test_local_value": local}
+
 
 def test_compiler_matches_shared_fixture(dial):
     fixture = json.loads((ROOT / "tests/fixtures/scenes.json").read_text())

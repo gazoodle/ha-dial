@@ -60,6 +60,7 @@ class HaDialCard extends HTMLElement {
   _definition() {
     return {
       template: this.config.template || "", theme: this.config.theme || "ember",
+      ...(this._device() !== this.config.device && this.config.device !== "preview" ? {preview_of:this.config.device} : {}),
       pages: this.config.pages || HaDialCard.getStubConfig().pages,
     };
   }

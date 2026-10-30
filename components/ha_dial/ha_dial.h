@@ -38,6 +38,7 @@ class HaDial : public Component, public api::CustomAPIDevice, public AsyncWebHan
   void set_font(font::Font *font) { this->font_ = font; }
   void set_touchscreen(Component *touchscreen) { this->touchscreen_ = touchscreen; }
   void request_wifi_reset();
+  void set_settings_enabled(bool enabled);
 
   void show_view(std::string view);
   void draw(display::Display &display);
@@ -49,6 +50,8 @@ class HaDial : public Component, public api::CustomAPIDevice, public AsyncWebHan
  protected:
   static void network_event_(void *arg, esp_event_base_t base, int32_t event, void *data);
   void draw_setup_(display::Display &display);
+  void draw_settings_(display::Display &display);
+  bool dismiss_settings_();
   bool ready_() const;
   void flush_value_();
   void draw_pill_(display::Display &display);
@@ -80,6 +83,8 @@ class HaDial : public Component, public api::CustomAPIDevice, public AsyncWebHan
   bool was_connected_{false};
   bool scene_received_{false};
   bool reset_confirmation_{false};
+  bool settings_enabled_{false};
+  bool settings_active_{false};
   bool started_{false};
   std::atomic<bool> network_changed_{false};
   std::atomic<int> wifi_failure_{0};

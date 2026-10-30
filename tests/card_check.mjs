@@ -11,6 +11,8 @@ class Element {
   set textContent(value) { this.firstChild = { textContent: value }; }
   get textContent() { return this.firstChild?.textContent; }
   focus() {}
+  showModal() { this.open = true; }
+  close() { this.open = false; }
   set innerHTML(value) { this.html = value; }
   get innerHTML() { return this.html; }
   addEventListener(name, callback) { this.events[name] = callback; }
@@ -45,7 +47,7 @@ globalThis.CustomEvent = class { constructor(name, properties) { this.type = nam
 Element.prototype.dispatchEvent = function(event) { this.lastEvent = event; };
 globalThis.customElements = { define: (name, type) => classes.set(name, type) };
 globalThis.renderScene = () => {};
-vm.runInThisContext(fs.readFileSync("custom_components/ha_dial/www/editor.js", "utf8").replace(/^export /gm, ""));
+for (const path of ['editor/catalogue.js','editor/options.js','editor.js']) vm.runInThisContext(fs.readFileSync(`custom_components/ha_dial/www/${path}`, 'utf8').replace(/^import .*;\n/gm, '').replace(/^export /gm,''));
 vm.runInThisContext(fs.readFileSync("custom_components/ha_dial/www/ha-dial-card.js", "utf8").replace(/^import .*;\n/gm, ""));
 const Editor = classes.get("ha-dial-card-editor"), Card = classes.get("ha-dial-card");
 const editor = new Editor(); editor.setConfig({}); editor.hass = {};
@@ -77,7 +79,8 @@ editor.addPage(child.id);
 const treeForms = editor.querySelector(".tree").querySelectorAll("ha-form");
 assert.equal(treeForms.length, 4, "a closed grandchild has no controls");
 assert(treeForms.every((form) => !form.schema.some((field) => field.name === "parent")));
-assert.deepEqual(treeForms[1].schema[0].selector.entity.filter.domain, ["light", "switch", "cover"]);
+assert(treeForms[1].schema[0].selector.entity.filter.domain.includes("climate"));
+assert(treeForms[1].schema[0].selector.entity.filter.domain.includes("sensor"));
 const grandchild = editor.config.pages[2];
 assert.equal(editor.move({kind:"page",id:child.id}, {kind:"page",id:grandchild.id}, "inside"), false, "reject cycles");
 assert.equal(editor.move({kind:"page",id:grandchild.id}, {kind:"page",id:child.id}, "after"), true);
@@ -163,6 +166,19 @@ large.renderTree();
 assert.equal(largeTree.querySelectorAll("ha-form").length, 0, "a closed root stays closed");
 assert.equal(large.config.pages.length, 1086, "unmounting never removes configuration");
 
+// The dialog round-trips rich entity settings without disturbing tree ordering.
+large.setEntities('home', ['light.demo']);
+openOptions(large, 'home', 'light.demo');
+const dialog = large.children.at(-1);
+const optionsForm = dialog.children.find((node)=>node.tag==='ha-form');
+optionsForm.events['value-changed']({stopPropagation(){},detail:{value:{label:'Reading light',icon:'mdi:book-open',style:'CTL-LIGHT-EDITORIAL','outer-border':false,conditions:[{condition:'state',entity_id:'switch.demo',state:'on'}]}}});
+dialog.children.find((node)=>node.textContent==='Apply').events.click();
+const editedEntity = large.entities('home')[0];
+assert.equal(editedEntity.entity_id,'light.demo');
+assert.equal(editedEntity.label,'Reading light');
+assert.equal(editedEntity.appearance['outer-border'],false);
+assert.equal(editedEntity.conditions[0].entity_id,'switch.demo');
+assert.equal(editedEntity.style,'CTL-LIGHT-EDITORIAL');
 const zoomCard = new Card();
 zoomCard.setConfig({device:"preview",zoom:200});
 assert.equal(zoomCard.shadowRoot.querySelector("ha-card").style["--dial-card-width"], "720px");

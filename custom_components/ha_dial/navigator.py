@@ -67,6 +67,10 @@ class Navigator:
                         "profile",
                         "style",
                         "theme",
+                        "appearance",
+                        "css",
+                        "confirm",
+                        "label_override",
                     )
                     if key in child
                 }
@@ -77,6 +81,11 @@ class Navigator:
                             "title": item.get("label", "Menu"),
                             "theme": child.get("theme", node.get("theme", "ember")),
                             "style": child.get("style", node.get("style", "NAV-ORBIT")),
+                            **{
+                                key: child[key]
+                                for key in ("appearance", "css")
+                                if key in child
+                            },
                             "items": child["children"],
                         },
                         page_id,
@@ -88,25 +97,55 @@ class Navigator:
                 "title": str(node.get("title", "Home"))[:24],
                 "theme": node.get("theme", "ember"),
                 "style": node.get("style", "NAV-ORBIT"),
+                **{key: node[key] for key in ("appearance", "css") if key in node},
                 "parent": parent,
                 "items": items,
             }
             return page_id
 
+        self.settings_enabled = False
         self.root_id = add_page(root)
+        for page in self.views.values():
+            ancestors = []
+            parent = page.get("parent")
+            while parent:
+                ancestors.insert(0, self.views[parent]["title"])
+                parent = self.views[parent].get("parent")
+            page["breadcrumbs"] = ancestors
         self.view_id = self.root_id
         self.selected = 0
         self.control: dict | None = None
+
+    def _items(self, page_id=None):
+        page_id = page_id or self.view_id
+        items = self.views[page_id]["items"]
+        if self.settings_enabled and page_id == self.root_id:
+            return [
+                *items,
+                {
+                    "id": "__settings",
+                    "label": "Settings",
+                    "icon": "mdi:cog",
+                    "settings": True,
+                },
+            ]
+        return items
 
     def current(self) -> dict:
         if self.control is not None:
             return deepcopy(self.control)
         view = deepcopy(self.views[self.view_id])
-        view.update(kind="menu", selected=self.selected, back=bool(view.get("parent")))
+        view["items"] = self._items()
+        view.update(
+            kind="menu",
+            selected=self.selected % max(1, len(view["items"])),
+            back=bool(view.get("parent")),
+        )
         return view
 
     def previous(self) -> dict | None:
         page = deepcopy(self.views[self.view_id])
+        page["items"] = self._items()
         if self.control is not None:
             page.update(
                 kind="menu", selected=self.selected, back=bool(page.get("parent"))
@@ -132,6 +171,8 @@ class Navigator:
     def input(
         self, action: str, item_id: str | None = None, value: float | None = None
     ) -> dict:
+        if self.control is not None:
+            self.control.pop("_confirmed", None)
         if action == "ready":
             return self.current()
         if action == "home":
@@ -142,7 +183,48 @@ class Navigator:
             self._back()
             return self.current()
         if self.control is not None:
+            if self.control.get("kind") == "settings":
+                if action in {"press", "rotate_left", "rotate_right", "touch"}:
+                    self.control = None
+                return self.current()
             if not self.control["available"]:
+                return self.current()
+            if self.control.get("confirmation"):
+                if (
+                    action == "touch"
+                    and item_id == "cancel"
+                    or action in {"rotate_left", "rotate_right"}
+                ):
+                    self.control.pop("confirmation", None)
+                    return self.current()
+                if action == "press" or action == "touch" and item_id == "confirm":
+                    self.control["_confirmed"] = self.control["confirmation"]
+                    if self.control.get("domain") in {"light", "switch"}:
+                        self.control["active"] = not self.control["active"]
+                    self.control.pop("confirmation", None)
+                    self.control["pending"] = True
+                    return self.current()
+                return self.current()
+            command = (
+                item_id
+                if action == "touch"
+                else "toggle"
+                if self.control.get("domain") in {"light", "switch"}
+                else "stop"
+                if self.control.get("domain") == "cover"
+                and "stop" in self.control.get("actions", [])
+                else (self.control.get("actions") or [None])[0]
+            )
+            if (
+                command is not None
+                and self.control.get("confirm")
+                and (
+                    action == "press"
+                    or action == "touch"
+                    and command in self.control.get("actions", [])
+                )
+            ):
+                self.control["confirmation"] = command
                 return self.current()
             if action in {
                 "rotate_left",
@@ -176,6 +258,12 @@ class Navigator:
                 self.control["active"] = True
                 self.control["pending"] = True
             elif action == "press":
+                if self.control.get("domain") not in {
+                    "light",
+                    "switch",
+                    "cover",
+                } and not self.control.get("actions"):
+                    return self.current()
                 self.control.pop("target_value", None)
                 if self.control["profile"] == "position":
                     if "stop" in self.control.get("actions", []):
@@ -185,7 +273,7 @@ class Navigator:
                     self.control["pending"] = True
             return self.current()
 
-        items = self.views[self.view_id]["items"]
+        items = self._items()
         if action in {"rotate_left", "rotate_right"} and items:
             step = -1 if action == "rotate_left" else 1
             self.selected = (self.selected + step) % len(items)
@@ -202,6 +290,23 @@ class Navigator:
         return self.current()
 
     def _activate(self, item: dict) -> None:
+        if item.get("settings"):
+            self.control = {
+                "id": "settings",
+                "kind": "settings",
+                "domain": "settings",
+                "title": "Device settings",
+                "icon": "mdi:cog",
+                "style": "CTL-SETTINGS-EDITORIAL",
+                "available": True,
+                "state": "Local diagnostics",
+                "detail": "Shown locally on the Dial",
+                "value": 0,
+                "continuous": False,
+                "back": True,
+                "actions": [],
+            }
+            return
         if target := item.get("view"):
             self.view_id, self.selected = target, 0
             return
@@ -209,6 +314,29 @@ class Navigator:
             domain = entity_id.partition(".")[0]
             profile, style, icon = CONTROL_TYPES[domain]
             self.control = {
+                **{
+                    key: item[key]
+                    for key in ("appearance", "css", "confirm", "label_override")
+                    if key in item
+                },
+                "appearance": {
+                    **self.views[self.view_id].get("appearance", {}),
+                    **item.get("appearance", {}),
+                },
+                "css": self.views[self.view_id].get("css", "")
+                + ";"
+                + item.get("css", ""),
+                "confirm": item.get(
+                    "confirm",
+                    domain
+                    in {
+                        "lock",
+                        "alarm_control_panel",
+                        "scene",
+                        "button",
+                        "input_button",
+                    },
+                ),
                 "kind": "control",
                 "id": f"control:{entity_id}",
                 "title": item["label"],
@@ -253,9 +381,12 @@ class Navigator:
             )
 
     def restore(self, previous: Navigator) -> None:
-        if previous.view_id not in self.views:
-            return
-        self.view_id = previous.view_id
+        target = previous.view_id
+        while target not in self.views:
+            target = previous.views.get(target, {}).get("parent")
+            if target is None:
+                return
+        self.view_id = target
         items = self.views[self.view_id]["items"]
         self.selected = previous.selected % max(1, len(items))
         if previous.control is not None:
@@ -291,5 +422,5 @@ class Navigator:
                 pending=pending,
                 **properties,
             )
-            if title:
+            if title and not self.control.get("label_override"):
                 self.control["title"] = title

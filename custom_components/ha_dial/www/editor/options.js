@@ -1,0 +1,108 @@
+import { CONTROL_STYLES, NAV_STYLES } from './catalogue.js';
+
+const number = (min, max, step = 1) => ({ number: { min, max, step, mode: 'box' } });
+const select = (options) => ({ select: { options, mode: 'dropdown' } });
+const labels = { title:'Page title', label:'Control label', icon:'Icon', style:'Atlas style', theme:'Theme', conditions:'Show when all conditions pass', confirm:'Confirm actions', css:'Advanced style', 'outer-border':'Outer border', 'border-width':'Border width', 'font-size':'Title size', 'icon-size':'Icon size', 'orbit-radius':'Orbit radius', raster:'Crisp / Smooth', accent:'Accent colour', background:'Background colour', text:'Text colour' };
+const defaults = {'outer-border':true,'border-width':2,'font-size':11,'icon-size':18,'orbit-radius':84,raster:'smooth'};
+const appearanceKeys = [...Object.keys(defaults), 'accent','background','text','surface','secondary','quiet','grid'];
+
+function declarations(source) {
+  const result = {};
+  for (const declaration of (source || '').split(';')) {
+    if (!declaration.trim()) continue;
+    const at = declaration.indexOf(':');
+    if (at < 0) throw new Error('Use property: value; in Advanced style.');
+    const name = declaration.slice(0, at).trim(), raw = declaration.slice(at + 1).trim();
+    if (!appearanceKeys.includes(name)) throw new Error(`Unsupported style property: ${name}`);
+    result[name] = name === 'outer-border' ? ['true','on'].includes(raw) ? true : ['false','off'].includes(raw) ? false : raw : ['border-width','font-size','icon-size','orbit-radius'].includes(name) ? Number(raw.replace(/px$/, '')) : raw;
+  }
+  return result;
+}
+
+function validateConditions(conditions) {
+  if (!Array.isArray(conditions)) throw new Error('Conditions must be a list.');
+  for (const item of conditions) {
+    if (item.enabled === false) continue;
+    if (['and','or','not'].includes(item.condition)) {
+      const children = item.conditions || item.options?.conditions;
+      if (!Array.isArray(children) || !children.length) throw new Error('Logical conditions need at least one condition.');
+      validateConditions(children);
+    } else {
+      if (!['state','numeric_state','template'].includes(item.condition)) throw new Error('Use state, numeric state, template or AND/OR/NOT visibility conditions.');
+      if ('for' in (item.options || item)) throw new Error('Use an HA helper/template sensor for duration conditions.');
+    }
+  }
+}
+
+export function openOptions(editor, pageId, entityId) {
+  editor.querySelector('.options-dialog')?.remove();
+  const page = editor.config.pages.find((candidate) => candidate.id === pageId);
+  const entities = editor.entities(pageId);
+  const original = entityId ? entities.find((item) => (typeof item === 'string' ? item : item.entity_id) === entityId) : page;
+  const item = typeof original === 'string' ? {entity_id:original} : {...original};
+  const domain = entityId?.split('.')[0];
+  const dialog = document.createElement('dialog'); dialog.className = 'options-dialog';
+  dialog.setAttribute('aria-label', entityId ? `Edit ${domain} control` : 'Edit page');
+  const heading = document.createElement('h3'); heading.textContent = entityId ? `Edit ${domain} control` : 'Page appearance and visibility';
+  const hint = document.createElement('p'); hint.textContent = 'Conditions are evaluated in Home Assistant. Supported: state, numeric state, template and AND/OR/NOT. Visibility is not access control.';
+  const error = document.createElement('p'); error.setAttribute('role','alert');
+  const form = document.createElement('ha-form');
+  let options;
+  try { options = {...defaults, ...page.appearance, ...declarations(page.css), ...item.appearance, ...declarations(item.css)}; }
+  catch (reason) { error.textContent = reason.message; options = {...defaults,...item.appearance}; }
+  let draft = {...item,...options,confirm:item.confirm ?? ['lock','alarm_control_panel','scene','button','input_button'].includes(domain), conditions:item.conditions || []};
+  form.hass = editor._hass;
+  form.data = draft;
+  form.schema = [
+    {name: entityId ? 'label' : 'title', selector:{text:{}}},
+    {name:'icon',selector:{icon:{}}},
+    {name:'style',selector:select(domain ? CONTROL_STYLES[domain] : NAV_STYLES)},
+    {name:'theme',selector:select(['ember','verdant','cobalt','rose','acid','alloy'])},
+    {name:'raster',selector:select(['smooth','crisp'])},
+    {name:'outer-border',selector:{boolean:{}}},
+    {name:'border-width',selector:number(1,4)},
+    {name:'font-size',selector:number(6,16)},
+    {name:'icon-size',selector:number(12,28)},
+    ...(!domain ? [{name:'orbit-radius',selector:number(70,90)}] : []),
+    ...['accent','background','text'].map((name)=>({name,selector:{text:{}}})),
+    ...(domain && !['sensor','binary_sensor','weather','calendar'].includes(domain) ? [{name:'confirm',selector:{boolean:{}}}] : []),
+    {name:'conditions',selector:{condition:{}}},
+  ];
+  form.computeLabel = (field) => labels[field.name] || field.name;
+  form.computeHelper = (field) => ({icon:'Material Design Icons (bundled for offline rendering).',accent:'Optional #RRGGBB override.',background:'Optional #RRGGBB override.',text:'Optional #RRGGBB override.',confirm:'Locks and alarms always require confirmation; PIN-protected actions remain unavailable.'})[field.name];
+  const advanced = document.createElement('details'), summary = document.createElement('summary'); summary.textContent = 'Advanced style';
+  const css = document.createElement('textarea'); css.rows = 8; css.setAttribute('aria-label','Advanced style declarations');
+  const writeCss = () => { css.value = appearanceKeys.filter((key)=>draft[key] !== undefined && draft[key] !== '').map((key)=>`${key}: ${draft[key]};`).join('\n'); };
+  css.value = item.css || ''; if (!css.value) writeCss();
+  form.addEventListener('value-changed', (event)=>{event.stopPropagation();draft={...draft,...event.detail.value};writeCss();});
+  css.addEventListener('change', ()=>{try {draft={...draft,...declarations(css.value)};form.data=draft;error.textContent='';}catch(reason){error.textContent=reason.message;}});
+  advanced.append(summary, css);
+  const save = document.createElement('button'); save.type='button'; save.textContent='Apply';
+  save.addEventListener('click', ()=>{
+    try {
+      validateConditions(draft.conditions || []);
+      const styling = {...Object.fromEntries(appearanceKeys.filter((key)=>draft[key] !== undefined && draft[key] !== '').map((key)=>[key,draft[key]])), ...declarations(css.value)};
+      for (const [key, low, high] of [['border-width',1,4],['font-size',6,16],['icon-size',12,28],['orbit-radius',70,90]]) if (!(Number.isFinite(styling[key]) && styling[key]>=low && styling[key]<=high)) throw new Error(`${key} must be between ${low} and ${high}.`);
+      if (typeof styling['outer-border'] !== 'boolean' || !['crisp','smooth'].includes(styling.raster)) throw new Error('Check outer-border and raster values.');
+      for (const name of ['accent','background','text','surface','secondary','quiet','grid']) if (styling[name] && !/^#[a-f\d]{6}$/i.test(styling[name])) throw new Error(`${name} needs a #RRGGBB colour.`);
+      const updated = {...item,appearance:styling,conditions:draft.conditions || []};
+      delete updated.css;
+      for (const name of [entityId?'label':'title','icon','style','theme','confirm']) {
+        if (draft[name] !== undefined && draft[name] !== '') updated[name]=draft[name]; else delete updated[name];
+      }
+      if (entityId) {
+        updated.label_override=Boolean(updated.label);
+        editor.setEntities(pageId, entities.map((entity)=>(typeof entity==='string'?entity:entity.entity_id)===entityId?updated:entity));
+      } else {
+        editor.changed({...editor.config,pages:editor.config.pages.map((candidate)=>candidate.id===pageId?updated:candidate)});
+        editor.renderTree();
+      }
+      dialog.close(); dialog.remove();
+    } catch(reason) { error.textContent=reason.message; }
+  });
+  const cancel = document.createElement('button'); cancel.type='button'; cancel.textContent='Cancel'; cancel.addEventListener('click',()=>{dialog.close();dialog.remove();});
+  dialog.append(heading,hint,error,form,advanced,save,cancel);
+  dialog.addEventListener('close',()=>dialog.remove());
+  editor.append(dialog); dialog.showModal();
+  form.querySelector('input')?.focus();
+}

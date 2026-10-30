@@ -1,3 +1,6 @@
+import { openOptions } from './editor/options.js';
+import { DOMAINS } from './editor/catalogue.js';
+
 export function defaultConfig() {
   return { device: "preview", zoom: 100, theme: "ember", pages: [{ id: "home", title: "Home", parent: "", lights: [] }], template: "" };
 }
@@ -31,6 +34,8 @@ class HaDialEditor extends HTMLElement {
     if (!this.initialised) {
       this.initialised = true;
       this.innerHTML = `<style>
+        .options-dialog{color:var(--primary-text-color);background:var(--card-background-color,#1c1c1c);border:1px solid var(--divider-color);border-radius:12px;max-width:600px;width:calc(100vw - 48px);max-height:85vh;box-sizing:border-box;overflow:auto}
+        .options-dialog::backdrop{background:#0009}.options-dialog textarea{box-sizing:border-box;width:100%;font:inherit;color:inherit;background:var(--secondary-background-color);padding:12px}.options-dialog [role=alert]{color:var(--error-color);overflow-wrap:anywhere}
         details{margin:12px 0}summary{cursor:pointer;padding:10px 0}
         .children{padding-left:16px;border-left:2px solid var(--divider-color,#8884)}
         button{font:inherit;padding:8px 12px;margin:8px 8px 8px 0;cursor:pointer;color:var(--primary-text-color);background:var(--secondary-background-color);border:1px solid var(--divider-color);border-radius:8px}
@@ -42,7 +47,7 @@ class HaDialEditor extends HTMLElement {
         .drop-inside{outline:2px solid var(--primary-color);border-radius:8px}
         .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
         button:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
-      </style><ha-form class="settings"></ha-form><p class="hint">Add subpages to build your tree. Select light, switch and cover entities on any page. Changes stay local until you save.</p><p class="hint">Drag a page above/below another to reorder, or onto its title to nest it. On a handle, arrow keys move; Left/Right change nesting.</p><p class="sr-only" role="status"></p><div class="tree"></div><details><summary>Advanced Jinja template</summary><ha-form class="advanced"></ha-form></details>`;
+      </style><ha-form class="settings"></ha-form><p class="hint">Add subpages to build your tree. Add controls or read-only entities on any page. Open Appearance & conditions or Edit for detailed options. Changes stay local until you save.</p><p class="hint">Drag a page above/below another to reorder, or onto its title to nest it. On a handle, arrow keys move; Left/Right change nesting.</p><p class="sr-only" role="status"></p><div class="tree"></div><details><summary>Advanced Jinja template</summary><ha-form class="advanced"></ha-form></details>`;
       this.querySelector(".settings").addEventListener("value-changed", (event) => {
         event.stopPropagation(); this.changed({ ...this.config, ...event.detail.value });
       });
@@ -99,10 +104,12 @@ class HaDialEditor extends HTMLElement {
     if (source.kind !== target.kind || source.id === target.id) return false;
     if (source.kind === "entity") {
       if (source.page !== target.page) return false;
-      const entities = this.entities(source.page).filter((id) => id !== source.id);
-      const index = entities.indexOf(target.id);
+      const all = this.entities(source.page);
+      const moved = all.find((item) => (typeof item === 'string' ? item : item.entity_id) === source.id);
+      const entities = all.filter((item) => (typeof item === 'string' ? item : item.entity_id) !== source.id);
+      const index = entities.findIndex((item) => (typeof item === 'string' ? item : item.entity_id) === target.id);
       if (index < 0) return false;
-      entities.splice(index + (position === "after" ? 1 : 0), 0, source.id);
+      entities.splice(index + (position === "after" ? 1 : 0), 0, moved);
       this.setEntities(source.page, entities);
     } else {
       const pages = this.config.pages, page = pages.find((page) => page.id === source.id), destination = pages.find((page) => page.id === target.id);
@@ -129,7 +136,7 @@ class HaDialEditor extends HTMLElement {
     handle.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); });
     handle.addEventListener("keydown", (event) => {
       const page = this.config.pages.find((page) => page.id === (source.kind === "page" ? source.id : source.page));
-      const siblings = source.kind === "page" ? this.config.pages.filter((candidate) => candidate.parent === page.parent).map((candidate) => candidate.id) : this.entities(source.page);
+      const siblings = source.kind === "page" ? this.config.pages.filter((candidate) => candidate.parent === page.parent).map((candidate) => candidate.id) : this.entities(source.page).map((item) => typeof item === "string" ? item : item.entity_id);
       const index = siblings.indexOf(source.id);
       let target, position;
       if (event.key === "ArrowUp") { target = siblings[index - 1]; position = "before"; }
@@ -213,7 +220,6 @@ class HaDialEditor extends HTMLElement {
         form.hass = this._hass; form.data = { ...page, entities: [...(page.lights || []), ...(page.entities || [])] };
         form.schema = [
           { name: "title", required: true, selector: { text: {} } },
-          { name: "theme", selector: THEME_SELECTOR },
         ];
         form.computeLabel = (field) => ({ title: "Page title", parent: "Parent page", theme: "Page theme", entities: "Controls" })[field.name];
         form.computeHelper = (field) => field.name === "theme" ? "Leave empty to use the default theme." : undefined;
@@ -229,24 +235,26 @@ class HaDialEditor extends HTMLElement {
           this.treePages = this.config.pages;
         });
         const controls = document.createElement("div");
-        for (const entity of [...(page.lights || []), ...(page.entities || [])]) {
+        for (const entry of [...(page.lights || []), ...(page.entities || [])]) {
+          const entity = typeof entry === "string" ? entry : entry.entity_id;
           const control = document.createElement("div"); control.className = "entity";
           control.dataset.kind = "entity"; control.dataset.page = page.id; control.dataset.id = entity;
-          const label = document.createElement("span"); label.textContent = this._hass.states?.[entity]?.attributes.friendly_name || entity;
+          const label = document.createElement("span"); label.textContent = entry.label || this._hass.states?.[entity]?.attributes.friendly_name || entity;
           control.append(this.handle({ kind: "entity", page: page.id, id: entity }, "Move " + label.textContent), label,
-            button("Remove", () => this.setEntities(page.id, this.entities(page.id).filter((id) => id !== entity))));
+            button("Edit", () => openOptions(this, page.id, entity)),
+            button("Remove", () => this.setEntities(page.id, this.entities(page.id).filter((item) => (typeof item === "string" ? item : item.entity_id) !== entity))));
           controls.append(control);
         }
         const add = document.createElement("ha-form");
         add.hass = this._hass; add.data = {};
-        add.schema = [{ name: "entity", selector: { entity: { filter: { domain: ["light", "switch", "cover"] } } } }];
+        add.schema = [{ name: "entity", selector: { entity: { filter: { domain: DOMAINS } } } }];
         add.computeLabel = () => "Add control";
         add.addEventListener("value-changed", (event) => {
           event.stopPropagation();
           const entity = event.detail.value.entity;
-          if (entity && !this.entities(page.id).includes(entity)) this.setEntities(page.id, [...this.entities(page.id), entity]);
+          if (entity && !this.entities(page.id).some((item) => (typeof item === "string" ? item : item.entity_id) === entity)) this.setEntities(page.id, [...this.entities(page.id), entity]);
         });
-        body.append(form, controls, add, button("Add subpage", () => { details.open = true; this.addPage(page.id); }));
+        body.append(form, button("Appearance & conditions", () => openOptions(this, page.id)), controls, add, button("Add subpage", () => { details.open = true; this.addPage(page.id); }));
         if (page.parent) body.append(button("Remove page", () => {
           const currentPages = this.config.pages;
           const children = currentPages.filter((candidate) => candidate.parent === page.id);

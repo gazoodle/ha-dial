@@ -4,6 +4,7 @@
 #include <string>
 #include <memory>
 #include <utility>
+#include <limits>
 #include "esphome/components/json/json_util.h"
 #include "esphome/components/display/display.h"
 
@@ -13,7 +14,8 @@ int hex_value(char value);
 Color scene_colour(const std::string &value, const Color &fallback);
 struct SceneElement {
   char op{' '};
-  int value{0};
+  int value{0}, precision{0}, glyphs{10};
+  float minimum{0}, maximum{100};
   int x{0}, y{0}, x2{0}, y2{0}, radius{0}, start{0}, end{0}, width{1}, mask_width{0}, mask_height{0};
   Color stroke{Color::BLACK}, fill{Color::BLACK}, colour{Color::BLACK}, background{Color::BLACK};
   bool has_stroke{false}, has_fill{false};
@@ -56,5 +58,5 @@ struct SceneHistory {
 
 bool parse_scene(JsonObject source, SceneBuffer &target);
 bool parse_clear_request(JsonObject source, uint64_t applied_revision, uint64_t &revision);
-void draw_scene(display::Display &it, const SceneBuffer &scene, float local_value = -1);
+void draw_scene(display::Display &it, const SceneBuffer &scene, float local_value = std::numeric_limits<float>::quiet_NaN());
 }  // namespace esphome::ha_dial
