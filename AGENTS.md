@@ -8,6 +8,10 @@ The owner wants an admin-only multi-Dial integration panel to assess the configu
 Keep the existing card for now; do not spend effort on migration or card compatibility.
 Why: the project is not live and the owner wants to evaluate the direction first.
 
+The panel follows the Casa Mia house design language, including its chips, pills and custom
+controls. Dialog actions stay visible while their content scrolls. Why: the owner rejected
+the prototype's browser controls, cramped card-editor layout and scrolling action buttons.
+
 ## Independent versions — Casa Mia rules (2026-10-29)
 
 Firmware and HA Dial Server have separate versions. Before changing runtime code, run

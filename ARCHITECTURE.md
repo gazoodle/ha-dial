@@ -240,7 +240,7 @@ An ordinary reload/restart restores them. Removing the server deletes its defini
 unloaded server commands reject card requests, and teardown waits for in-flight saves.
 
 The admin-only HA Dial panel edits a selected device's server definition using an isolated
-preview session. The existing dashboard card remains independently configured for now and can
+preview session, with a page tree and focused inspector. The existing dashboard card remains independently configured for now and can
 still republish its definition. Configuration writes require an administrator.
 
 On unload, the server sends a revision-checked `{"revision": N, "clear": true}` envelope

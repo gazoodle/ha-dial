@@ -47,17 +47,21 @@ export function openOptions(editor, pageId, entityId) {
   const hint = document.createElement('p'); hint.textContent = 'Conditions are evaluated in Home Assistant. Supported: state, numeric state, template and AND/OR/NOT. Visibility is not access control.';
   const error = document.createElement('p'); error.setAttribute('role','alert');
   const form = document.createElement('ha-form');
+  const appearanceForm = document.createElement('ha-form');
+  const conditionForm = document.createElement('ha-form');
   let options;
   try { options = {...defaults, ...page.appearance, ...declarations(page.css), ...item.appearance, ...declarations(item.css)}; }
   catch (reason) { error.textContent = reason.message; options = {...defaults,...item.appearance}; }
   let draft = {...item,...options,confirm:item.confirm ?? ['lock','alarm_control_panel','scene','button','input_button'].includes(domain), conditions:item.conditions || []};
-  form.hass = editor._hass;
-  form.data = draft;
+  for (const field of [form, appearanceForm, conditionForm]) { field.hass = editor._hass; field.data = draft; }
   form.schema = [
     {name: entityId ? 'label' : 'title', selector:{text:{}}},
     {name:'icon',selector:{icon:{}}},
     {name:'style',selector:select(domain ? CONTROL_STYLES[domain] : NAV_STYLES)},
     {name:'theme',selector:select(['ember','verdant','cobalt','rose','acid','alloy'])},
+    ...(domain && !['sensor','binary_sensor','weather','calendar'].includes(domain) ? [{name:'confirm',selector:{boolean:{}}}] : []),
+  ];
+  appearanceForm.schema = [
     {name:'raster',selector:select(['smooth','crisp'])},
     {name:'outer-border',selector:{boolean:{}}},
     {name:'border-width',selector:number(1,4)},
@@ -65,17 +69,18 @@ export function openOptions(editor, pageId, entityId) {
     {name:'icon-size',selector:number(12,28)},
     ...(!domain ? [{name:'orbit-radius',selector:number(70,90)}] : []),
     ...['accent','background','text'].map((name)=>({name,selector:{text:{}}})),
-    ...(domain && !['sensor','binary_sensor','weather','calendar'].includes(domain) ? [{name:'confirm',selector:{boolean:{}}}] : []),
-    {name:'conditions',selector:{condition:{}}},
   ];
-  form.computeLabel = (field) => labels[field.name] || field.name;
-  form.computeHelper = (field) => ({icon:'Material Design Icons (bundled for offline rendering).',accent:'Optional #RRGGBB override.',background:'Optional #RRGGBB override.',text:'Optional #RRGGBB override.',confirm:'Locks and alarms always require confirmation; PIN-protected actions remain unavailable.'})[field.name];
+  conditionForm.schema = [{name:'conditions',selector:{condition:{}}}];
+  for (const field of [form, appearanceForm, conditionForm]) {
+    field.computeLabel = (item) => labels[item.name] || item.name;
+    field.computeHelper = (item) => ({icon:'Material Design Icons (bundled for offline rendering).',accent:'Optional #RRGGBB override.',background:'Optional #RRGGBB override.',text:'Optional #RRGGBB override.',confirm:'Locks and alarms always require confirmation; PIN-protected actions remain unavailable.'})[item.name];
+  }
   const advanced = document.createElement('details'), summary = document.createElement('summary'); summary.textContent = 'Advanced style';
   const css = document.createElement('textarea'); css.rows = 8; css.setAttribute('aria-label','Advanced style declarations');
   const writeCss = () => { css.value = appearanceKeys.filter((key)=>draft[key] !== undefined && draft[key] !== '').map((key)=>`${key}: ${draft[key]};`).join('\n'); };
   css.value = item.css || ''; if (!css.value) writeCss();
-  form.addEventListener('value-changed', (event)=>{event.stopPropagation();draft={...draft,...event.detail.value};writeCss();});
-  css.addEventListener('change', ()=>{try {draft={...draft,...declarations(css.value)};form.data=draft;error.textContent='';}catch(reason){error.textContent=reason.message;}});
+  for (const field of [form, appearanceForm, conditionForm]) field.addEventListener('value-changed', (event)=>{event.stopPropagation();for (const item of field.schema) draft[item.name] = event.detail.value[item.name];writeCss();});
+  css.addEventListener('change', ()=>{try {draft={...draft,...declarations(css.value)};appearanceForm.data=draft;error.textContent='';}catch(reason){error.textContent=reason.message;}});
   advanced.append(summary, css);
   const save = document.createElement('button'); save.type='button'; save.textContent='Apply';
   save.addEventListener('click', ()=>{
@@ -101,7 +106,12 @@ export function openOptions(editor, pageId, entityId) {
     } catch(reason) { error.textContent=reason.message; }
   });
   const cancel = document.createElement('button'); cancel.type='button'; cancel.textContent='Cancel'; cancel.addEventListener('click',()=>{dialog.close();dialog.remove();});
-  dialog.append(heading,hint,error,form,advanced,save,cancel);
+  const head = document.createElement('header'); head.className = 'options-head'; head.append(heading);
+  const appearance = document.createElement('details'), appearanceTitle = document.createElement('summary'); appearanceTitle.textContent = 'Detailed appearance'; appearance.append(appearanceTitle,appearanceForm,advanced);
+  const visibility = document.createElement('details'), visibilityTitle = document.createElement('summary'); visibilityTitle.textContent = 'Visibility conditions'; visibility.append(visibilityTitle,hint,conditionForm);
+  const body = document.createElement('div'); body.className = 'options-body'; body.append(error,form,appearance,visibility);
+  const foot = document.createElement('footer'); foot.className = 'options-foot'; foot.append(cancel,save);
+  dialog.append(head,body,foot);
   dialog.addEventListener('close',()=>dialog.remove());
   editor.append(dialog); dialog.showModal();
   form.querySelector('input')?.focus();

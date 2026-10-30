@@ -2,6 +2,14 @@
 
 ## Admin panel prototype
 
+On 2026-10-30 the owner requested Casa Mia's house style and a better editing workflow.
+Integration b4 replaces the embedded card-editor presentation with a page tree and focused
+inspector, Casa Mia colours/chips/pills, Dial chips and grouped options with a fixed footer.
+The original card remains. A local browser mock was checked on desktop and at 390px width;
+its HA forms are stubs, so live HA selectors and conditions still need verification. b4 was
+copied to the HA config share and all 38 files match; restart HA and refresh the browser to
+load it. b4 is not committed; preserve the separate staged AGENTS.core.md edit.
+
 The owner requested a quick multi-Dial panel prototype, keeping the card in place without
 spending time on compatibility or migration. The integration registers an admin-only sidebar
 panel, loads server definitions, uses the existing editor and isolated card preview, and saves
@@ -10,7 +18,7 @@ panel definitions. The integration b2 build was committed as d35d508, excluding 
 staged AGENTS.core.md edit. Integration b3 was copied to the live HA config share and all 37
 installed files match source. Restart HA and refresh the browser to activate it; the HA app
 showed only its loading screen, so the panel and condition picker have not been checked live.
-Panel work remains uncommitted; firmware remains at b2.
+Panel b3 is committed as 466ad29; firmware remains at b2.
 
 ## Overnight commission — implemented and deployed; HA activation pending
 

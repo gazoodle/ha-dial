@@ -10,10 +10,11 @@ globalThis.customElements = {define: (_name, type) => { Panel = type; }};
 vm.runInThisContext(fs.readFileSync('custom_components/ha_dial/www/panel.js', 'utf8').replace(/^import .*\n/gm, '').replace(/^if \(!customElements.get.*\n/m, ''));
 
 const panel = new Panel();
-const nodes = Object.fromEntries(['select','.error','.save','.state','ha-dial-card-editor','ha-dial-card'].map(key => [key, {}]));
-nodes['ha-dial-card-editor'].setConfig = function(config) { this.config = config; };
+const nodes = Object.fromEntries(['select','.error','.save','.state','ha-dial-panel-editor','ha-dial-card'].map(key => [key, {}]));
+nodes['ha-dial-panel-editor'].setConfig = function(config) { this.config = config; };
 nodes['ha-dial-card'].setConfig = function(config) { this.config = config; };
 panel.querySelector = key => nodes[key];
+panel.querySelectorAll = () => [];
 panel.definitions = {first:{theme:'ember', pages:[{id:'one'}]}, second:{theme:'cobalt', pages:[{id:'two'}]}};
 const calls = [];
 panel._hass = {callWS: async message => { calls.push(message); return {deployment:'waiting'}; }};

@@ -34,7 +34,8 @@ class HaDialEditor extends HTMLElement {
     if (!this.initialised) {
       this.initialised = true;
       this.innerHTML = `<style>
-        .options-dialog{color:var(--primary-text-color);background:var(--card-background-color,#1c1c1c);border:1px solid var(--divider-color);border-radius:12px;max-width:600px;width:calc(100vw - 48px);max-height:85vh;box-sizing:border-box;overflow:auto}
+        .options-dialog{color:var(--primary-text-color);background:var(--card-background-color,#1c1c1c);border:1px solid var(--divider-color);border-radius:18px;max-width:600px;width:calc(100vw - 24px);max-height:calc(100dvh - 40px);padding:0;box-sizing:border-box;overflow:hidden}
+        .options-dialog[open]{display:flex;flex-direction:column}.options-head{padding:16px 18px 6px}.options-head h3{margin:0}.options-body{min-height:0;overflow:auto;padding:10px 18px 6px}.options-foot{flex:none;display:flex;justify-content:flex-end;gap:8px;padding:14px 18px 16px;border-top:1px solid var(--divider-color)}
         .options-dialog::backdrop{background:#0009}.options-dialog textarea{box-sizing:border-box;width:100%;font:inherit;color:inherit;background:var(--secondary-background-color);padding:12px}.options-dialog [role=alert]{color:var(--error-color);overflow-wrap:anywhere}
         details{margin:12px 0}summary{cursor:pointer;padding:10px 0}
         .children{padding-left:16px;border-left:2px solid var(--divider-color,#8884)}

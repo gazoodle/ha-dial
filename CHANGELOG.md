@@ -1,5 +1,9 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b4
+
+- Give the configuration panel Casa Mia styling, a page tree and focused inspector, and keep dialog actions visible while scrolling.
+
 ## 2026.10.1-b3
 
 - Add an admin-only configuration panel with per-Dial drafts and an interactive preview.
