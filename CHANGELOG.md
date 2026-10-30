@@ -1,5 +1,9 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b3
+
+- Add an admin-only configuration panel with per-Dial drafts and an interactive preview.
+
 ## 2026.10.1-b2
 
 - Requires paired b2 firmware for signed/decimal local feedback and the gated local settings page; restart HA after deployment and refresh the browser.

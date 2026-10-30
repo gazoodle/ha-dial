@@ -80,7 +80,7 @@ class HaDialEditor extends HTMLElement {
       this.deviceServices = services;
       this.deviceSelection = this.config.device;
     }
-    settings.schema = this.settingsSchema;
+    settings.schema = this.panelMode ? this.settingsSchema.filter((field) => field.name === "theme") : this.settingsSchema;
     advanced.schema = [{ name: "template", selector: { template: {} } }];
     const key = this.config.pages === this.treePages ? this.treeKey : JSON.stringify(this.config.pages);
     if (key !== this.treeKey) this.renderTree();

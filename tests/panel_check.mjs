@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+
+globalThis.HTMLElement = class {};
+globalThis.window = {confirm: () => false};
+globalThis.defaultConfig = () => ({device:'preview', theme:'ember', pages:[{id:'home', title:'Home', parent:'', lights:[]}], template:''});
+let Panel;
+globalThis.customElements = {define: (_name, type) => { Panel = type; }};
+vm.runInThisContext(fs.readFileSync('custom_components/ha_dial/www/panel.js', 'utf8').replace(/^import .*\n/gm, '').replace(/^if \(!customElements.get.*\n/m, ''));
+
+const panel = new Panel();
+const nodes = Object.fromEntries(['select','.error','.save','.state','ha-dial-card-editor','ha-dial-card'].map(key => [key, {}]));
+nodes['ha-dial-card-editor'].setConfig = function(config) { this.config = config; };
+nodes['ha-dial-card'].setConfig = function(config) { this.config = config; };
+panel.querySelector = key => nodes[key];
+panel.definitions = {first:{theme:'ember', pages:[{id:'one'}]}, second:{theme:'cobalt', pages:[{id:'two'}]}};
+const calls = [];
+panel._hass = {callWS: async message => { calls.push(message); return {deployment:'waiting'}; }};
+panel.selectDevice('first', true);
+assert.equal(panel.draft.pages[0].id, 'one');
+assert.equal(nodes['ha-dial-card'].config.device, 'preview');
+panel.draft = {...panel.draft, theme:'rose'}; panel.dirty = true;
+panel.selectDevice('second');
+assert.equal(panel.device, 'first', 'switching cannot discard a draft silently');
+await panel.save();
+assert.equal(calls[0].device, 'first');
+assert.equal(calls[0].definition.theme, 'rose');
+assert.equal(panel.dirty, false);
+panel.selectDevice('second');
+assert.equal(panel.draft.pages[0].id, 'two');
+panel.selectDevice('new_dial');
+assert.equal(panel.dirty, true, 'a new Dial can be saved without editing');
+console.log('Panel device selection, draft isolation and saving passed');

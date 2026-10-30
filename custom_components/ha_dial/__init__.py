@@ -119,6 +119,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         websocket_api.async_register_command(hass, _ws_input)
         websocket_api.async_register_command(hass, _ws_configure)
         websocket_api.async_register_command(hass, _ws_subscribe)
+        websocket_api.async_register_command(hass, _ws_definitions)
         state["registered"] = True
 
     from .transport import watch_transports
@@ -127,6 +128,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     url = f"{CARD_URL}?v={LOADED_VERSION}"
     frontend.add_extra_js_url(hass, url)
     entry.async_on_unload(lambda: frontend.remove_extra_js_url(hass, url))
+    from homeassistant.components import panel_custom
+
+    await panel_custom.async_register_panel(
+        hass, frontend_url_path="ha-dial", webcomponent_name="ha-dial-panel",
+        sidebar_title="HA Dial", sidebar_icon="mdi:knob",
+        module_url=f"/ha_dial/panel.js?v={LOADED_VERSION}", require_admin=True,
+    )
+    entry.async_on_unload(lambda: frontend.async_remove_panel(hass, "ha-dial"))
 
     def update_settings_flag(device, flag):
         if not isinstance(flag, str) or flag not in {"true", "false"}:
@@ -393,6 +402,9 @@ async def _ws_input(hass, connection, msg) -> None:
 @websocket_api.async_response
 @_require_server
 async def _ws_configure(hass, connection, msg) -> None:
+    if not connection.user or not connection.user.is_admin:
+        connection.send_error(msg["id"], "unauthorized", "Administrator access required")
+        return
     source = msg["definition"]
     device = msg["device"]
     if not isinstance(source.get("template", ""), str) or not isinstance(
@@ -447,6 +459,16 @@ async def _ws_configure(hass, connection, msg) -> None:
             hass, device, source, definition, push=True
         )
     connection.send_result(msg["id"], _scene_result(hass, device, navigator.current()))
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/definitions"})
+@websocket_api.async_response
+@_require_server
+async def _ws_definitions(hass, connection, msg) -> None:
+    if not connection.user or not connection.user.is_admin:
+        connection.send_error(msg["id"], "unauthorized", "Administrator access required")
+        return
+    connection.send_result(msg["id"], hass.data[DOMAIN].get("stored_definitions", {}))
 
 
 @websocket_api.websocket_command(

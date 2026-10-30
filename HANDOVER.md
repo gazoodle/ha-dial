@@ -1,5 +1,17 @@
 # Handover — 2026-10-30
 
+## Admin panel prototype
+
+The owner requested a quick multi-Dial panel prototype, keeping the card in place without
+spending time on compatibility or migration. The integration registers an admin-only sidebar
+panel, loads server definitions, uses the existing editor and isolated card preview, and saves
+per Dial. Configuration writes and definition reads require admin. Existing cards can overwrite
+panel definitions. The integration b2 build was committed as d35d508, excluding the owner's
+staged AGENTS.core.md edit. Integration b3 was copied to the live HA config share and all 37
+installed files match source. Restart HA and refresh the browser to activate it; the HA app
+showed only its loading screen, so the panel and condition picker have not been checked live.
+Panel work remains uncommitted; firmware remains at b2.
+
 ## Overnight commission — implemented and deployed; HA activation pending
 
 The owner approved: domain editors and add-to-tree UI, Crisp/Smooth, Atlas styles (2–3

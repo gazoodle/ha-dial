@@ -49,7 +49,8 @@ def integration(dial):
     identity = lambda fn: fn
     dial.module("homeassistant")
     dial.module("homeassistant.components")
-    dial.module("homeassistant.components.frontend")
+    dial.module("homeassistant.components.frontend", async_remove_panel=lambda *_: None)
+    dial.module("homeassistant.components.panel_custom", async_register_panel=AsyncMock())
     dial.module(
         "homeassistant.components.websocket_api",
         websocket_command=lambda _: identity,
@@ -181,6 +182,7 @@ def integration(dial):
         send_error=AsyncMock(),
         send_event=lambda *args: None,
         subscriptions={},
+        user=SimpleNamespace(is_admin=True),
     )
     # HA sends these messages synchronously, so record calls without awaiting.
     from unittest.mock import Mock

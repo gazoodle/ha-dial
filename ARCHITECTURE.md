@@ -239,6 +239,10 @@ type remain stable. The server persists definitions in HA so a dashboard need no
 An ordinary reload/restart restores them. Removing the server deletes its definitions store;
 unloaded server commands reject card requests, and teardown waits for in-flight saves.
 
+The admin-only HA Dial panel edits a selected device's server definition using an isolated
+preview session. The existing dashboard card remains independently configured for now and can
+still republish its definition. Configuration writes require an administrator.
+
 On unload, the server sends a revision-checked `{"revision": N, "clear": true}` envelope
 through the existing view transport. Firmware releases both cached scenes, cancels local
 pending feedback and returns to its compiled setup interface while the API can remain

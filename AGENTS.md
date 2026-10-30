@@ -2,6 +2,12 @@ Read `AGENTS.core.md` before working in this repository.
 
 # Project instructions
 
+## Configuration panel prototype (2026-10-30)
+
+The owner wants an admin-only multi-Dial integration panel to assess the configuration UX.
+Keep the existing card for now; do not spend effort on migration or card compatibility.
+Why: the project is not live and the owner wants to evaluate the direction first.
+
 ## Independent versions — Casa Mia rules (2026-10-29)
 
 Firmware and HA Dial Server have separate versions. Before changing runtime code, run
