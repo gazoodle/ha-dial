@@ -84,6 +84,9 @@ async def _input(
 ) -> dict:
     if hass.data[DOMAIN].get("unloading"):
         return _navigator(hass, device).current()
+    state = hass.data[DOMAIN]
+    if device in state.get("resetting", set()) or (device in state.get("stored_definitions", {}) and state["stored_definitions"][device] is None):
+        return {}
     sequences = hass.data[DOMAIN].setdefault("input_sequences", {})
     if input_sequence is not None:
         if action != "ready" and input_sequence <= sequences.get(device, -1):
@@ -133,7 +136,7 @@ def _next_revision(hass: HomeAssistant, device: str) -> int:
 
 async def _push(hass: HomeAssistant, device: str, view: dict) -> None:
     state = hass.data[DOMAIN]
-    if state.get("unloading"):
+    if state.get("unloading") or device in state.get("resetting", set()) or (device in state.get("stored_definitions", {}) and state["stored_definitions"][device] is None):
         return
     revision = _next_revision(hass, device)
     service = f"{device}_ha_dial_show_view"

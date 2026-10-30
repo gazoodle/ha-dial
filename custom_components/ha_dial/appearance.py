@@ -8,6 +8,10 @@ NUMBERS = {
     "icon-size": (12, 28),
     "font-size": (6, 16),
     "orbit-radius": (70, 90),
+    "highlight-radius": (14, 25),
+    "hub-radius": (25, 65),
+    "gauge-radius": (55, 85),
+    "gauge-width": (1, 12),
 }
 DEFAULTS = {
     "outer-border": True,
@@ -15,6 +19,10 @@ DEFAULTS = {
     "icon-size": 18,
     "font-size": 11,
     "orbit-radius": 84,
+    "highlight-radius": 18,
+    "hub-radius": 55,
+    "gauge-radius": 70,
+    "gauge-width": 6,
     "raster": "smooth",
 }
 

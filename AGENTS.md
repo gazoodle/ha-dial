@@ -18,6 +18,10 @@ Panel confirmations use the house-styled dialog, not browser prompts. Removing a
 keeping its subpages or removing all descendants, with the count. Why: on 2026-10-30 the owner
 rejected the browser prompt and wanted an explicit choice about children.
 
+Appearance dialogs keep a stable position between tabs and show a live HA-rendered preview beside
+the controls on wide screens. Why: on 2026-10-30 the owner found the moving dialog distracting and
+wants to see the effect of the growing set of options while editing.
+
 ## Independent versions — Casa Mia rules (2026-10-29)
 
 Firmware and HA Dial Server have separate versions. Before changing runtime code, run

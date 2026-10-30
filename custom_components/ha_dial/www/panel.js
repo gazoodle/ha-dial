@@ -36,17 +36,19 @@ class HaDialPanel extends HTMLElement {
       ha-dial-panel .condition-hint{font-size:12px} ha-dial-panel .condition-row{border:1px solid var(--border);border-radius:10px;background:var(--bg);margin:8px 0;padding:10px} ha-dial-panel .condition-row summary{color:var(--text);font-size:13px;font-weight:600;overflow-wrap:anywhere} ha-dial-panel .condition-row summary ha-icon,ha-dial-panel .condition-menu ha-icon{--mdc-icon-size:20px;vertical-align:middle;color:var(--accent);margin-right:9px} ha-dial-panel .condition-row ha-form{display:block;margin:12px 0} ha-dial-panel .condition-add{position:relative;margin:10px 0} ha-dial-panel .condition-add summary{list-style:none;width:max-content;cursor:pointer} ha-dial-panel .condition-menu{position:relative;z-index:2;display:grid;gap:4px;margin-top:6px;padding:6px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2)} ha-dial-panel .condition-menu button{text-align:left;border:0;background:none;padding:7px 10px}
       ha-dial-panel .dialog-tabs button[aria-pressed=true]{background:var(--surface-2);color:var(--text);font-weight:600} ha-dial-panel .condition-result,ha-dial-panel .condition-badge{display:inline-block;border-radius:999px;padding:3px 9px;font-size:11px;font-weight:600;background:var(--surface-2);color:var(--muted)} ha-dial-panel .condition-result{margin:0 0 4px} ha-dial-panel .condition-badge{margin-left:8px} ha-dial-panel [data-result=pass]{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--surface))} ha-dial-panel [data-result=fail]{color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,var(--surface))}
       ha-dial-panel .confirm-dialog{width:min(540px,calc(100vw - 24px))} ha-dial-panel .confirm-choices{border:0;padding:0;margin:16px 0} ha-dial-panel .confirm-choices legend{font-size:13px;font-weight:600;margin-bottom:10px} ha-dial-panel label.confirm-choice{display:flex;align-items:flex-start;gap:12px;max-width:none;min-width:0;padding:12px;margin:8px 0;border:1px solid var(--border);border-radius:12px;background:var(--bg);cursor:pointer} ha-dial-panel .confirm-choice:has(input:checked){border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--bg))} ha-dial-panel .confirm-choice input{accent-color:var(--accent);margin:4px 0 0} ha-dial-panel .confirm-choice span{display:grid;gap:3px;font-size:13px} ha-dial-panel .confirm-choice small{font-weight:400;color:var(--muted);line-height:1.4} ha-dial-panel .options-foot button.destructive{background:var(--bad);color:#fff}
+      ha-dial-panel .edit-options-dialog{width:min(1100px,calc(100vw - 24px));height:min(760px,calc(100dvh - 40px))} ha-dial-panel .appearance-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,330px);min-height:0;flex:1} ha-dial-panel .appearance-layout>.options-body{min-width:0} ha-dial-panel .appearance-preview{border-left:1px solid var(--border);background:var(--bg);padding:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:0} ha-dial-panel .appearance-preview h4{align-self:flex-start;margin:0 0 14px} ha-dial-panel .appearance-preview canvas{width:min(100%,240px);aspect-ratio:1;border-radius:50%;box-shadow:0 8px 24px #0004} ha-dial-panel .appearance-preview p{font-size:12px;text-align:center;margin:14px 0 0} @media(max-width:700px){ha-dial-panel .appearance-layout{display:flex;flex-direction:column-reverse} ha-dial-panel .appearance-preview{border-left:0;border-bottom:1px solid var(--border);padding:10px;flex:none} ha-dial-panel .appearance-preview h4{margin:0;align-self:center} ha-dial-panel .appearance-preview canvas{width:min(140px,30dvh)} ha-dial-panel .appearance-preview p{margin:4px 0 0} ha-dial-panel .appearance-layout>.options-body{flex:1}}
       @media(prefers-color-scheme:light){ha-dial-panel{--bg:#f4f6f1;--surface:#fff;--surface-2:#eef4ee;--border:#d9e3da;--text:#13241a;--muted:#5d7064;--accent:#1f7a4d;--on-accent:#fff;--bad:#c2412d}}
       @media(max-width:800px){ha-dial-panel main{padding:20px 16px 48px} ha-dial-panel .layout{grid-template-columns:1fr} ha-dial-panel .preview{position:static} ha-dial-panel .bar{padding:12px 16px}} @media(max-width:550px){ha-dial-panel .editor-workspace{grid-template-columns:1fr} ha-dial-panel .editor-tree{border-right:0;border-bottom:1px solid var(--border);padding:0 0 16px}}
     </style><header class="bar"><button class="menu" aria-label="Open sidebar">☰</button><h1>HA Dial</h1></header>
     <main><div class="intro"><h2>Make your Dial yours</h2><p>Choose a Dial, arrange its pages and controls, then try them in the preview.</p></div>
-    <div class="toolbar"><label>Dial<span class="devices"></span><select aria-label="Dial" hidden></select></label><button class="save" disabled>Save and apply</button><span class="state" role="status"></span></div>
+    <div class="toolbar"><label>Dial<span class="devices"></span><select aria-label="Dial" hidden></select></label><button class="save" disabled>Save and apply</button><button class="chip danger reset" disabled>Reset Dial</button><span class="state" role="status"></span></div>
     <p class="error" role="alert" hidden></p><p class="empty" hidden>No Dials found. Add a Dial through the ESPHome integration, then return here.</p>
     <div class="layout" hidden><section class="box"><ha-dial-panel-editor></ha-dial-panel-editor></section>
     <section class="box preview"><h3>Try your Dial</h3><p>Changes here are a safe preview. They won’t operate your devices until applied.</p><ha-dial-card></ha-dial-card></section></div></main>`;
     this.querySelector('.menu').addEventListener('click', () => this.dispatchEvent(new CustomEvent('hass-toggle-menu', {bubbles:true, composed:true})));
     this.querySelector('select').addEventListener('change', (event) => this.selectDevice(event.target.value));
     this.querySelector('.save').addEventListener('click', () => this.save());
+    this.querySelector('.reset').addEventListener('click', () => this.confirmReset());
     this.beforeUnload = (event) => { if (this.dirty) { event.preventDefault(); event.returnValue = ''; } };
     window.addEventListener('beforeunload', this.beforeUnload);
     this.querySelector('ha-dial-panel-editor').addEventListener('config-changed', (event) => {
@@ -119,7 +121,24 @@ class HaDialPanel extends HTMLElement {
   }
   updateState() {
     this.querySelector('.save').disabled = !this.device || !this.dirty || this.saving;
+    this.querySelector('.reset').disabled = !this.device || this.saving;
     this.querySelector('.state').textContent = this.saving ? 'Saving…' : this.dirty ? 'Unsaved changes' : 'Saved';
+  }
+  confirmReset() {
+    if (!this.device || this.saving) return;
+    const device = this.device;
+    confirmDialog(this, {title:'Reset Dial configuration', message:`Remove all saved pages, controls and unsaved changes for ${device.replaceAll('_',' ')}? The Dial will return to an unconfigured display. Wi-Fi, ESPHome pairing and firmware stay as they are.`, confirm:'Reset Dial', action:()=>this.reset(device)});
+  }
+  async reset(device) {
+    this.saving = true; this.querySelector('select').disabled = true; this.updateState();
+    let status;
+    try {
+      const result = await this._hass.callWS({type:'ha_dial/reset',device});
+      delete this.definitions[device];
+      this.selectDevice(device,true);
+      status = result.cleared ? 'Reset sent to Dial' : 'Reset saved; display not cleared';
+    } catch (error) { this.showError(error); }
+    finally { this.saving = false; this.querySelector('select').disabled = false; this.updateState(); if (status) this.querySelector('.state').textContent = status; }
   }
   async save() {
     const device = this.device, definition = this.definition(), snapshot = JSON.stringify(definition);

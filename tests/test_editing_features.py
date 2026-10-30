@@ -78,9 +78,45 @@ def test_raster_border_css_and_icons(dial):
     )
     assert not any(e.get("r") == 116 for e in styled["elements"])
     assert original != styled
+    highlighted = scene.compile_scene({**view, "appearance": {"highlight-radius": 24}})
+    assert any(e.get("r") == 24 for e in highlighted["elements"])
+    hub = scene.compile_scene({**view, "appearance": {"hub-radius": 42}})
+    assert any(e.get("r") == 42 for e in hub["elements"])
+    control = scene.compile_scene(
+        {
+            "kind": "control",
+            "id": "demo",
+            "domain": "light",
+            "title": "Light",
+            "style": "CTL-LIGHT-INSTRUMENT",
+            "value": 50,
+            "appearance": {"gauge-radius": 80, "gauge-width": 4},
+        }
+    )
+    assert any(
+        e.get("op") == "gauge" and e["r"] == 80 and e["width"] == 4
+        for e in control["elements"]
+    )
+    petals = scene.compile_scene({**view, "style": "NAV-PETALS"})
+    assert not any(e.get("r") == 18 for e in petals["elements"])
     crisp = assets.icon_mask("mdi:star", 24, "#ffffff", "crisp")
     smooth = assets.icon_mask("mdi:star", 24, "#ffffff", "smooth")
     assert crisp["pixels"] != smooth["pixels"]
+    from PIL import Image, ImageDraw, ImageFont
+
+    font = ImageFont.truetype(
+        str(assets.Path(assets.__file__).with_name("resources") / "mdi.ttf"), 24
+    )
+    glyph = chr(assets.icon_names()["mdi:star"])
+    box = font.getbbox(glyph)
+    native = Image.new("1", (24, 24))
+    ImageDraw.Draw(native).text(
+        ((24 - box[2] + box[0]) // 2 - box[0], (24 - box[3] + box[1]) // 2 - box[1]),
+        glyph,
+        font=font,
+        fill=1,
+    )
+    assert crisp["pixels"] == assets._pack(native.convert("L").tobytes())
     assert all(
         ((int(crisp["pixels"][i : i + 2], 16) >> shift) & 3) in {0, 3}
         for i in range(0, len(crisp["pixels"]), 2)
@@ -90,6 +126,8 @@ def test_raster_border_css_and_icons(dial):
         "position: fixed;",
         "accent: red;",
         "orbit-radius: 1000;",
+        "highlight-radius: 26;",
+        "gauge-width: 13;",
         "outer-border: maybe;",
     ]:
         with pytest.raises(ValueError):

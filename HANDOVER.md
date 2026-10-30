@@ -1,6 +1,59 @@
 # Handover — 2026-10-30
 
+## Next session: finish the Atlas implementation
+
+The owner explicitly directed the agent to complete the remaining Atlas styles, compare production
+against the prototype (especially Petals and Pointer), restore lost distinctions, add many more
+appearance controls including highlight radius, and implement proper Crisp rendering with the
+deliberate line-step character of Bresenham geometry. Continue until the whole request is complete;
+do not stop after a subset or treat the size of the work as a blocker. The previous agent repeatedly
+did so despite being corrected, and the owner is understandably frustrated.
+
+The prototype catalogue and drawings are in `tools/ux-gallery/concepts.js` and `renderers.js`.
+Production currently exposes eight navigation layouts and domain control styles, but most domain
+styles collapse into generic Instrument/Editorial layouts. Chronograph, smartwatch, data, camera
+and ambient families are absent. Prototype examples contain fixed sample values and images; real
+production versions need appropriate HA data, update paths and scene support. Follow `ARCHITECTURE.md`
+and assess the 24 KiB two-scene transport, 64-element limit and shared firmware/browser contract;
+do not present invented sample data as live state. The owner asked for all the families, not just
+catalogue labels or approximations. Measure and evolve the contract where the work requires it.
+
+Local changes already made: Petals has a smaller centre and no generic icon circles; Pointer has
+a triangular outline; highlight, centre, gauge radius and gauge width controls were added. Crisp
+text, icon and digit masks are drawn in one-bit mode at display resolution instead of thresholding
+resampled masks. Primitive lines already use Bresenham in both renderers. These changes are a start,
+not acceptance of the requested visual result: compare against the Atlas, check the moiré/stepping
+appearance and refine as needed. Some controls may be irrelevant to certain styles; check that their
+effects are visible and appropriate. `tests/fixtures/scenes.json` was regenerated.
+
+Last local check: 30 tests passed across `test_scene_firmware.py`, `test_editing_features.py`,
+`test_definition_scene.py` and `test_panel_visibility_gallery.py`, including the shared C++/browser
+pixel comparison; Ruff passed on the changed Python files. No visual comparison, live HA panel check
+or physical Dial check was performed for the Atlas changes. No changes from this work were deployed.
+Preserve the separately staged `AGENTS.core.md`. Integration is at b8; follow the independent
+component version rules before runtime edits. The panel rules
+authorise commits needed for subsequent build cycles, but do not include the unrelated staged file.
+
 ## Admin panel prototype
+
+The current local iteration starts restoring the Atlas navigation differences: petals no longer
+use the generic icon circles, pointer has a triangular marker, and highlight, centre and gauge
+dimensions are configurable.
+This is incomplete: the other Atlas families and faithful domain treatments still need real data
+and scene implementations. Crisp masks now draw directly at display resolution. No visual or physical
+verification was performed for these changes. Preserve the separately staged rules.
+
+The b8 work also keeps the appearance dialog size stable and shows a live
+HA-rendered preview, alongside controls on wide screens and stacked on narrow ones. Its raw
+Advanced style tab was replaced by colour controls for the four remaining supported colours.
+The preview changes are local only: an earlier b8 iteration was deployed. The gallery preview response is tested locally;
+the browser preview used mock HA responses.
+
+Integration b8 adds an admin-only per-Dial reset with a styled confirmation. It removes that
+Dial's saved configuration and clears its display, preserving Wi-Fi and firmware. Reset markers
+prevent legacy defaults from recreating a scene; offline displays fall back on reconnect. b8 is
+deployed to the HA config share with matching files; restart HA and refresh the browser. The owner
+requested no commit while further changes are coming. Preserve staged AGENTS.core.md.
 
 Integration b7 replaces panel browser confirmations with styled dialogs. Page removal offers
 moving direct subpages up while retaining their hierarchy, or removing all descendants; the

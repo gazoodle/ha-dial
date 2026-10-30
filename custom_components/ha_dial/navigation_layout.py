@@ -27,7 +27,7 @@ def navigation_layout(view, items, selected, options, theme):
         positions = [(62, 72 + slot * 40) for slot in range(len(visible))]
         title_y, label_y, footer_y, cog_y = 183, 0, 212, 27
     elif style == "NAV-PETALS":
-        positions = [point(72, n * 360 / max(1, count), cy=112) for n in visible]
+        positions = [point(59, n * 360 / max(1, count), cy=109) for n in visible]
         for n in visible:
             angle = n * 360 / max(1, count)
             spread = min(32, 160 / max(1, count))
@@ -36,8 +36,8 @@ def navigation_layout(view, items, selected, options, theme):
                 {
                     "op": "arc",
                     "x": 120,
-                    "y": 112,
-                    "r": 96,
+                    "y": 109,
+                    "r": 82,
                     "start": round(angle - spread),
                     "end": round(angle + spread),
                     "stroke": ink,
@@ -45,8 +45,8 @@ def navigation_layout(view, items, selected, options, theme):
                 }
             )
             for edge in (angle - spread, angle + spread):
-                x, y = point(96, edge, cy=112)
-                ix, iy = point(44, edge, cy=112)
+                x, y = point(82, edge, cy=109)
+                ix, iy = point(32, edge, cy=109)
                 extra.append(
                     {"op": "line", "x1": ix, "y1": iy, "x2": x, "y2": y, "stroke": ink}
                 )

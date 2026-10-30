@@ -15,35 +15,30 @@ from .runtime import _is_preview, _navigator, _next_revision, _push
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_clear_views(hass: HomeAssistant) -> None:
-    async def clear(device):
-        if _is_preview(device):
-            return
-        async_dispatcher_send(
-            hass,
-            f"{DOMAIN}_scene_{device}",
-            {"error": "HA Dial Server is restarting or has been removed"},
-        )
-        service = f"{device}_ha_dial_show_view"
-        if not hass.services.has_service("esphome", service):
-            return
-        try:
-            async with asyncio.timeout(2):
-                await hass.services.async_call(
-                    "esphome",
-                    service,
-                    {
-                        "view": json.dumps(
-                            {"revision": _next_revision(hass, device), "clear": True}
-                        )
-                    },
-                    blocking=True,
-                )
-        except (HomeAssistantError, TimeoutError) as error:
-            _LOGGER.warning("Could not clear HA Dial display for %s: %s", device, error)
+async def async_clear_view(hass: HomeAssistant, device: str) -> bool:
+    if _is_preview(device):
+        return False
+    message = "HA Dial Server is restarting or has been removed" if hass.data[DOMAIN].get("unloading") else "Dial has no active configuration"
+    async_dispatcher_send(hass, f"{DOMAIN}_scene_{device}", {"error": message})
+    service = f"{device}_ha_dial_show_view"
+    if not hass.services.has_service("esphome", service) or not hass.data[DOMAIN].get("transport_available", {}).get(device, True):
+        return False
+    try:
+        async with asyncio.timeout(2):
+            await hass.services.async_call(
+                "esphome", service,
+                {"view": json.dumps({"revision": _next_revision(hass, device), "clear": True})},
+                blocking=True,
+            )
+        return True
+    except (HomeAssistantError, TimeoutError) as error:
+        _LOGGER.warning("Could not clear HA Dial display for %s: %s", device, error)
+        return False
 
+
+async def async_clear_views(hass: HomeAssistant) -> None:
     await asyncio.gather(
-        *(clear(device) for device in hass.data[DOMAIN].get("navigators", {}))
+        *(async_clear_view(hass, device) for device in hass.data[DOMAIN].get("navigators", {}))
     )
 
 

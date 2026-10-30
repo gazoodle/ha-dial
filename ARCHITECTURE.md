@@ -246,6 +246,11 @@ still republish its definition. Configuration writes require an administrator.
 Panel style and theme galleries use scenes compiled by HA. Fixed-time visibility conditions
 schedule local-time boundary and midnight events; they do not poll for state changes.
 
+An admin can reset one Dial's HA configuration. HA stores an unconfigured marker, removes that
+Dial's runtime subscriptions, and sends the existing revision-checked clear envelope. The marker
+prevents old inputs and legacy defaults from restoring a scene after a restart. Wi-Fi, ESPHome
+pairing and firmware are unchanged; an unavailable device clears its cached scene on reconnect.
+
 On unload, the server sends a revision-checked `{"revision": N, "clear": true}` envelope
 through the existing view transport. Firmware releases both cached scenes, cancels local
 pending feedback and returns to its compiled setup interface while the API can remain

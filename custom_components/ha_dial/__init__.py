@@ -118,6 +118,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         websocket_api.async_register_command(hass, _ws_view)
         websocket_api.async_register_command(hass, _ws_input)
         websocket_api.async_register_command(hass, _ws_configure)
+        websocket_api.async_register_command(hass, _ws_reset)
         websocket_api.async_register_command(hass, _ws_subscribe)
         websocket_api.async_register_command(hass, _ws_definitions)
         websocket_api.async_register_command(hass, _ws_gallery)
@@ -175,6 +176,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not isinstance(action, str) or action not in INPUTS:
             return
         update_settings_flag(device, event.data.get("settings_enabled"))
+        if device in state.get("resetting", set()) or (device in state.get("stored_definitions", {}) and state["stored_definitions"][device] is None):
+            return
         if device not in state["definition_sources"] and not light_entity:
             return
         item = event.data.get("item")
@@ -224,6 +227,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             device
         ):
             return
+        if device in state.get("resetting", set()) or (device in state.get("stored_definitions", {}) and state["stored_definitions"][device] is None):
+            return
         changed = update_settings_flag(device, event.data.get("settings_enabled"))
         if not state["active"]:
             if changed:
@@ -272,6 +277,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     from homeassistant.exceptions import TemplateError
 
     for device, source in saved_definitions.items():
+        if source is None:
+            continue
         if (
             not isinstance(device, str)
             or DEVICE_RE.fullmatch(device) is None
@@ -405,6 +412,11 @@ async def _ws_view(hass, connection, msg) -> None:
 @websocket_api.async_response
 @_require_server
 async def _ws_input(hass, connection, msg) -> None:
+    device = msg["device"]
+    state = hass.data[DOMAIN]
+    if device in state.get("resetting", set()) or (device in state.get("stored_definitions", {}) and state["stored_definitions"][device] is None):
+        connection.send_error(msg["id"], "not_configured", "Dial has no active configuration")
+        return
     if msg.get("value") is not None and not math.isfinite(msg["value"]):
         connection.send_error(msg["id"], "invalid_format", "Value must be finite")
         return
@@ -454,6 +466,9 @@ async def _ws_configure(hass, connection, msg) -> None:
         return
 
     state = hass.data[DOMAIN]
+    if device in state.get("resetting", set()):
+        connection.send_error(msg["id"], "busy", "Dial is being reset")
+        return
     if source == state["definition_sources"].get(device):
         if not _is_preview(device):
             _sync_control(hass, _navigator(hass, device))
@@ -489,6 +504,49 @@ async def _ws_configure(hass, connection, msg) -> None:
     connection.send_result(msg["id"], _scene_result(hass, device, navigator.current()))
 
 
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/reset", vol.Required("device"): DEVICE_SCHEMA})
+@websocket_api.async_response
+@_require_server
+async def _ws_reset(hass, connection, msg) -> None:
+    if not connection.user or not connection.user.is_admin:
+        connection.send_error(msg["id"], "unauthorized", "Administrator access required")
+        return
+    device = msg["device"]
+    if _is_preview(device):
+        connection.send_error(msg["id"], "invalid_format", "Choose a physical Dial")
+        return
+    state = hass.data[DOMAIN]
+    from .transport import async_clear_view
+
+    async with state.setdefault("definition_lock", asyncio.Lock()):
+        if not state["active"]:
+            connection.send_error(msg["id"], "not_loaded", "HA Dial Server was unloaded")
+            return
+        resetting = state.setdefault("resetting", set())
+        resetting.add(device)
+        try:
+            stored = {**state.get("stored_definitions", {}), device: None}
+            await state["definition_store"].async_save(stored)
+            state["stored_definitions"] = stored
+            state.get("pending_scenes", {}).pop(device, None)
+            if worker := state.get("scene_workers", {}).get(device):
+                await asyncio.shield(worker)
+            for key in ("template_trackers", "condition_trackers"):
+                if tracker := state.get(key, {}).pop(device, None):
+                    tracker.async_remove()
+            for key in ("condition_entity_unsubs", "definition_unsubs"):
+                if unsubscribe := state.get(key, {}).pop(device, None):
+                    unsubscribe()
+            for unsubscribe in state.get("condition_time_unsubs", {}).pop(device, []):
+                unsubscribe()
+            for key in ("definitions", "definition_sources", "navigators", "deployment_status", "input_sequences"):
+                state.get(key, {}).pop(device, None)
+            cleared = await async_clear_view(hass, device)
+        finally:
+            resetting.discard(device)
+    connection.send_result(msg["id"], {"cleared": cleared})
+
+
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/definitions"})
 @websocket_api.async_response
 @_require_server
@@ -496,13 +554,13 @@ async def _ws_definitions(hass, connection, msg) -> None:
     if not connection.user or not connection.user.is_admin:
         connection.send_error(msg["id"], "unauthorized", "Administrator access required")
         return
-    connection.send_result(msg["id"], hass.data[DOMAIN].get("stored_definitions", {}))
+    connection.send_result(msg["id"], {device: source for device, source in hass.data[DOMAIN].get("stored_definitions", {}).items() if source is not None})
 
 
 @websocket_api.websocket_command(
     {vol.Required("type"): f"{DOMAIN}/gallery", vol.Required("page"): dict,
      vol.Optional("entity"): str, vol.Optional("theme", default="ember"): str,
-     vol.Optional("children", default=[]): [dict]}
+     vol.Optional("children", default=[]): [dict], vol.Optional("preview_only", default=False): bool}
 )
 @websocket_api.async_response
 @_require_server
@@ -529,7 +587,7 @@ async def _ws_gallery(hass, connection, msg) -> None:
         if not entity:
             existing = len(page.get("entities", [])) + len(page.get("lights", []))
             children = msg.get("children", [])[:max(0, 8 - existing)]
-            if not children and not existing:
+            if not children and not existing and not msg.get("preview_only"):
                 children = [{"title": name} for name in ("Rooms", "Lights", "Climate", "Media")]
             children = [{"id": f"gallery_{index}", "parent": "gallery", "title": item.get("title", "Page"), "icon": item.get("icon", "mdi:folder")} for index, item in enumerate(children)]
         nav = Navigator(definition=build_definition(hass, [page, *children], msg["theme"]))
@@ -537,6 +595,9 @@ async def _ws_gallery(hass, connection, msg) -> None:
             nav.input("press")
             _sync_control(hass, nav)
         view = nav.current()
+        if msg.get("preview_only"):
+            connection.send_result(msg["id"], {"scene": compile_scene(view)})
+            return
         styles = sorted(control_styles(entity.split(".", 1)[0]) if entity else NAV_STYLES)
         connection.send_result(msg["id"], {
             "style": view.get("style"), "theme": view.get("theme"),

@@ -1,5 +1,13 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b8
+
+- Add centre radius and gauge radius and width controls to the appearance dialog.
+- Draw crisp text, digits and icons directly at display resolution instead of thresholding smoothed masks.
+- Restore distinct petal and pointer navigation details and add a highlight radius control.
+- Keep the appearance dialog stable between tabs and show an HA-rendered live preview beside its controls.
+- Add a confirmed per-Dial configuration reset that removes saved pages and clears the device display without changing Wi-Fi or firmware.
+
 ## 2026.10.1-b7
 
 - Replace browser confirmations with styled dialogs; choose whether to keep or remove nested subpages when removing a page.

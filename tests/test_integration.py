@@ -12,6 +12,54 @@ SOURCE = {
 }
 
 
+def test_reset_one_device_clears_configuration_and_blocks_old_inputs(integration):
+    async def run():
+        i = integration
+        await i.code._ws_configure(i.hass, i.connection, {"id": 1, "device": "dial_one", "definition": SOURCE})
+        await i.code._ws_configure(i.hass, i.connection, {"id": 2, "device": "dial_two", "definition": SOURCE})
+        i.connection.user.is_admin = False
+        await i.code._ws_reset(i.hass, i.connection, {"id": 3, "device": "dial_one"})
+        assert i.connection.send_error.call_args.args[1] == "unauthorized"
+        assert i.data["stored_definitions"]["dial_one"] == SOURCE
+        i.connection.user.is_admin = True
+        await i.code._ws_reset(i.hass, i.connection, {"id": 4, "device": "dial_one"})
+        assert i.data["stored_definitions"] == {"dial_one": None, "dial_two": SOURCE}
+        assert "dial_one" not in i.data["navigators"]
+        assert json.loads(i.hass.services.async_call.call_args.args[2]["view"])["clear"] is True
+        assert i.connection.send_result.call_args.args == (4, {"cleared": True})
+        i.hass.services.async_call.reset_mock()
+        assert await i.code._input(i.hass, "dial_one", "ready") == {}
+        i.hass.services.async_call.assert_not_called()
+        await i.code._ws_definitions(i.hass, i.connection, {"id": 5})
+        assert i.connection.send_result.call_args.args[1] == {"dial_two": SOURCE}
+        await i.code._ws_configure(i.hass, i.connection, {"id": 6, "device": "dial_one", "definition": SOURCE})
+        assert i.data["stored_definitions"]["dial_one"] == SOURCE
+
+    asyncio.run(run())
+
+
+def test_reset_offline_device_and_storage_failure(integration):
+    async def run():
+        i = integration
+        i.data["stored_definitions"] = {"dial_one": SOURCE}
+        i.data["definition_store"].async_save.side_effect = OSError("disk full")
+        try:
+            await i.code._ws_reset(i.hass, i.connection, {"id": 1, "device": "dial_one"})
+        except OSError:
+            pass
+        else:
+            raise AssertionError("storage failure must propagate")
+        assert i.data["stored_definitions"]["dial_one"] == SOURCE
+        assert not i.data["resetting"]
+        i.data["definition_store"].async_save.side_effect = None
+        i.data["transport_available"] = {"dial_one": False}
+        await i.code._ws_reset(i.hass, i.connection, {"id": 2, "device": "dial_one"})
+        assert i.connection.send_result.call_args.args == (2, {"cleared": False})
+        assert i.data["stored_definitions"]["dial_one"] is None
+
+    asyncio.run(run())
+
+
 def test_draft_isolation_saved_deployment_and_invalid_save(integration):
     async def run():
         i = integration

@@ -133,6 +133,8 @@ def compile_scene(view: dict) -> dict:
                 "_raster": raster,
                 "_font_size": options["font-size"],
                 "_icon_size": options["icon-size"],
+                "_gauge_radius": options["gauge-radius"],
+                "_gauge_width": options["gauge-width"],
             },
             theme,
         )
@@ -199,7 +201,7 @@ def compile_scene(view: dict) -> dict:
                     "op": "arc",
                     "x": 120,
                     "y": 118,
-                    "r": 70,
+                    "r": options["gauge-radius"],
                     "start": -132,
                     "end": 132,
                     "stroke": theme["grid"],
@@ -210,12 +212,12 @@ def compile_scene(view: dict) -> dict:
                     "fill": theme["primary"],
                     "x": 120,
                     "y": 118,
-                    "r": 70,
+                    "r": options["gauge-radius"],
                     "start": -132,
                     "end": 132,
                     "value": round(value),
                     "stroke": accent,
-                    "width": 6,
+                    "width": options["gauge-width"],
                 },
                 {
                     **(
@@ -263,8 +265,8 @@ def compile_scene(view: dict) -> dict:
             angle = -126 + index * 14
             elements.append(
                 line(
-                    *_point(120, 118, 60, angle),
-                    *_point(120, 118, 64, angle),
+                    *_point(120, 118, options["gauge-radius"] - 10, angle),
+                    *_point(120, 118, options["gauge-radius"] - 6, angle),
                     theme["secondary"]
                     if active and index <= round(value * 18 / 100)
                     else theme["grid"],
@@ -300,8 +302,10 @@ def compile_scene(view: dict) -> dict:
                 {
                     "op": "circle",
                     "x": 120,
-                    "y": 120,
-                    "r": 55,
+                    "y": 109 if view.get("style") == "NAV-PETALS" else 120,
+                    "r": 32
+                    if view.get("style") == "NAV-PETALS"
+                    else options["hub-radius"],
                     "stroke": theme["grid"],
                     "fill": theme["surface"],
                 }
@@ -316,19 +320,20 @@ def compile_scene(view: dict) -> dict:
             angle = index * 360 / max(1, len(menu_items))
             active = index == selected
             ink = theme["secondary"] if active else theme["text"]
-            elements.extend(
-                [
-                    {
-                        "op": "circle",
-                        "x": round(x),
-                        "y": round(y),
-                        "r": 18 if active else 14,
-                        "stroke": theme["primary"] if active else theme["quiet"],
-                        "fill": theme["surface"],
-                        "width": 2,
-                    },
-                ]
-            )
+            if view.get("style") != "NAV-PETALS":
+                elements.extend(
+                    [
+                        {
+                            "op": "circle",
+                            "x": round(x),
+                            "y": round(y),
+                            "r": options["highlight-radius"] if active else 14,
+                            "stroke": theme["primary"] if active else theme["quiet"],
+                            "fill": theme["surface"],
+                            "width": 2,
+                        },
+                    ]
+                )
             elements.append(
                 {
                     "op": "icon",
@@ -355,12 +360,15 @@ def compile_scene(view: dict) -> dict:
                     }
                 )
             if view.get("style") == "NAV-POINTER" and active:
-                elements.append(
-                    line(
-                        *_point(120, 120, 57, angle),
-                        *_point(120, 120, 66, angle),
-                        theme["primary"],
-                    )
+                tip = _point(120, 120, options["hub-radius"] + 13, angle)
+                left = _point(120, 120, options["hub-radius"], angle - 7)
+                right = _point(120, 120, options["hub-radius"], angle + 7)
+                elements.extend(
+                    [
+                        line(*tip, *left, theme["primary"]),
+                        line(*left, *right, theme["primary"]),
+                        line(*right, *tip, theme["primary"]),
+                    ]
                 )
             regions.append({"id": item["id"], "x": round(x), "y": round(y), "r": 20})
         elements.extend(

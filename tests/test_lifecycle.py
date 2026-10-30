@@ -85,6 +85,20 @@ def test_unconfigured_dial_stays_in_onboarding(lifecycle):
     asyncio.run(run())
 
 
+def test_reset_marker_survives_restart_with_legacy_light(lifecycle):
+    async def run():
+        case = lifecycle
+        case.saved.write_text(json.dumps({"demo_dial": None}))
+        case.entry.data = {"entity_id": "light.example"}
+        assert await case.i.code.async_setup_entry(case.i.hass, case.entry)
+        case.listeners["esphome.ha_dial_input"][0](SimpleNamespace(data={"device": "demo_dial", "action": "ready"}))
+        await asyncio.gather(*case.i.tasks)
+        assert "demo_dial" not in case.i.data["navigators"]
+        case.i.hass.services.async_call.assert_not_called()
+
+    asyncio.run(run())
+
+
 def test_custom_server_title_is_preserved(lifecycle):
     async def run():
         case = lifecycle

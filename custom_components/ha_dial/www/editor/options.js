@@ -3,8 +3,10 @@ import { renderScene } from '../scene.js';
 
 const number = (min, max, step = 1) => ({ number: { min, max, step, mode: 'box' } });
 const select = (options) => ({ select: { options, mode: 'dropdown' } });
-const labels = { title:'Page title', label:'Control label', icon:'Icon', style:'Atlas style', theme:'Theme', conditions:'Show when all conditions pass', confirm:'Confirm actions', css:'Advanced style', 'outer-border':'Outer border', 'border-width':'Border width', 'font-size':'Title size', 'icon-size':'Icon size', 'orbit-radius':'Orbit radius', raster:'Crisp / Smooth', accent:'Accent colour', background:'Background colour', text:'Text colour' };
-const defaults = {'outer-border':true,'border-width':2,'font-size':11,'icon-size':18,'orbit-radius':84,raster:'smooth'};
+const labels = { title:'Page title', label:'Control label', icon:'Icon', style:'Atlas style', theme:'Theme', conditions:'Show when all conditions pass', confirm:'Confirm actions', css:'Advanced style', 'outer-border':'Outer border', 'border-width':'Border width', 'font-size':'Title size', 'icon-size':'Icon size', 'orbit-radius':'Orbit radius', 'highlight-radius':'Highlight radius', raster:'Crisp / Smooth', accent:'Accent colour', background:'Background colour', text:'Text colour' };
+Object.assign(labels, {'hub-radius':'Centre radius','gauge-radius':'Gauge radius','gauge-width':'Gauge width'});
+const defaults = {'outer-border':true,'border-width':2,'font-size':11,'icon-size':18,'orbit-radius':84,'highlight-radius':18,'hub-radius':55,'gauge-radius':70,'gauge-width':6,raster:'smooth'};
+const ranges = [['border-width',1,4],['font-size',6,16],['icon-size',12,28],['orbit-radius',70,90],['highlight-radius',14,25],['hub-radius',25,65],['gauge-radius',55,85],['gauge-width',1,12]];
 const appearanceKeys = [...Object.keys(defaults), 'accent','background','text','surface','secondary','quiet','grid'];
 
 function declarations(source) {
@@ -15,7 +17,7 @@ function declarations(source) {
     if (at < 0) throw new Error('Use property: value; in Advanced style.');
     const name = declaration.slice(0, at).trim(), raw = declaration.slice(at + 1).trim();
     if (!appearanceKeys.includes(name)) throw new Error(`Unsupported style property: ${name}`);
-    result[name] = name === 'outer-border' ? ['true','on'].includes(raw) ? true : ['false','off'].includes(raw) ? false : raw : ['border-width','font-size','icon-size','orbit-radius'].includes(name) ? Number(raw.replace(/px$/, '')) : raw;
+    result[name] = name === 'outer-border' ? ['true','on'].includes(raw) ? true : ['false','off'].includes(raw) ? false : raw : ranges.some(([key])=>key===name) ? Number(raw.replace(/px$/, '')) : raw;
   }
   return result;
 }
@@ -81,6 +83,8 @@ export function openOptions(editor, pageId, entityId) {
     {name:'font-size',selector:number(6,16)},
     {name:'icon-size',selector:number(12,28)},
     ...(!domain ? [{name:'orbit-radius',selector:number(70,90)}] : []),
+    ...(!domain ? [{name:'highlight-radius',selector:number(14,25)}] : []),
+    ...(!domain ? [{name:'hub-radius',selector:number(25,65)}] : [{name:'gauge-radius',selector:number(55,85)},{name:'gauge-width',selector:number(1,12)}]),
     ...['accent','background','text'].map((name)=>({name,selector:{text:{}}})),
   ];
   conditionForm.schema = [{name:'conditions',selector:{condition:{}}}];
@@ -90,8 +94,8 @@ export function openOptions(editor, pageId, entityId) {
   }
   const advanced = document.createElement('details'), summary = document.createElement('summary'); summary.textContent = 'Advanced style';
   const css = document.createElement('textarea'); css.rows = 8; css.setAttribute('aria-label','Advanced style declarations');
-  let syncAppearance = () => {};
-  const writeCss = () => { css.value = appearanceKeys.filter((key)=>draft[key] !== undefined && draft[key] !== '').map((key)=>`${key}: ${draft[key]};`).join('\n'); };
+  let syncAppearance = () => {}, schedulePreview = () => {};
+  const writeCss = () => { css.value = appearanceKeys.filter((key)=>draft[key] !== undefined && draft[key] !== '').map((key)=>`${key}: ${draft[key]};`).join('\n'); schedulePreview(); };
   css.value = item.css || ''; if (!css.value) writeCss();
   for (const field of [form, appearanceForm, conditionForm]) field.addEventListener('value-changed', (event)=>{event.stopPropagation();for (const item of field.schema) draft[item.name] = event.detail.value[item.name];writeCss();});
   css.addEventListener('change', ()=>{try {draft={...draft,...declarations(css.value)};appearanceForm.data=draft;syncAppearance();error.textContent='';}catch(reason){error.textContent=reason.message;}});
@@ -101,7 +105,7 @@ export function openOptions(editor, pageId, entityId) {
     try {
       validateConditions(draft.conditions || []);
       const styling = {...Object.fromEntries(appearanceKeys.filter((key)=>draft[key] !== undefined && draft[key] !== '').map((key)=>[key,draft[key]])), ...declarations(css.value)};
-      for (const [key, low, high] of [['border-width',1,4],['font-size',6,16],['icon-size',12,28],['orbit-radius',70,90]]) if (!(Number.isFinite(styling[key]) && styling[key]>=low && styling[key]<=high)) throw new Error(`${key} must be between ${low} and ${high}.`);
+      for (const [key, low, high] of ranges) if (!(Number.isFinite(styling[key]) && styling[key]>=low && styling[key]<=high)) throw new Error(`${key} must be between ${low} and ${high}.`);
       if (typeof styling['outer-border'] !== 'boolean' || !['crisp','smooth'].includes(styling.raster)) throw new Error('Check outer-border and raster values.');
       for (const name of ['accent','background','text','surface','secondary','quiet','grid']) if (styling[name] && !/^#[a-f\d]{6}$/i.test(styling[name])) throw new Error(`${name} needs a #RRGGBB colour.`);
       const updated = {...item,appearance:styling,conditions:draft.conditions || []};
@@ -123,16 +127,16 @@ export function openOptions(editor, pageId, entityId) {
   const head = document.createElement('header'); head.className = 'options-head'; head.append(heading);
   const appearance = document.createElement('details'), appearanceTitle = document.createElement('summary'); appearanceTitle.textContent = 'Detailed appearance'; appearance.append(appearanceTitle,appearanceForm,advanced);
   const visibility = document.createElement('details'), visibilityTitle = document.createElement('summary'); visibilityTitle.textContent = 'Visibility conditions'; visibility.append(visibilityTitle,hint,conditionForm);
-  const body = document.createElement('div'); body.className = 'options-body'; body.append(error,form,appearance,visibility);
+  let body = document.createElement('div'); body.className = 'options-body'; body.append(error,form,appearance,visibility);
   if (editor.panelMode) {
     body.replaceChildren(error);
     const gallery = document.createElement('div'); gallery.className = 'options-galleries';
     const tabs = document.createElement('div'); tabs.className = 'dialog-tabs'; tabs.setAttribute('role','tablist'); tabs.setAttribute('aria-label','Appearance settings');
-    const panels = [gallery, document.createElement('div'), document.createElement('div')];
+    const panels = [gallery, document.createElement('div')];
     const controls = document.createElement('div'); controls.className='appearance-controls';
     const updates = [];
     const title = document.createElement('h4'); title.textContent='Display'; controls.append(title);
-    for (const [key,low,high] of [['border-width',1,4],['font-size',6,16],['icon-size',12,28],...(!domain?[['orbit-radius',70,90]]:[])]) {
+    for (const [key,low,high] of ranges.filter(([key])=>!['orbit-radius','highlight-radius','hub-radius','gauge-radius','gauge-width'].includes(key) || (domain ? key.startsWith('gauge-') : !key.startsWith('gauge-')))) {
       const row=document.createElement('label'); row.className='slider-row';
       const name=document.createElement('span'); name.textContent=labels[key];
       const input=document.createElement('input'); input.type='range'; input.min=low; input.max=high; input.step=1; input.setAttribute('aria-label',labels[key]);
@@ -151,17 +155,17 @@ export function openOptions(editor, pageId, entityId) {
     const syncRaster=()=>modes.forEach((button,index)=>button.setAttribute('aria-pressed',String((draft.raster || 'smooth') === ['smooth','crisp'][index]))); updates.push(syncRaster); syncRaster(); raster.append(segments); controls.append(raster);
     const coloursTitle=document.createElement('h4'); coloursTitle.textContent='Colour overrides'; controls.append(coloursTitle);
     const colours=document.createElement('div'); colours.className='colour-grid';
-    for (const [key,fallback] of [['accent','#ff8b2d'],['background','#060707'],['text','#fff7eb']]) {
-      const row=document.createElement('div');row.className='colour-choice';const label=document.createElement('label');label.textContent=labels[key];
-      const input=document.createElement('input');input.type='color';input.setAttribute('aria-label',labels[key]);
+    for (const [key,fallback] of [['accent','#ff8b2d'],['background','#060707'],['text','#fff7eb'],['surface','#252525'],['secondary','#cccccc'],['quiet','#777777'],['grid','#444444']]) {
+      const row=document.createElement('div');row.className='colour-choice';const label=document.createElement('label');label.textContent=labels[key] || `${key[0].toUpperCase()}${key.slice(1)} colour`;
+      const input=document.createElement('input');input.type='color';input.setAttribute('aria-label',label.textContent);
       const reset=document.createElement('button');reset.type='button';reset.className='chip';reset.textContent='Use theme';
       const sync=()=>{input.value=draft[key] || fallback;reset.disabled=!draft[key];};updates.push(sync);sync();
       input.addEventListener('input',()=>{draft[key]=input.value;sync();writeCss();});reset.addEventListener('click',()=>{delete draft[key];sync();writeCss();});
       label.append(input);row.append(label,reset);colours.append(row);
     }
     controls.append(colours);syncAppearance=()=>updates.forEach(update=>update());
-    panels[1].append(form,controls); panels[2].append(css);
-    const names = ['Styles & themes','Options','Advanced'];
+    panels[1].append(form,controls);
+    const names = ['Styles & themes','Options'];
     const buttons = names.map((name,index) => {
       const tab = document.createElement('button'); tab.type='button'; tab.textContent=name; tab.setAttribute('role','tab');
       tab.id=`dial-tab-${index}`; tab.setAttribute('aria-controls',`dial-panel-${index}`);
@@ -172,12 +176,34 @@ export function openOptions(editor, pageId, entityId) {
       tabs.append(tab); return tab;
     });
     body.append(tabs,...panels); buttons[0].click();
+    const preview=document.createElement('aside'); preview.className='appearance-preview';
+    const previewTitle=document.createElement('h4'); previewTitle.textContent='Live preview';
+    const canvas=document.createElement('canvas'); canvas.width=canvas.height=240; canvas.setAttribute('aria-label','Live Dial appearance preview'); canvas.setAttribute('role','img');
+    const status=document.createElement('p'); status.textContent='Loading preview…'; status.setAttribute('role','status');
+    preview.append(previewTitle,canvas,status);
+    const layout=document.createElement('div'); layout.className='appearance-layout'; layout.append(body,preview); body=layout;
+    const currentPage = () => {
+      const updated = {...item,...draft,appearance:Object.fromEntries(appearanceKeys.filter(key=>draft[key] !== undefined && draft[key] !== '').map(key=>[key,draft[key]]))}; delete updated.css;
+      return entityId ? {...page,entities:entities.map(entry => (typeof entry === 'string' ? entry : entry.entity_id) === entityId ? updated : entry),lights:[]} : updated;
+    };
+    const children = editor.config.pages.filter(candidate => candidate.parent === pageId).map(({title,icon})=>({title,icon}));
+    let previewSequence=0, timer;
+    schedulePreview = () => {
+      const sequence=++previewSequence; clearTimeout(timer); status.textContent='Updating preview…';
+      timer=setTimeout(async()=>{
+        try {
+          const result=await editor._hass.callWS({type:'ha_dial/gallery',page:currentPage(),children,...(entityId ? {entity:entityId} : {}),theme:editor.config.theme || 'ember',preview_only:true});
+          if (sequence !== previewSequence || !dialog.isConnected) return;
+          renderScene(canvas,result.scene); status.textContent='Preview only — changes are not applied yet.';
+        } catch (reason) { if (sequence === previewSequence && dialog.isConnected) status.textContent=`Preview unavailable: ${reason.message || reason}`; }
+      },80);
+    };
+    dialog.addEventListener('close',()=>{previewSequence++; clearTimeout(timer);});
     let request = 0;
     const updateGallery = async () => {
       const sequence = ++request;
-      const current = entityId ? {...page,entities:entities.map(entry => (typeof entry === 'string' ? entry : entry.entity_id) === entityId ? {...item, ...draft} : entry),lights:[]} : {...page,...draft};
+      const current = currentPage();
       try {
-        const children = editor.config.pages.filter(candidate => candidate.parent === pageId).map(({title,icon})=>({title,icon}));
         const data = await editor._hass.callWS({type:'ha_dial/gallery',page:current,children,...(entityId ? {entity:entityId} : {}),theme:editor.config.theme || 'ember'});
         if (sequence !== request || !dialog.isConnected) return;
         gallery.replaceChildren();
@@ -191,13 +217,13 @@ export function openOptions(editor, pageId, entityId) {
             const canvas=document.createElement('canvas'); canvas.width=canvas.height=240; canvas.setAttribute('aria-hidden','true');
             const label=document.createElement('span'); label.textContent=value.replace(/^NAV-|^CTL-/,'').replaceAll('-',' ').toLowerCase();
             choice.append(canvas,label); choices.append(choice); renderScene(canvas,scene);
-            choice.addEventListener('click',()=>{draft[field]=value; updateGallery();});
+            choice.addEventListener('click',()=>{draft[field]=value; schedulePreview(); updateGallery();});
           }
           gallery.append(section);
         }
       } catch (reason) { if (sequence === request) error.textContent = `Could not load previews: ${reason.message || reason}`; }
     };
-    updateGallery();
+    updateGallery(); schedulePreview();
   }
   const foot = document.createElement('footer'); foot.className = 'options-foot'; foot.append(cancel,save);
   dialog.append(head,body,foot);

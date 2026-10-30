@@ -57,11 +57,11 @@ def control_layout(view: dict, theme: dict) -> tuple[list, list]:
                 "op": "arc",
                 "x": 120,
                 "y": 120,
-                "r": 74,
+                "r": view.get("_gauge_radius", 70),
                 "start": -125,
                 "end": 125,
                 "stroke": theme["grid"],
-                "width": 5,
+                "width": view.get("_gauge_width", 6),
             }
         )
         if continuous:
@@ -78,11 +78,11 @@ def control_layout(view: dict, theme: dict) -> tuple[list, list]:
                     "fill": theme["primary"],
                     "x": 120,
                     "y": 120,
-                    "r": 74,
+                    "r": view.get("_gauge_radius", 70),
                     "start": -125,
                     "end": 125,
                     "stroke": theme["primary"],
-                    "width": 3,
+                    "width": view.get("_gauge_width", 6),
                 }
             )
     precision = min(2, len(str(view.get("step", 1)).rstrip("0").partition(".")[2]))
