@@ -37,6 +37,8 @@ NAV_STYLES = {
     )
 }
 READOUTS = {"ENERGY", "AIR", "VEHICLE", "WATER", "DATA"}
+CHRONOGRAPH_STYLES = {f"CHR-{name}" for name in ("TRICOMPAX", "WORLDTIMER", "SKELETON", "MOONPHASE")}
+PAGE_STYLES = NAV_STYLES | CHRONOGRAPH_STYLES
 
 
 def control_styles(domain: str) -> set[str]:
@@ -51,6 +53,6 @@ def control_styles(domain: str) -> set[str]:
     }
 
 
-STYLES = NAV_STYLES | {
+STYLES = PAGE_STYLES | {
     style for domain in CONTROL_TYPES for style in control_styles(domain)
 }

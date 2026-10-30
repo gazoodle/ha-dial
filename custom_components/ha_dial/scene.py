@@ -6,7 +6,8 @@ from math import cos, pi, sin
 
 from .appearance import appearance
 from .assets import _number_mask, _text_mask, icon_mask
-from .catalogue import CONTROL_TYPES
+from .catalogue import CHRONOGRAPH_STYLES, CONTROL_TYPES
+from .chronograph_layout import chronograph_layout
 from .control_layout import control_layout
 from .navigation_layout import navigation_layout
 
@@ -110,6 +111,7 @@ def compile_scene(view: dict) -> dict:
     )
     regions = [{"id": "back", "x": 90, "y": 158, "r": 16}] if view.get("back") else []
     regions.append({"id": "home", "x": 150, "y": 158, "r": 16})
+    nav_positions = {"footer": 158, "cog": 77}
 
     def line(x1: float, y1: float, x2: float, y2: float, colour: str) -> dict:
         return {
@@ -126,7 +128,13 @@ def compile_scene(view: dict) -> dict:
         or view.get("style", "").endswith("-EDITORIAL")
         or view.get("confirmation")
     )
-    if extended:
+    clock_face = view.get("style") in CHRONOGRAPH_STYLES
+    if clock_face:
+        body, regions = chronograph_layout(view, theme)
+        elements.extend(body)
+        regions.extend(([{"id": "back", "x": 90, "y": 212, "r": 14}] if view.get("back") else []) + [{"id": "home", "x": 150, "y": 212, "r": 14}])
+        nav_positions = {"footer": 212, "cog": 24}
+    elif extended:
         body, targets = control_layout(
             {
                 **view,
@@ -293,6 +301,11 @@ def compile_scene(view: dict) -> dict:
                 )
                 regions.append({"id": action, "x": x, "y": 211, "r": 19})
     else:
+        menu_items = [item for item in items if not item.get("settings")]
+        visible, ornaments, nav_positions = navigation_layout(
+            view, menu_items, selected, options, theme
+        )
+        elements.extend(ornaments)
         if view.get("style", "NAV-ORBIT") not in {
             "NAV-ROLODEX",
             "NAV-RIBBON",
@@ -310,11 +323,6 @@ def compile_scene(view: dict) -> dict:
                     "fill": theme["surface"],
                 }
             )
-        menu_items = [item for item in items if not item.get("settings")]
-        visible, ornaments, nav_positions = navigation_layout(
-            view, menu_items, selected, options, theme
-        )
-        elements.extend(ornaments)
         rolodex = view.get("style") == "NAV-ROLODEX"
         for index, item, x, y in visible:
             angle = index * 360 / max(1, len(menu_items))
@@ -377,15 +385,23 @@ def compile_scene(view: dict) -> dict:
                     "op": "mask",
                     "x": 120,
                     "y": nav_positions["title"],
-                    "text": view.get("title", "Home").upper()[:14],
-                    "size": options["font-size"],
+                    "text": (
+                        items[selected % len(items)]["label"].upper()[:10]
+                        if view.get("style") == "NAV-PETALS" and items
+                        else view.get("title", "Home").upper()[:14]
+                    ),
+                    "size": min(9, options["font-size"])
+                    if view.get("style") == "NAV-PETALS"
+                    else options["font-size"],
                     "colour": theme["text"],
                 },
                 {
                     "op": "mask",
                     "x": 120,
                     "y": nav_positions["label"] or 193,
-                    "text": ""
+                    "text": f"{selected + 1:02} / {len(items):02}"
+                    if view.get("style") == "NAV-PETALS"
+                    else ""
                     if not nav_positions["label"]
                     else items[selected % len(items)]["label"]
                     if items
@@ -481,7 +497,11 @@ def compile_scene(view: dict) -> dict:
                 theme["surface"] if view.get("kind") == "menu" else theme["bg"]
             )
     return {
-        "version": 3 if any(e.get("characters") for e in elements) else 2,
+        "version": 4
+        if any(e["op"] == "polyline" for e in elements)
+        else 3
+        if any(e.get("characters") for e in elements)
+        else 2,
         "width": 240,
         "height": 240,
         "background": theme["bg"],

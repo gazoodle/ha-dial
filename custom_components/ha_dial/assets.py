@@ -14,7 +14,7 @@ def _text_mask(text: str, size: int, colour: str, raster: str = "smooth") -> dic
         font = ImageFont.load_default(size=max(6, size))
         text = str(text)[:16]
         box = font.getbbox(text)
-        image = Image.new("1", (max(1, box[2] - box[0]), max(1, box[3] - box[1])))
+        image = Image.new("1", (max(1, ceil(box[2] - box[0])), max(1, ceil(box[3] - box[1]))))
         ImageDraw.Draw(image).text((-box[0], -box[1]), text, font=font, fill=1)
         scale = min(1, 120 / image.width, 32 / image.height)
         if scale < 1:

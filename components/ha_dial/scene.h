@@ -5,6 +5,7 @@
 #include <memory>
 #include <utility>
 #include <limits>
+#include <vector>
 #include "esphome/components/json/json_util.h"
 #include "esphome/components/display/display.h"
 
@@ -20,6 +21,7 @@ struct SceneElement {
   Color stroke{Color::BLACK}, fill{Color::BLACK}, colour{Color::BLACK}, background{Color::BLACK};
   bool has_stroke{false}, has_fill{false};
   std::string pixels;
+  std::vector<std::pair<uint8_t, uint8_t>> points;
 };
 
 struct SceneRegion {

@@ -269,6 +269,21 @@ compiled onboarding interface. Its ready/input events must not create a placehol
 
 ## Appearance, conditional definitions and local settings (2026-10-29)
 
+Chronograph pages resolve HA local time (or an explicit IANA zone), configured world zones,
+moon phase and percentage reserve sensors in HA before compilation. One scheduled second-boundary
+callback per definition publishes only while a clock is visible. It shares definition subscription
+cleanup and the existing coalescing publisher. Resolution occurs once per publication so the
+browser and native API delivery use the same reading; previous clock scenes resolve when sent.
+No clock, astronomical phase or sensor semantics are added to either consumer. Unknown readings
+remain unavailable. A static gallery/appearance preview resolves the instant of its request.
+
+Scene v4 adds `polyline`: an ordered list of 2–128 integer pixel-coordinate pairs and a
+stroke colour. HA samples curves; both consumers join the resolved points using their shared
+Bresenham raster. Coordinates must be within 0–239. Older scene versions cannot carry this
+operation. The 64-element and 24 KiB two-scene limits remain unchanged. Eight Petals sectors
+need 200 separate segments at twelve samples per curve plus their outer arcs, exceeding the
+element limit; paths retain the resolved geometry in eight elements. This requires paired firmware.
+
 The editor stores page/entity overrides and a bounded CSS-like declaration vocabulary. HA
 validates the options, resolves visibility from state/template events and compiles all layout,
 icons and glyphs. Editor dialogs are mounted on demand. Hidden nodes remain in saved source;

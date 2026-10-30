@@ -48,7 +48,7 @@ bool parse_clear_request(JsonObject source, uint64_t applied_revision, uint64_t 
 bool parse_scene(JsonObject source, SceneBuffer &target) {
     target.element_count = target.region_count = 0;
     target.valid = false;
-    if (((source["version"] | 0) != 1 && (source["version"] | 0) != 2 && (source["version"] | 0) != 3) || (source["width"] | 0) != 240 ||
+    if (((source["version"] | 0) < 1 || (source["version"] | 0) > 4) || (source["width"] | 0) != 240 ||
         (source["height"] | 0) != 240 || !valid_colour(source["background"]))
       return false;
     const char *screen = source["screen"];
@@ -72,7 +72,20 @@ bool parse_scene(JsonObject source, SceneBuffer &target) {
       element.stroke = scene_colour(stroke, Color::BLACK);
       element.fill = scene_colour(fill, Color::BLACK);
       element.width = input["width"] | 1;
-      if (strcmp(operation, "line") == 0) {
+      if (strcmp(operation, "polyline") == 0) {
+        if ((source["version"] | 0) < 4 || !element.has_stroke) return false;
+        element.op = 'p';
+        JsonArray points = input["points"].as<JsonArray>();
+        if (points.isNull() || points.size() < 2 || points.size() > 128) return false;
+        element.points.reserve(points.size());
+        for (JsonVariant value : points) {
+          JsonArray point = value.as<JsonArray>();
+          if (point.isNull() || point.size() != 2 || !point[0].is<int>() || !point[1].is<int>()) return false;
+          const int x = point[0].as<int>(), y = point[1].as<int>();
+          if (x < 0 || x >= 240 || y < 0 || y >= 240) return false;
+          element.points.emplace_back(x, y);
+        }
+      } else if (strcmp(operation, "line") == 0) {
         element.op = 'l';
         element.x = input["x1"] | -1;
         element.y = input["y1"] | -1;
@@ -130,7 +143,7 @@ bool parse_scene(JsonObject source, SceneBuffer &target) {
         element.pixels = pixels;
         element.colour = scene_colour(colour, Color::BLACK);
         element.background = scene_colour(background, Color::BLACK);
-      } else if (strcmp(operation, "line") != 0) {
+      } else if (strcmp(operation, "line") != 0 && strcmp(operation, "polyline") != 0) {
         return false;
       }
       if ((element.op == 'l' || element.op == 'a' || element.op == 'g') && !element.has_stroke) return false;
@@ -189,6 +202,11 @@ void draw_scene(display::Display &it, const SceneBuffer &scene, float local_valu
             previous_y = y;
             first = false;
           }
+        }
+      } else if (element.op == 'p') {
+        for (size_t point = 1; point < element.points.size(); point++) {
+          const auto &a = element.points[point - 1], &b = element.points[point];
+          raster.line(a.first, a.second, b.first, b.second, element.stroke);
         }
       } else if (element.op == 'l') {
         raster.line(element.x, element.y, element.x2, element.y2,

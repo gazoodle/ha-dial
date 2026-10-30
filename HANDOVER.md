@@ -1,5 +1,94 @@
 # Handover — 2026-10-30
 
+## Current scope: one complete family — chronographs
+
+The owner reduced the immediate request to one family. Chronograph implementation is complete
+locally and deployed; activation and physical acceptance remain explicit below. The other Atlas
+families stay outstanding rather than being represented by substitute layouts.
+
+- [x] Tricompax: local 24-hour, small-seconds and day-of-month registers, central time hands.
+- [x] Worldtimer: two to eight configured IANA zones, DST-aware dual time, date and optional
+  percentage reserve sensor. Invalid/missing readings show `RESERVE --`.
+- [x] Skeleton: open-work geometry and separate hour/minute/second regulator registers.
+- [x] Moonphase: real HA moon-phase sensor, all eight phase treatments; unavailable indication.
+- [x] Page validation, nested navigation, generated editor catalogue, options and HA gallery.
+- [x] Scheduled second-boundary updates through the coalescing publisher, moon/reserve state
+  subscriptions, definition/preview/unload cleanup. Acknowledgements retain the published reading.
+- [x] Inspect prototype/Crisp/Smooth comparison; fix Worldtimer overlap and striped thick hands.
+  Artefact: `/tmp/chronograph-comparison.png`. Geometry and scene pixels match C++ and browser.
+- [x] 87 tests pass in 6.88s; Ruff passes; Pyright with actual HA types reports zero errors.
+- [x] 960-scene geometry/transport sweep: maximum 41 elements, paired envelope 19,161 bytes,
+  and 1,082 bytes of packed coordinate pairs per scene (excluding vector/container overhead).
+- [x] Compile firmware b3: static RAM 106,107/341,760 bytes, flash 928,111/3,932,160 bytes.
+- [x] Owner explicitly approved b3 OTA. Identity checked before upload; native API reports b3.
+  Eight real-time UTC sends, with missing complications correctly unavailable, received after-draw
+  acknowledgements in 185.8–204.8 ms; envelopes were 11,389–14,865 bytes. Temporary evidence is in
+  `/tmp/ha-dial-chronograph-device-evidence.json`. Restart requested afterwards to discard the
+  temporary acceptance scene and request HA resynchronisation; no saved definition was replaced.
+- [x] Owner explicitly approved b9 integration deployment. All 41 installed files match source.
+- [ ] Activate b9 in the running HA process (restart), refresh browser, and check actual HA selectors,
+  configured moon/reserve state changes and sustained second-boundary delivery. No browser surface
+  is enabled; Safari window access failed (`cgWindowNotFound`). The config-share copy is verified,
+  but this is not proof that the running HA process loaded it.
+- [ ] Physical visual and tactile acceptance: inspect all faces, text and stepping on the panel;
+  turn/press/touch through destinations and Back/Home. Native acknowledgements prove after-draw
+  completion, not visual quality or physical rotary feel. Requires physical observation/input.
+
+This checkpoint includes integration b9 and firmware b3. Preserve the separately staged
+`AGENTS.core.md`; run the component version bump before starting another runtime build cycle.
+
+## Atlas completion checklist — active implementation
+
+Evidence must include distinct production drawings, configured HA sources, update/cleanup tests,
+and inspected production/prototype images. A catalogue entry or passing legacy test is insufficient.
+The separately staged `AGENTS.core.md` is unrelated and must remain staged and uncommitted.
+
+- [x] Chronograph implementation: tricompax, worldtimer, skeleton, moonphase; actual local/world time,
+  calendar and configured complications; scheduled clock updates with unload cleanup.
+- [ ] Smartwatch: contour, modular, palette, rings, solar, reflections, photos, toybox;
+  actual time, configured metrics/goals, sun and photo sources; no invented activity values.
+- [ ] Data: area, radar, bands, spark; actual recorded history and configured metrics/ranges;
+  initial history retrieval, event-driven updates, unavailable/empty history and cleanup.
+- [ ] Camera: portal, cinema, radar; actual snapshot source and capture age, explicitly bound
+  event/detection metadata and actions; no invented boxes/confidence; lifecycle cleanup.
+- [ ] Ambient: solar, typographic, orbital, status; actual time, sun and configured home state.
+- [ ] Restore distinct domain graphics for all 18 Atlas treatments and both variants, preserving
+  capability-filtered actions, availability, confirmations and responsive continuous feedback.
+- [ ] Compare all eight navigation designs against Atlas; specifically inspect Petals sectors,
+  centre/icon placement and Pointer triangle/rings at physical display resolution.
+- [ ] Appearance: validate and expose requested controls including highlight radius; inspect
+  minimum/default/maximum effects and style relevance in live HA-rendered previews.
+- [ ] Crisp: inspect deliberate pixel stepping for lines, arcs, masks and icons; retain shared
+  browser/C++ pixel fixtures and assess both Crisp and Smooth visually.
+- [ ] Complete definition validation, editor controls/galleries, source subscriptions, time/event
+  updates and unload/session cleanup for each new family.
+- [ ] Measure worst-case current+previous encoded bytes, elements and device memory; evolve the
+  shared scene contract only from measurements, with browser/device validation and fixtures.
+- [ ] Complete focused tests, static checks, full pre-commit suite, independent component bumps,
+  changelogs, architecture/user documentation and authorised build-cycle commits.
+- [ ] Visually compare production/prototype variants across themes; record inspected artefacts.
+- [ ] Perform available live HA panel, deployment and identity-verified physical Dial checks;
+  record precise inaccessible acceptance checks and the access required to resolve them.
+
+Baseline: clean runtime worktree at `da98528` (integration b8); only unrelated rules staged.
+Tokensave sync followed that commit, and git reported no later code commits. Catalogue inspection
+confirmed 23 missing special-family variants (4+8+4+3+4), eight navigation designs and 18 domain
+treatments.
+
+Initial navigation work, before the chronograph checkpoint above: scene v4
+polylines accept 2–128 integer coordinate pairs in the display bounds; both renderers join them
+with Bresenham. Petals now samples its quadratic sides in HA, paints the centre over ornaments,
+contains its selected label and moves the cog above the petals. Shared fixtures regenerated.
+Eight-item Petals measured 30 elements and 14,329 bytes for a paired current/previous envelope
+before the final label/cog refinement. 21 focused tests passed (`test_scene_firmware.py`,
+`test_editing_features.py`), including C++ parser rejection and shared browser/device pixels.
+Ruff and Pyright passed on the changed runtime Python (zero typing errors). One enlarged Crisp image was inspected and exposed oversized
+centre text/cog crowding; these were adjusted afterwards, but the revised image still needs
+inspection. Petals selected fill, hub-radius behaviour, Pointer, the other navigation comparisons
+and physical visual acceptance remain outstanding.
+Current chronograph, build and deployment evidence is recorded above; no claim of overall
+Atlas completion is made.
+
 ## Next session: finish the Atlas implementation
 
 The owner explicitly directed the agent to complete the remaining Atlas styles, compare production

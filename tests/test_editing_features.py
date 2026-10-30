@@ -99,6 +99,12 @@ def test_raster_border_css_and_icons(dial):
     )
     petals = scene.compile_scene({**view, "style": "NAV-PETALS"})
     assert not any(e.get("r") == 18 for e in petals["elements"])
+    assert petals["version"] == 4
+    paths = [e for e in petals["elements"] if e["op"] == "polyline"]
+    assert len(paths) == 1
+    assert paths[0]["points"][0] == paths[0]["points"][-1]
+    hub_index = next(i for i, e in enumerate(petals["elements"]) if e.get("r") == 32)
+    assert all(e["op"] != "polyline" for e in petals["elements"][hub_index:])
     crisp = assets.icon_mask("mdi:star", 24, "#ffffff", "crisp")
     smooth = assets.icon_mask("mdi:star", 24, "#ffffff", "smooth")
     assert crisp["pixels"] != smooth["pixels"]
@@ -315,7 +321,7 @@ def test_editor_catalogue_matches_backend(dial):
     ).read_text()
     for name, expected in [
         ("DOMAINS", list(catalogue.CONTROL_TYPES)),
-        ("NAV_STYLES", sorted(catalogue.NAV_STYLES)),
+        ("NAV_STYLES", sorted(catalogue.PAGE_STYLES)),
         (
             "CONTROL_STYLES",
             {d: sorted(catalogue.control_styles(d)) for d in catalogue.CONTROL_TYPES},

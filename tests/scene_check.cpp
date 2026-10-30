@@ -16,10 +16,23 @@ int main() {
     draw_scene(*display, *scene, source["test_local_value"] | std::numeric_limits<float>::quiet_NaN());
     std::cout.write(reinterpret_cast<const char *>(display->pixels.data()), display->pixels.size());
     const int version = source["version"];
-    source["version"] = 4;
+    source["version"] = 5;
     auto unknown = std::make_unique<SceneBuffer>();
     assert(!parse_scene(source, *unknown));
     source["version"] = version;
+    for (JsonObject element : source["elements"].as<JsonArray>()) {
+      if (element["op"].as<std::string>() != "polyline") continue;
+      source["version"] = 3;
+      assert(!parse_scene(source, *unknown));
+      source["version"] = version;
+      const int x = element["points"][0][0];
+      element["points"][0][0] = 240;
+      assert(!parse_scene(source, *unknown));
+      element["points"][0][0] = x;
+      element["points"][0][0] = 1.5;
+      assert(!parse_scene(source, *unknown));
+      element["points"][0][0] = x;
+    }
     source["width"] = 241;
     auto invalid = std::make_unique<SceneBuffer>();
     assert(!parse_scene(source, *invalid));

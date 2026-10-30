@@ -12,6 +12,16 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def examples(scene):
     for theme in scene.THEMES:
+        for style in ("TRICOMPAX", "WORLDTIMER", "SKELETON", "MOONPHASE"):
+            for raster in ("crisp", "smooth"):
+                yield scene.compile_scene({
+                    "id": "clock", "kind": "menu", "title": "HA DIAL", "theme": theme,
+                    "style": f"CHR-{style}", "appearance": {"raster": raster},
+                    "items": [], "_clock": {"hour": 10, "minute": 9, "second": 37,
+                    "day": 27, "date": "MON 27 OCT", "moon": "waxing_crescent",
+                    "zones": [("UTC", "10:09"), ("NEW YORK", "06:09"), ("TOKYO", "19:09"), ("SYDNEY", "21:09")]},
+                })
+    for theme in scene.THEMES:
         yield scene.compile_scene(
             {
                 "kind": "menu",

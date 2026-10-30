@@ -65,6 +65,9 @@ export function rasterize(scene, localValue = NaN) {
           previous = point;
         }
       }
+    } else if (element.op === "polyline") {
+      for (let index = 1; index < element.points.length; index++)
+        line(...element.points[index - 1], ...element.points[index], element.stroke);
     } else if (element.op === "line") {
       line(element.x1, element.y1, element.x2, element.y2, element.stroke);
     } else if (element.op === "mask" || element.op === "number") {

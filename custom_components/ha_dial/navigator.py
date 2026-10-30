@@ -83,7 +83,7 @@ class Navigator:
                             "style": child.get("style", node.get("style", "NAV-ORBIT")),
                             **{
                                 key: child[key]
-                                for key in ("appearance", "css")
+                                for key in ("appearance", "css", "clock")
                                 if key in child
                             },
                             "items": child["children"],
@@ -97,7 +97,7 @@ class Navigator:
                 "title": str(node.get("title", "Home"))[:24],
                 "theme": node.get("theme", "ember"),
                 "style": node.get("style", "NAV-ORBIT"),
-                **{key: node[key] for key in ("appearance", "css") if key in node},
+                **{key: node[key] for key in ("appearance", "css", "clock") if key in node},
                 "parent": parent,
                 "items": items,
             }
@@ -115,6 +115,7 @@ class Navigator:
         self.view_id = self.root_id
         self.selected = 0
         self.control: dict | None = None
+        self.clock_snapshot: dict | None = None
 
     def _items(self, page_id=None):
         page_id = page_id or self.view_id

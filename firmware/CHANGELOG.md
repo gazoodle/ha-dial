@@ -1,5 +1,9 @@
 # HA Dial firmware changelog
 
+## 2026.10.1-b3
+
+- Accept scene v4 bounded polylines, reject invalid points and join HA-supplied geometry with the shared Bresenham raster. Retain v1–v3 support.
+
 ## 2026.10.1-b2
 
 - Accept scene v3 signed/decimal glyph feedback and normalised gauge ranges, retaining v1/v2 support.

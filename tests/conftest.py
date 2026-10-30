@@ -4,6 +4,7 @@ import asyncio
 import importlib.util
 import json
 import sys
+from datetime import UTC, datetime
 from enum import IntFlag
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -83,6 +84,8 @@ def integration(dial):
         callback=identity,
     )
     dial.module("homeassistant.helpers")
+    dial.module("homeassistant.util")
+    dial.module("homeassistant.util.dt", now=lambda: datetime.now(UTC))
 
     class TemplateError(Exception):
         pass

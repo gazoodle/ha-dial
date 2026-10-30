@@ -8,7 +8,7 @@ root = Path(__file__).resolve().parents[1]
 catalogue = runpy.run_path(str(root / "custom_components/ha_dial/catalogue.py"))
 exports = {
     "DOMAINS": list(catalogue["CONTROL_TYPES"]),
-    "NAV_STYLES": sorted(catalogue["NAV_STYLES"]),
+    "NAV_STYLES": sorted(catalogue["PAGE_STYLES"]),
     "CONTROL_STYLES": {
         domain: sorted(catalogue["control_styles"](domain))
         for domain in catalogue["CONTROL_TYPES"]

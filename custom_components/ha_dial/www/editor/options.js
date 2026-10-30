@@ -68,11 +68,18 @@ export function openOptions(editor, pageId, entityId) {
   let options;
   try { options = {...defaults, ...page.appearance, ...declarations(page.css), ...item.appearance, ...declarations(item.css)}; }
   catch (reason) { error.textContent = reason.message; options = {...defaults,...item.appearance}; }
-  let draft = {...item,...options,confirm:item.confirm ?? ['lock','alarm_control_panel','scene','button','input_button'].includes(domain), conditions:item.conditions || []};
+  let draft = {...item,...options,clock_timezone:item.clock?.timezone || '',clock_world_zones:(item.clock?.world_zones || ['UTC','Europe/London','America/New_York','Asia/Tokyo']).join(', '),clock_moon_entity:item.clock?.moon_entity || '',clock_reserve_entity:item.clock?.reserve_entity || '',confirm:item.confirm ?? ['lock','alarm_control_panel','scene','button','input_button'].includes(domain), conditions:item.conditions || []};
+  const clockSettings = () => ({...(draft.clock_timezone ? {timezone:draft.clock_timezone.trim()} : {}),world_zones:draft.clock_world_zones.split(',').map(zone=>zone.trim()).filter(Boolean),...(draft.clock_moon_entity ? {moon_entity:draft.clock_moon_entity} : {}),...(draft.clock_reserve_entity ? {reserve_entity:draft.clock_reserve_entity} : {})});
   for (const field of [form, appearanceForm, conditionForm]) { field.hass = editor._hass; field.data = draft; }
   form.schema = [
     {name: entityId ? 'label' : 'title', selector:{text:{}}},
     {name:'icon',selector:{icon:{}}},
+    ...(!domain ? [
+      {name:'clock_timezone',selector:{text:{}}},
+      {name:'clock_world_zones',selector:{text:{}}},
+      {name:'clock_moon_entity',selector:{entity:{domain:'sensor'}}},
+      {name:'clock_reserve_entity',selector:{entity:{domain:'sensor'}}},
+    ] : []),
     ...(!editor.panelMode ? [{name:'style',selector:select(domain ? CONTROL_STYLES[domain] : NAV_STYLES)}, {name:'theme',selector:select(['ember','verdant','cobalt','rose','acid','alloy'])}] : []),
     ...(domain && !['sensor','binary_sensor','weather','calendar'].includes(domain) ? [{name:'confirm',selector:{boolean:{}}}] : []),
   ];
@@ -89,7 +96,7 @@ export function openOptions(editor, pageId, entityId) {
   ];
   conditionForm.schema = [{name:'conditions',selector:{condition:{}}}];
   for (const field of [form, appearanceForm, conditionForm]) {
-    field.computeLabel = (item) => labels[item.name] || item.name;
+    field.computeLabel = (item) => ({clock_timezone:'Clock time zone (blank uses HA)',clock_world_zones:'World time zones (comma separated IANA names)',clock_moon_entity:'Moon phase sensor (Moonphase face)',clock_reserve_entity:'Power reserve sensor (Worldtimer, %)' })[item.name] || labels[item.name] || item.name;
     field.computeHelper = (item) => ({icon:'Material Design Icons (bundled for offline rendering).',accent:'Optional #RRGGBB override.',background:'Optional #RRGGBB override.',text:'Optional #RRGGBB override.',confirm:'Locks and alarms always require confirmation; PIN-protected actions remain unavailable.'})[item.name];
   }
   const advanced = document.createElement('details'), summary = document.createElement('summary'); summary.textContent = 'Advanced style';
@@ -109,6 +116,7 @@ export function openOptions(editor, pageId, entityId) {
       if (typeof styling['outer-border'] !== 'boolean' || !['crisp','smooth'].includes(styling.raster)) throw new Error('Check outer-border and raster values.');
       for (const name of ['accent','background','text','surface','secondary','quiet','grid']) if (styling[name] && !/^#[a-f\d]{6}$/i.test(styling[name])) throw new Error(`${name} needs a #RRGGBB colour.`);
       const updated = {...item,appearance:styling,conditions:draft.conditions || []};
+      if (!domain) updated.clock = clockSettings();
       delete updated.css;
       for (const name of [entityId?'label':'title','icon','style','theme','confirm']) {
         if (draft[name] !== undefined && draft[name] !== '') updated[name]=draft[name]; else delete updated[name];
@@ -183,7 +191,7 @@ export function openOptions(editor, pageId, entityId) {
     preview.append(previewTitle,canvas,status);
     const layout=document.createElement('div'); layout.className='appearance-layout'; layout.append(body,preview); body=layout;
     const currentPage = () => {
-      const updated = {...item,...draft,appearance:Object.fromEntries(appearanceKeys.filter(key=>draft[key] !== undefined && draft[key] !== '').map(key=>[key,draft[key]]))}; delete updated.css;
+      const updated = {...item,...draft,...(!domain ? {clock:clockSettings()} : {}),appearance:Object.fromEntries(appearanceKeys.filter(key=>draft[key] !== undefined && draft[key] !== '').map(key=>[key,draft[key]]))}; delete updated.css;
       return entityId ? {...page,entities:entities.map(entry => (typeof entry === 'string' ? entry : entry.entity_id) === entityId ? updated : entry),lights:[]} : updated;
     };
     const children = editor.config.pages.filter(candidate => candidate.parent === pageId).map(({title,icon})=>({title,icon}));

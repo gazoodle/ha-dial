@@ -72,6 +72,10 @@ def appearance(value: dict) -> dict:
 
 
 def validate_options(value: dict) -> None:
+    if "clock" in value:
+        from .chronograph import validate_clock
+
+        validate_clock(value["clock"])
     if not isinstance(value.get("appearance", {}), dict):
         raise TypeError("Appearance must be an object")
     appearance(value)

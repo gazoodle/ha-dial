@@ -4,7 +4,7 @@ from __future__ import annotations
 
 THEMES = {"ember", "verdant", "cobalt", "rose", "acid", "alloy"}
 from .appearance import validate_options
-from .catalogue import CONTROL_TYPES, NAV_STYLES, STYLES, control_styles
+from .catalogue import CONTROL_TYPES, PAGE_STYLES, STYLES, control_styles
 
 
 def build_definition(hass, pages: list, default_theme: str) -> dict:
@@ -56,7 +56,7 @@ def build_definition(hass, pages: list, default_theme: str) -> dict:
                 "style": child.get("style", "NAV-ORBIT"),
                 **{
                     key: child[key]
-                    for key in ("appearance", "css", "conditions")
+                    for key in ("appearance", "css", "conditions", "clock")
                     if key in child
                 },
                 "icon": child.get("icon", "mdi:folder"),
@@ -101,7 +101,7 @@ def build_definition(hass, pages: list, default_theme: str) -> dict:
             "style": page.get("style", "NAV-ORBIT"),
             **{
                 key: page[key]
-                for key in ("appearance", "css", "conditions")
+                for key in ("appearance", "css", "conditions", "clock")
                 if key in page
             },
             "items": items,
@@ -143,7 +143,7 @@ def validate_definition(definition: dict) -> None:
         if page.get("theme", "ember") not in THEMES:
             raise ValueError("Unknown page theme")
         validate_options(page)
-        if page.get("style", "NAV-ORBIT") not in NAV_STYLES:
+        if page.get("style", "NAV-ORBIT") not in PAGE_STYLES:
             raise ValueError("Unknown navigation style")
         items = page.get("items", [])
         if not isinstance(items, list) or len(items) > 8:
@@ -185,7 +185,7 @@ def validate_definition(definition: dict) -> None:
                     raise ValueError("Item children must be a list")
                 if item.get("entity_id"):
                     raise ValueError("An item cannot be both a menu and a control")
-                if item.get("style", "NAV-ORBIT") not in NAV_STYLES:
+                if item.get("style", "NAV-ORBIT") not in PAGE_STYLES:
                     raise ValueError("Unknown navigation style")
                 check_page(
                     {

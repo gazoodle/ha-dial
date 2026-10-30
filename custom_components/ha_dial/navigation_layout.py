@@ -30,27 +30,40 @@ def navigation_layout(view, items, selected, options, theme):
         positions = [point(59, n * 360 / max(1, count), cy=109) for n in visible]
         for n in visible:
             angle = n * 360 / max(1, count)
-            spread = min(32, 160 / max(1, count))
+            spread = min(32, 108 / max(1, count))
             ink = theme["primary"] if n == selected else theme["grid"]
+            control = positions[n]
+            edges = [
+                point(82, edge, cy=109) for edge in (angle - spread, angle + spread)
+            ]
+
+            def curve(end, control):
+                return [
+                    [
+                        round(
+                            (1 - t) ** 2 * origin
+                            + 2 * (1 - t) * t * middle
+                            + t**2 * target
+                        )
+                        for origin, middle, target in zip((120, 109), control, end)
+                    ]
+                    for t in (step / 12 for step in range(13))
+                ]
+
+            outline = curve(edges[0], control)
+            outline.extend(
+                list(point(82, angle - spread + 2 * spread * step / 12, cy=109))
+                for step in range(1, 13)
+            )
+            outline.extend(reversed(curve(edges[1], control)))
             extra.append(
                 {
-                    "op": "arc",
-                    "x": 120,
-                    "y": 109,
-                    "r": 82,
-                    "start": round(angle - spread),
-                    "end": round(angle + spread),
+                    "op": "polyline",
+                    "points": outline,
                     "stroke": ink,
-                    "width": 2,
                 }
             )
-            for edge in (angle - spread, angle + spread):
-                x, y = point(82, edge, cy=109)
-                ix, iy = point(32, edge, cy=109)
-                extra.append(
-                    {"op": "line", "x1": ix, "y1": iy, "x2": x, "y2": y, "stroke": ink}
-                )
-        footer_y = 212
+        title_y, label_y, footer_y, cog_y = 107, 121, 212, 24
     elif style == "NAV-CONSTELLATION":
         positions = [
             point(76 if n % 2 else 88, n * 360 / max(1, count) + 15) for n in visible

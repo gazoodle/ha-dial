@@ -24,6 +24,8 @@ from homeassistant.helpers.event import (
     async_track_time_change,
 )
 
+from .catalogue import CHRONOGRAPH_STYLES
+from .chronograph import resolve_clock
 from .const import DOMAIN
 from .controls import control_command, control_state, preview_feedback
 from .definition import THEMES, build_definition, leaf_items, validate_definition
@@ -138,6 +140,8 @@ async def _push(hass: HomeAssistant, device: str, view: dict) -> None:
     state = hass.data[DOMAIN]
     if state.get("unloading") or device in state.get("resetting", set()) or (device in state.get("stored_definitions", {}) and state["stored_definitions"][device] is None):
         return
+    view = resolve_clock(hass, view)
+    _navigator(hass, device).clock_snapshot = view if view.get("style") in CHRONOGRAPH_STYLES else None
     revision = _next_revision(hass, device)
     service = f"{device}_ha_dial_show_view"
     connected = (
@@ -154,7 +158,7 @@ async def _push(hass: HomeAssistant, device: str, view: dict) -> None:
     if connected:
         state.setdefault("pending_scenes", {})[device] = (
             view,
-            _navigator(hass, device).previous(),
+            resolve_clock(hass, previous) if (previous := _navigator(hass, device).previous()) else None,
             revision,
             state.get("input_sequences", {}).get(device, 0),
         )
@@ -175,7 +179,7 @@ async def _send_scenes(hass: HomeAssistant, device: str) -> None:
         while device in pending:
             view, previous, revision, sequence = pending.pop(device)
             try:
-                payload = device_payload(view, previous, revision, sequence)
+                payload = device_payload(resolve_clock(hass, view), resolve_clock(hass, previous) if previous else None, revision, sequence)
                 async with asyncio.timeout(10):
                     await hass.services.async_call(
                         "esphome",
@@ -201,8 +205,11 @@ async def _send_scenes(hass: HomeAssistant, device: str) -> None:
 
 def _scene_result(hass: HomeAssistant, device: str, view: dict) -> dict:
     state = hass.data[DOMAIN]
+    snapshot = _navigator(hass, device).clock_snapshot
+    if snapshot and (snapshot.get("id"), snapshot.get("style")) == (view.get("id"), view.get("style")):
+        view = {**view, "_clock": snapshot["_clock"]}
     return {
-        "scene": compile_scene(view),
+        "scene": compile_scene(resolve_clock(hass, view)),
         "revision": state.get("revisions", {}).get(device, 0),
         "deployment": state.get("deployment_status", {}).get(
             device, "preview" if _is_preview(device) else "waiting"
@@ -258,19 +265,40 @@ def _watch_definition_entities(
     if unsubscribe := unsubs.pop(device, None):
         unsubscribe()
     entities = {item["entity_id"] for item in leaf_items(definition["tree"])}
-    if not entities:
-        return
+    clocks = [view for view in state["navigators"][device].views.values() if view.get("style") in CHRONOGRAPH_STYLES]
+    entities.update(view.get("clock", {}).get(field) for view in clocks for field in ("moon_entity", "reserve_entity") if view.get("clock", {}).get(field))
 
     async def entity_changed(_event: Event[EventStateChangedData]) -> None:
         navigator = state["navigators"].get(device)
-        if navigator is None or navigator.current().get("entity_id") != _event.data.get(
-            "entity_id"
-        ):
+        if navigator is None:
+            return
+        current = navigator.current()
+        if _event.data.get("entity_id") not in {current.get("entity_id"), current.get("clock", {}).get("moon_entity"), current.get("clock", {}).get("reserve_entity")}:
             return
         _sync_control(hass, navigator)
         await _push(hass, device, navigator.current())
 
-    unsubs[device] = async_track_state_change_event(hass, entities, entity_changed)
+    async def clock_changed(_now):
+        navigator = state["navigators"].get(device)
+        if navigator is not None and not state.get("unloading") and navigator.current().get("style") in CHRONOGRAPH_STYLES:
+            await _push(hass, device, navigator.current())
+
+    cleanup = []
+    try:
+        if entities:
+            cleanup.append(async_track_state_change_event(hass, entities, entity_changed))
+        if clocks:
+            cleanup.append(async_track_time_change(hass, clock_changed, second="*"))
+    except Exception:
+        for cancel in cleanup:
+            cancel()
+        raise
+
+    def unsubscribe():
+        for cancel in cleanup:
+            cancel()
+
+    unsubs[device] = unsubscribe
 
 
 async def _install_definition(

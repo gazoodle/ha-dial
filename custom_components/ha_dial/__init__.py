@@ -568,7 +568,8 @@ async def _ws_gallery(hass, connection, msg) -> None:
     if not connection.user or not connection.user.is_admin:
         connection.send_error(msg["id"], "unauthorized", "Administrator access required")
         return
-    from .catalogue import NAV_STYLES, control_styles
+    from .catalogue import PAGE_STYLES, control_styles
+    from .chronograph import resolve_clock
     from .definition import build_definition
     from .scene import THEMES, compile_scene
 
@@ -594,14 +595,14 @@ async def _ws_gallery(hass, connection, msg) -> None:
         if entity:
             nav.input("press")
             _sync_control(hass, nav)
-        view = nav.current()
+        view = resolve_clock(hass, nav.current())
         if msg.get("preview_only"):
             connection.send_result(msg["id"], {"scene": compile_scene(view)})
             return
-        styles = sorted(control_styles(entity.split(".", 1)[0]) if entity else NAV_STYLES)
+        styles = sorted(control_styles(entity.split(".", 1)[0]) if entity else PAGE_STYLES)
         connection.send_result(msg["id"], {
             "style": view.get("style"), "theme": view.get("theme"),
-            "styles": {style: compile_scene({**view, "style": style}) for style in styles},
+            "styles": {style: compile_scene(resolve_clock(hass, {**view, "style": style})) for style in styles},
             "themes": {theme: compile_scene({**view, "theme": theme}) for theme in THEMES},
         })
     except (ValueError, TypeError, KeyError, StopIteration) as error:

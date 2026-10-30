@@ -148,6 +148,38 @@ Other Home Assistant tools may use the public protocol in the future, but the pr
 
 ## Protocol model
 
+### Chronograph pages
+
+Choose `CHR-TRICOMPAX`, `CHR-WORLDTIMER`, `CHR-SKELETON` or `CHR-MOONPHASE` in a page's
+Atlas gallery. Clock options live in the appearance dialog's Options tab. A blank clock time
+zone uses HA's configured local time; explicit zones use IANA names and include daylight saving.
+Worldtimer accepts two to eight zones. Its optional power reserve sensor must report `%` in
+the range 0–100. Moonphase accepts a Moon integration sensor. Missing, unavailable or invalid
+complication readings display an unavailable indication; they never receive sample readings.
+
+```yaml
+pages:
+  - id: time
+    title: Time
+    style: CHR-WORLDTIMER
+    clock:
+      timezone: UTC
+      world_zones: [Europe/London, America/New_York, Asia/Tokyo, Australia/Sydney]
+      reserve_entity: sensor.example_reserve
+      moon_entity: sensor.example_moon
+```
+
+Tricompax shows a 24-hour register, small seconds and a day-of-month register. Skeleton uses
+separate hour, minute and second registers. Moonphase replaces the date register with the
+selected sensor's phase. Turn to select a configured destination and press to enter it; Back
+and Home retain their normal meaning. Without destinations, the face shows the date.
+
+HA resolves clock time and geometry on scheduled second boundaries and uses the existing
+coalescing scene publisher. This is a clock deadline, not state polling. Leaving the face
+stops clock scene delivery; replacing its definition, closing a preview or unloading the server
+removes its time/state subscriptions. Browser and Dial receive the same resolved clock reading.
+These faces require firmware with scene v4 support (private build b3 or later).
+
 Home Assistant sends a resolved scene containing only what the Dial needs: final geometry,
 theme colours, compact antialiased text masks and touch regions. The definition and navigation
 tree remain in Home Assistant. For example, the scene's drawing instructions use:

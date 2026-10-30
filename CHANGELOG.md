@@ -1,5 +1,13 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b9
+
+- Add all four Atlas chronographs: Tricompax, Worldtimer, Skeleton and Moonphase, with real time, IANA zones, optional HA moon and reserve sensors, and scheduled updates with subscription cleanup.
+- Add clock settings and HA-rendered gallery previews; retain the same resolved browser/device scene.
+
+- Introduce scene v4 polylines for HA-resolved curved Petals outlines without exceeding the element budget; requires paired firmware.
+- Draw navigation ornaments behind the centre, contain Petals labels and move its settings cog clear of the destination icons.
+
 ## 2026.10.1-b8
 
 - Add centre radius and gauge radius and width controls to the appearance dialog.
