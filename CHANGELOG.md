@@ -1,5 +1,10 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b5
+
+- Add server-rendered Atlas style and theme galleries and inline visibility condition editing.
+- Support fixed time and weekday visibility conditions, with scheduled updates at time boundaries.
+
 ## 2026.10.1-b4
 
 - Give the configuration panel Casa Mia styling, a page tree and focused inspector, and keep dialog actions visible while scrolling.

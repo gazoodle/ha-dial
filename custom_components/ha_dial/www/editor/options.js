@@ -1,4 +1,5 @@
 import { CONTROL_STYLES, NAV_STYLES } from './catalogue.js';
+import { renderScene } from '../scene.js';
 
 const number = (min, max, step = 1) => ({ number: { min, max, step, mode: 'box' } });
 const select = (options) => ({ select: { options, mode: 'dropdown' } });
@@ -28,7 +29,7 @@ function validateConditions(conditions) {
       if (!Array.isArray(children) || !children.length) throw new Error('Logical conditions need at least one condition.');
       validateConditions(children);
     } else {
-      if (!['state','numeric_state','template'].includes(item.condition)) throw new Error('Use state, numeric state, template or AND/OR/NOT visibility conditions.');
+      if (!['state','numeric_state','template','time'].includes(item.condition)) throw new Error('Use state, numeric state, time, template or AND/OR/NOT visibility conditions.');
       if ('for' in (item.options || item)) throw new Error('Use an HA helper/template sensor for duration conditions.');
     }
   }
@@ -44,7 +45,7 @@ export function openOptions(editor, pageId, entityId) {
   const dialog = document.createElement('dialog'); dialog.className = 'options-dialog';
   dialog.setAttribute('aria-label', entityId ? `Edit ${domain} control` : 'Edit page');
   const heading = document.createElement('h3'); heading.textContent = entityId ? `Edit ${domain} control` : 'Page appearance and visibility';
-  const hint = document.createElement('p'); hint.textContent = 'Conditions are evaluated in Home Assistant. Supported: state, numeric state, template and AND/OR/NOT. Visibility is not access control.';
+  const hint = document.createElement('p'); hint.textContent = 'Conditions are evaluated in Home Assistant. Visibility is not access control.';
   const error = document.createElement('p'); error.setAttribute('role','alert');
   const form = document.createElement('ha-form');
   const appearanceForm = document.createElement('ha-form');
@@ -57,8 +58,7 @@ export function openOptions(editor, pageId, entityId) {
   form.schema = [
     {name: entityId ? 'label' : 'title', selector:{text:{}}},
     {name:'icon',selector:{icon:{}}},
-    {name:'style',selector:select(domain ? CONTROL_STYLES[domain] : NAV_STYLES)},
-    {name:'theme',selector:select(['ember','verdant','cobalt','rose','acid','alloy'])},
+    ...(!editor.panelMode ? [{name:'style',selector:select(domain ? CONTROL_STYLES[domain] : NAV_STYLES)}, {name:'theme',selector:select(['ember','verdant','cobalt','rose','acid','alloy'])}] : []),
     ...(domain && !['sensor','binary_sensor','weather','calendar'].includes(domain) ? [{name:'confirm',selector:{boolean:{}}}] : []),
   ];
   appearanceForm.schema = [
@@ -110,6 +110,37 @@ export function openOptions(editor, pageId, entityId) {
   const appearance = document.createElement('details'), appearanceTitle = document.createElement('summary'); appearanceTitle.textContent = 'Detailed appearance'; appearance.append(appearanceTitle,appearanceForm,advanced);
   const visibility = document.createElement('details'), visibilityTitle = document.createElement('summary'); visibilityTitle.textContent = 'Visibility conditions'; visibility.append(visibilityTitle,hint,conditionForm);
   const body = document.createElement('div'); body.className = 'options-body'; body.append(error,form,appearance,visibility);
+  if (editor.panelMode) {
+    visibility.remove();
+    const gallery = document.createElement('div'); gallery.className = 'options-galleries';
+    body.insertBefore(gallery, appearance);
+    let request = 0;
+    const updateGallery = async () => {
+      const sequence = ++request;
+      const current = entityId ? {...page,entities:entities.map(entry => (typeof entry === 'string' ? entry : entry.entity_id) === entityId ? {...item, ...draft} : entry),lights:[]} : {...page,...draft};
+      try {
+        const children = editor.config.pages.filter(candidate => candidate.parent === pageId).map(({title,icon})=>({title,icon}));
+        const data = await editor._hass.callWS({type:'ha_dial/gallery',page:current,children,...(entityId ? {entity:entityId} : {}),theme:editor.config.theme || 'ember'});
+        if (sequence !== request || !dialog.isConnected) return;
+        gallery.replaceChildren();
+        for (const [key, headingText] of [['styles','Atlas style'],['themes','Theme']]) {
+          const section = document.createElement('section'), title = document.createElement('h4'), choices = document.createElement('div');
+          title.textContent=headingText; choices.className='gallery-grid'; section.append(title,choices);
+          const field = key === 'styles' ? 'style' : 'theme';
+          for (const [value, scene] of Object.entries(data[key])) {
+            const choice=document.createElement('button'); choice.type='button'; choice.className='gallery-choice';
+            choice.setAttribute('aria-pressed',String((draft[field] || data[field]) === value));
+            const canvas=document.createElement('canvas'); canvas.width=canvas.height=240; canvas.setAttribute('aria-hidden','true');
+            const label=document.createElement('span'); label.textContent=value.replace(/^NAV-|^CTL-/,'').replaceAll('-',' ').toLowerCase();
+            choice.append(canvas,label); choices.append(choice); renderScene(canvas,scene);
+            choice.addEventListener('click',()=>{draft[field]=value; updateGallery();});
+          }
+          gallery.append(section);
+        }
+      } catch (reason) { if (sequence === request) error.textContent = `Could not load previews: ${reason.message || reason}`; }
+    };
+    updateGallery();
+  }
   const foot = document.createElement('footer'); foot.className = 'options-foot'; foot.append(cancel,save);
   dialog.append(head,body,foot);
   dialog.addEventListener('close',()=>dialog.remove());

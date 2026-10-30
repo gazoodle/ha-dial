@@ -21,6 +21,7 @@ from homeassistant.helpers.event import (
     TrackTemplate,
     async_track_state_change_event,
     async_track_template_result,
+    async_track_time_change,
 )
 
 from .const import DOMAIN
@@ -341,6 +342,7 @@ async def _install_definition(
             _sync_control(hass, updated_navigator)
         state["definitions"][device] = updated
         state["navigators"][device] = updated_navigator
+        watch_condition_times(updated)
         _watch_definition_entities(hass, device, updated)
         hass.async_create_task(_push(hass, device, updated_navigator.current()))
 
@@ -348,35 +350,45 @@ async def _install_definition(
     if old_tracker := condition_trackers.pop(device, None):
         old_tracker.async_remove()
     condition_sources = definition.get("_condition_templates", [])
+
+    @callback
+    def conditions_changed(_event, _updates=None):
+        if (
+            state.get("unloading")
+            or state["definition_sources"].get(device) is not source
+        ):
+            return
+        try:
+            updated = _render_definition(hass, source)
+            current = state["navigators"].get(device)
+            replacement = Navigator(definition=updated)
+            replacement.settings_enabled = state.get("settings_enabled", {}).get(
+                device, False
+            )
+            if current:
+                replacement.restore(current)
+            _sync_control(hass, replacement)
+            state["navigators"][device] = replacement
+            state["definitions"][device] = updated
+            _watch_definition_entities(hass, device, updated)
+            hass.async_create_task(_push(hass, device, replacement.current()))
+        except (TemplateError, ValueError, TypeError) as error:
+            _LOGGER.error("HA Dial visibility failed: %s", error)
+            async_dispatcher_send(
+                hass, f"{DOMAIN}_scene_{device}", {"error": str(error)}
+            )
+
+    def watch_condition_times(current_definition):
+        time_unsubs = state.setdefault("condition_time_unsubs", {})
+        for unsubscribe in time_unsubs.pop(device, []):
+            unsubscribe()
+        time_unsubs[device] = [
+            async_track_time_change(hass, conditions_changed, hour=int(hour), minute=int(minute), second=int(second))
+            for hour, minute, second in (value.split(":") for value in current_definition.get("_condition_times", []))
+        ]
+
+    watch_condition_times(definition)
     if condition_sources:
-
-        @callback
-        def conditions_changed(_event, _updates):
-            if (
-                state.get("unloading")
-                or state["definition_sources"].get(device) is not source
-            ):
-                return
-            try:
-                updated = _render_definition(hass, source)
-                current = state["navigators"].get(device)
-                replacement = Navigator(definition=updated)
-                replacement.settings_enabled = state.get("settings_enabled", {}).get(
-                    device, False
-                )
-                if current:
-                    replacement.restore(current)
-                _sync_control(hass, replacement)
-                state["navigators"][device] = replacement
-                state["definitions"][device] = updated
-                _watch_definition_entities(hass, device, updated)
-                hass.async_create_task(_push(hass, device, replacement.current()))
-            except (TemplateError, ValueError, TypeError) as error:
-                _LOGGER.error("HA Dial visibility failed: %s", error)
-                async_dispatcher_send(
-                    hass, f"{DOMAIN}_scene_{device}", {"error": str(error)}
-                )
-
         condition_trackers[device] = async_track_template_result(
             hass,
             [TrackTemplate(Template(text, hass), {}) for text in condition_sources],

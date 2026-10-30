@@ -161,14 +161,14 @@ def test_conditions_track_hidden_branches_and_restore_nearest_ancestor(
     assert restored.current()["title"] == "Floor"
     assert len(hidden["_condition_templates"]) == 2
     assert len(raw["tree"]["items"][0]["children"]) == 1
-    with pytest.raises(ValueError, match="time"):
+    with pytest.raises(ValueError, match="fixed time"):
         definition.build_definition(
             i.hass,
             [
                 {
                     "id": "root",
                     "title": "Home",
-                    "conditions": [{"condition": "time", "after": "12:00:00"}],
+                "conditions": [{"condition": "time", "after": "invalid"}],
                 }
             ],
             "ember",

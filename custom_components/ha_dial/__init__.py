@@ -120,6 +120,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         websocket_api.async_register_command(hass, _ws_configure)
         websocket_api.async_register_command(hass, _ws_subscribe)
         websocket_api.async_register_command(hass, _ws_definitions)
+        websocket_api.async_register_command(hass, _ws_gallery)
         state["registered"] = True
 
     from .transport import watch_transports
@@ -323,6 +324,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     for tracker in state.get("condition_trackers", {}).values():
         tracker.async_remove()
     state.get("condition_trackers", {}).clear()
+    for callbacks in state.get("condition_time_unsubs", {}).values():
+        for unsubscribe in callbacks:
+            unsubscribe()
+    state.get("condition_time_unsubs", {}).clear()
     for unsubscribe in state.get("definition_unsubs", {}).values():
         unsubscribe()
     state.get("definition_unsubs", {}).clear()
@@ -472,6 +477,54 @@ async def _ws_definitions(hass, connection, msg) -> None:
 
 
 @websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/gallery", vol.Required("page"): dict,
+     vol.Optional("entity"): str, vol.Optional("theme", default="ember"): str,
+     vol.Optional("children", default=[]): [dict]}
+)
+@websocket_api.async_response
+@_require_server
+async def _ws_gallery(hass, connection, msg) -> None:
+    if not connection.user or not connection.user.is_admin:
+        connection.send_error(msg["id"], "unauthorized", "Administrator access required")
+        return
+    from .catalogue import NAV_STYLES, control_styles
+    from .definition import build_definition
+    from .scene import THEMES, compile_scene
+
+    try:
+        page = {**msg["page"], "id": "gallery", "parent": ""}
+        page.pop("conditions", None)
+        entity = msg.get("entity")
+        if entity:
+            entries = [*page.get("lights", []), *page.get("entities", [])]
+            selected = next(item for item in entries if (item if isinstance(item, str) else item.get("entity_id")) == entity)
+            if isinstance(selected, dict):
+                selected = {key: value for key, value in selected.items() if key != "conditions"}
+            page["entities"] = [selected]
+            page.pop("lights", None)
+        children = []
+        if not entity:
+            existing = len(page.get("entities", [])) + len(page.get("lights", []))
+            children = msg.get("children", [])[:max(0, 8 - existing)]
+            if not children and not existing:
+                children = [{"title": name} for name in ("Rooms", "Lights", "Climate", "Media")]
+            children = [{"id": f"gallery_{index}", "parent": "gallery", "title": item.get("title", "Page"), "icon": item.get("icon", "mdi:folder")} for index, item in enumerate(children)]
+        nav = Navigator(definition=build_definition(hass, [page, *children], msg["theme"]))
+        if entity:
+            nav.input("press")
+            _sync_control(hass, nav)
+        view = nav.current()
+        styles = sorted(control_styles(entity.split(".", 1)[0]) if entity else NAV_STYLES)
+        connection.send_result(msg["id"], {
+            "style": view.get("style"), "theme": view.get("theme"),
+            "styles": {style: compile_scene({**view, "style": style}) for style in styles},
+            "themes": {theme: compile_scene({**view, "theme": theme}) for theme in THEMES},
+        })
+    except (ValueError, TypeError, KeyError, StopIteration) as error:
+        connection.send_error(msg["id"], "invalid_format", str(error))
+
+
+@websocket_api.websocket_command(
     {
         vol.Required("type"): f"{DOMAIN}/subscribe",
         vol.Required("device"): DEVICE_SCHEMA,
@@ -505,6 +558,8 @@ async def _ws_subscribe(hass, connection, msg) -> None:
     def remove():
         unsubscribe()
         if _is_preview(device):
+            for cancel_time in state.get("condition_time_unsubs", {}).pop(device, []):
+                cancel_time()
             if tracker := state.get("condition_trackers", {}).pop(device, None):
                 tracker.async_remove()
             if tracker := state.get("template_trackers", {}).pop(device, None):

@@ -135,6 +135,7 @@ def integration(dial):
         "homeassistant.helpers.event",
         TrackTemplate=lambda *args: args,
         async_track_state_change_event=watch,
+        async_track_time_change=lambda *args, **kwargs: lambda: None,
         async_track_template_result=track,
         async_track_time_interval=lambda *args: None,
     )

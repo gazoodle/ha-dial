@@ -1,5 +1,6 @@
 import { openOptions } from './editor/options.js';
 import { DOMAINS } from './editor/catalogue.js';
+import { conditionsEditor } from './editor/conditions.js';
 
 class HaDialPanelEditor extends customElements.get('ha-dial-card-editor') {
   render() {
@@ -75,7 +76,7 @@ class HaDialPanelEditor extends customElements.get('ha-dial-card-editor') {
     head.append(eyebrow,title,detail); panel.append(head);
     const button = (label, action, extra = '') => { const node = document.createElement('button'); node.type = 'button'; node.className = `chip ${extra}`; node.textContent = label; node.addEventListener('click',action); return node; };
     const actions = document.createElement('div'); actions.className = 'editor-actions';
-    actions.append(button(entity ? 'Edit control' : 'Appearance & conditions', () => openOptions(this,page.id,entity), 'accent'));
+    actions.append(button(entity ? 'Edit control' : 'Appearance', () => openOptions(this,page.id,entity), 'accent'));
     if (entity) actions.append(button('Remove control', () => { this.selectedEntity = undefined; this.setEntities(page.id,this.entities(page.id).filter(item => (typeof item === 'string' ? item : item.entity_id) !== entity)); }, 'danger'));
     else {
       actions.append(button('+ Subpage', () => this.addPage(page.id)));
@@ -89,6 +90,17 @@ class HaDialPanelEditor extends customElements.get('ha-dial-card-editor') {
       form.addEventListener('value-changed', event => { event.stopPropagation(); const id = event.detail.value.entity; if (id && !this.entities(page.id).some(item => (typeof item === 'string' ? item : item.entity_id) === id)) { this.selectedEntity = id; this.expanded.add(page.id); this.setEntities(page.id,[...this.entities(page.id),id]); } });
       panel.append(form);
     }
+    const entry = entity ? this.entities(page.id).find(item => (typeof item === 'string' ? item : item.entity_id) === entity) : page;
+    const visibilityTitle = document.createElement('p'); visibilityTitle.className = 'inspector-label'; visibilityTitle.textContent = 'VISIBILITY'; panel.append(visibilityTitle);
+    panel.append(conditionsEditor(this._hass, typeof entry === 'string' ? [] : entry.conditions, conditions => {
+      const pages = this.config.pages.map(item => {
+        if (item.id !== page.id) return item;
+        if (!entity) return {...item,conditions};
+        const entities = this.entities(page.id).map(value => (typeof value === 'string' ? value : value.entity_id) === entity ? {...(typeof value === 'string' ? {entity_id:value} : value),conditions} : value);
+        const updated = {...item,entities}; delete updated.lights; return updated;
+      });
+      this.changed({...this.config,pages}); this.treePages = pages;
+    }));
   }
 }
 

@@ -11,6 +11,8 @@ Why: the project is not live and the owner wants to evaluate the direction first
 The panel follows the Casa Mia house design language, including its chips, pills and custom
 controls. Dialog actions stay visible while their content scrolls. Why: the owner rejected
 the prototype's browser controls, cramped card-editor layout and scrolling action buttons.
+During this panel iteration the owner authorises the commits needed for subsequent build
+cycles; preserve unrelated staged changes. Why: repeated commit questions delayed iteration.
 
 ## Independent versions — Casa Mia rules (2026-10-29)
 

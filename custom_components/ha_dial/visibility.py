@@ -21,9 +21,37 @@ def condition_template(config: dict) -> str:
         if not isinstance(source, str):
             raise ValueError("Template conditions need value_template text")
         return source
+    if kind == "time":
+        bounds = {}
+        for name in ("after", "before"):
+            value = options.get(name)
+            if value is None:
+                continue
+            if not isinstance(value, str) or not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?", value):
+                raise ValueError("Time conditions require a fixed time in HH:MM or HH:MM:SS format")
+            bounds[name] = value if len(value) == 8 else value + ":00"
+        days = options.get("weekday")
+        if isinstance(days, str):
+            days = [days]
+        if days is not None and (not isinstance(days, list) or not days or any(day not in ("mon", "tue", "wed", "thu", "fri", "sat", "sun") for day in days)):
+            raise ValueError("Time conditions need valid weekdays")
+        if not bounds and not days:
+            raise ValueError("Choose a time or weekday")
+        parts = []
+        if days:
+            parts.append("now().weekday() in " + repr([("mon", "tue", "wed", "thu", "fri", "sat", "sun").index(day) for day in days]))
+        after, before = bounds.get("after"), bounds.get("before")
+        checks = []
+        if after:
+            checks.append("now().strftime('%H:%M:%S') >= " + json.dumps(after))
+        if before:
+            checks.append("now().strftime('%H:%M:%S') < " + json.dumps(before))
+        if checks:
+            parts.append("(" + (" or " if after and before and after > before else " and ").join(checks) + ")")
+        return "{{ " + " and ".join(parts) + " }}"
     if kind not in {"state", "numeric_state"}:
         raise ValueError(
-            "Visibility supports state, numeric_state, template, and/or/not conditions; time, device and browser conditions are not supported"
+            "Visibility supports state, numeric_state, time, template and and/or/not conditions; device and browser conditions are not supported"
         )
     if kind == "numeric_state" and "value_template" in options:
         raise ValueError(
@@ -100,8 +128,10 @@ def templates(conditions: list) -> list[str]:
             if not isinstance(nested, list) or not nested:
                 raise ValueError("Logical conditions need a non-empty conditions list")
             result.extend(templates(nested))
-        else:
+        elif config.get("condition") != "time":
             result.append(condition_template(config))
+        else:
+            condition_template(config)
     return result
 
 
@@ -109,6 +139,20 @@ def filter_definition(hass, definition: dict) -> dict:
     from homeassistant.helpers.template import Template
 
     tracked = set()
+    times = set()
+
+    def collect_times(conditions):
+        for config in conditions:
+            if config.get("enabled") is False:
+                continue
+            if config.get("condition") in {"and", "or", "not"}:
+                collect_times(config.get("conditions", config.get("options", {}).get("conditions", [])))
+            elif config.get("condition") == "time":
+                times.add("00:00:00")
+                for key in ("after", "before"):
+                    value = config.get("options", config).get(key)
+                    if value:
+                        times.add(value if len(value) == 8 else value + ":00")
 
     def matches(config):
         kind = config.get("condition")
@@ -136,6 +180,8 @@ def filter_definition(hass, definition: dict) -> dict:
     def visit(node):
         conditions = node.get("conditions", [])
         tracked.update(templates(conditions))
+        if conditions:
+            collect_times(conditions)
         visible = all(matches(config) for config in conditions)
         children_key = "items" if "items" in node else "children"
         if children_key in node:
@@ -146,4 +192,5 @@ def filter_definition(hass, definition: dict) -> dict:
     if not visit(result["tree"]):
         result["tree"]["items"] = []
     result["_condition_templates"] = sorted(tracked)
+    result["_condition_times"] = sorted(times)
     return result

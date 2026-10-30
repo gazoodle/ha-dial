@@ -243,6 +243,9 @@ The admin-only HA Dial panel edits a selected device's server definition using a
 preview session, with a page tree and focused inspector. The existing dashboard card remains independently configured for now and can
 still republish its definition. Configuration writes require an administrator.
 
+Panel style and theme galleries use scenes compiled by HA. Fixed-time visibility conditions
+schedule local-time boundary and midnight events; they do not poll for state changes.
+
 On unload, the server sends a revision-checked `{"revision": N, "clear": true}` envelope
 through the existing view transport. Firmware releases both cached scenes, cancels local
 pending feedback and returns to its compiled setup interface while the API can remain

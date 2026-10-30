@@ -2,6 +2,15 @@
 
 ## Admin panel prototype
 
+Integration b5 adds inline visibility rows with an Add condition menu, fixed-time/weekday
+visibility scheduled at local-time boundaries, and style/theme galleries rendered by the HA
+scene compiler. b5 was deployed to the HA config share; all 39 files match. Restart HA and
+refresh the browser. Local browser tests used stub HA forms and gallery responses; real HA
+condition selectors and gallery interactions have not been checked. Time helpers as dynamic
+boundaries are not supported; fixed HH:MM[:SS] times and weekdays are supported. b5 is
+uncommitted. The owner authorised commits needed to continue this panel iteration; preserve
+the separate staged AGENTS.core.md edit.
+
 On 2026-10-30 the owner requested Casa Mia's house style and a better editing workflow.
 Integration b4 replaces the embedded card-editor presentation with a page tree and focused
 inspector, Casa Mia colours/chips/pills, Dial chips and grouped options with a fixed footer.

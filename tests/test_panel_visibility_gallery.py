@@ -1,0 +1,72 @@
+"""Time visibility transitions and authoritative gallery scenes."""
+
+import asyncio
+from datetime import datetime
+from unittest.mock import AsyncMock
+
+from jinja2.nativetypes import NativeEnvironment
+
+
+def test_time_visibility_changes_at_scheduled_boundaries(integration, dial, monkeypatch):
+    case = integration
+    now = [datetime(2026, 10, 30, 21, 59, 59)]
+    env = NativeEnvironment()
+    env.globals["now"] = lambda: now[0]
+
+    class Template:
+        def __init__(self, source, hass):
+            self.source = source
+
+        def async_render(self, variables=None, parse_result=True):
+            return env.from_string(self.source).render(**(variables or {}))
+
+    dial.module("homeassistant.helpers.template", Template=Template)
+    runtime = dial.load("runtime")
+    schedules = {}
+    cancelled = []
+
+    def schedule(hass, callback, **time):
+        key = tuple(time.values())
+        schedules[key] = callback
+        return lambda: cancelled.append(key)
+
+    monkeypatch.setattr(runtime, "async_track_time_change", schedule)
+    monkeypatch.setattr(runtime, "_push", AsyncMock())
+    source = {"pages": [{"id": "home", "title": "Home", "entities": [{"entity_id": "light.example", "conditions": [{"condition": "time", "after": "22:00:00", "before": "06:00:00", "weekday": ["fri", "sat"]}]}]}]}
+
+    async def run():
+        definition = runtime._render_definition(case.hass, source)
+        assert definition["tree"]["items"] == []
+        await runtime._install_definition(case.hass, "demo", source, definition)
+        assert set(schedules) == {(0, 0, 0), (22, 0, 0), (6, 0, 0)}
+        now[0] = datetime(2026, 10, 30, 22, 0, 0)
+        schedules[(22, 0, 0)](now[0])
+        assert len(case.data["definitions"]["demo"]["tree"]["items"]) == 1
+        now[0] = datetime(2026, 10, 31, 6, 0, 0)
+        schedules[(6, 0, 0)](now[0])
+        assert case.data["definitions"]["demo"]["tree"]["items"] == []
+        await runtime._install_definition(case.hass, "demo", source, definition)
+        assert len(cancelled) == 3
+        await asyncio.gather(*case.tasks)
+
+    asyncio.run(run())
+
+
+def test_gallery_uses_domain_styles_and_real_scene(integration):
+    async def run():
+        await integration.code._ws_gallery(integration.hass, integration.connection, {
+            "id": 1, "page": {"title": "Home", "entities": ["light.example"]},
+            "entity": "light.example", "theme": "ember",
+        })
+        result = integration.connection.send_result.call_args.args[1]
+        assert set(result["styles"]) == {"CTL-LIGHT-INSTRUMENT", "CTL-LIGHT-EDITORIAL"}
+        assert len(result["themes"]) == 6
+        assert all(scene["elements"] for scene in result["styles"].values())
+        await integration.code._ws_gallery(integration.hass, integration.connection, {
+            "id": 2, "page": {"title": "Home"}, "theme": "ember",
+        })
+        navigation = integration.connection.send_result.call_args.args[1]
+        assert len(navigation["styles"]) == 8
+        assert len(navigation["styles"]["NAV-ORBIT"]["regions"]) >= 4
+
+    asyncio.run(run())
