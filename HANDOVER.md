@@ -2,6 +2,13 @@
 
 ## Admin panel prototype
 
+Integration b6 adds direct state listeners for visibility, live condition indicators based on
+HA template subscriptions, HA state selectors and condition icons, and tabbed appearance/settings
+dialogs with sliders, switches and colour swatches. b6 was deployed to the HA config share and
+all 39 integration files match; restart HA and refresh the browser. Local tests cover state transitions
+and subscription cleanup; the real HA selector and live condition indicators still need checking.
+b5 was committed as 939e834. Preserve the separate staged AGENTS.core.md edit.
+
 Integration b5 adds inline visibility rows with an Add condition menu, fixed-time/weekday
 visibility scheduled at local-time boundaries, and style/theme galleries rendered by the HA
 scene compiler. b5 was deployed to the HA config share; all 39 files match. Restart HA and

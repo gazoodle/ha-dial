@@ -159,7 +159,8 @@ def test_conditions_track_hidden_branches_and_restore_nearest_ancestor(
     restored = nav_type(definition=hidden)
     restored.restore(nav)
     assert restored.current()["title"] == "Floor"
-    assert len(hidden["_condition_templates"]) == 2
+    assert hidden["_condition_entities"] == ["sensor.demo", "switch.demo"]
+    assert hidden["_condition_templates"] == []
     assert len(raw["tree"]["items"][0]["children"]) == 1
     with pytest.raises(ValueError, match="fixed time"):
         definition.build_definition(
@@ -168,7 +169,7 @@ def test_conditions_track_hidden_branches_and_restore_nearest_ancestor(
                 {
                     "id": "root",
                     "title": "Home",
-                "conditions": [{"condition": "time", "after": "invalid"}],
+                    "conditions": [{"condition": "time", "after": "invalid"}],
                 }
             ],
             "ember",

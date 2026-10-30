@@ -140,6 +140,7 @@ def filter_definition(hass, definition: dict) -> dict:
 
     tracked = set()
     times = set()
+    entities = set()
 
     def collect_times(conditions):
         for config in conditions:
@@ -153,6 +154,16 @@ def filter_definition(hass, definition: dict) -> dict:
                     value = config.get("options", config).get(key)
                     if value:
                         times.add(value if len(value) == 8 else value + ":00")
+            elif config.get("condition") in {"state", "numeric_state"}:
+                options = config.get("options", config)
+                ids = options.get("entity_id", [])
+                entities.update([ids] if isinstance(ids, str) else ids)
+                for key in ("above", "below"):
+                    value = options.get(key)
+                    if isinstance(value, str) and re.fullmatch(r"[a-z_][a-z0-9_]*\.[a-z0-9_]+", value):
+                        entities.add(value)
+            elif config.get("condition") == "template":
+                tracked.add(condition_template(config))
 
     def matches(config):
         kind = config.get("condition")
@@ -179,7 +190,7 @@ def filter_definition(hass, definition: dict) -> dict:
 
     def visit(node):
         conditions = node.get("conditions", [])
-        tracked.update(templates(conditions))
+        templates(conditions)
         if conditions:
             collect_times(conditions)
         visible = all(matches(config) for config in conditions)
@@ -193,4 +204,5 @@ def filter_definition(hass, definition: dict) -> dict:
         result["tree"]["items"] = []
     result["_condition_templates"] = sorted(tracked)
     result["_condition_times"] = sorted(times)
+    result["_condition_entities"] = sorted(entities)
     return result

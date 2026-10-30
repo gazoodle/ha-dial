@@ -22,6 +22,7 @@ class Element {
   releasePointerCapture() { this.pointer = undefined; }
   setAttribute(name, value) { this[name] = value; }
   append(...nodes) { for (const node of nodes) { node.parentNode = this; this.children.push(node); } }
+  prepend(node) { node.parentNode = this; this.children.unshift(node); }
   contains(node) { return this === node || this.children.some((child) => child.contains(node)); }
   remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((node) => node !== this); this.parentNode = undefined; }
   replaceChildren() { this.children = []; }
@@ -54,13 +55,22 @@ const Editor = classes.get("ha-dial-card-editor"), Card = classes.get("ha-dial-c
 const Workspace = classes.get("ha-dial-panel-editor");
 let editedConditions;
 const conditionUI = conditionsEditor({}, [], value => { editedConditions = value; });
-const addCondition = conditionUI.children[1];
+const addCondition = conditionUI.children[2];
 addCondition.children[1].children.find(node => node.textContent === 'Time').events.click();
 assert.equal(editedConditions[0].condition, 'time');
-const timeRow = conditionUI.children[1];
+const timeRow = conditionUI.children[2];
 timeRow.children[1].events['value-changed']({stopPropagation(){},detail:{value:{after:'22:00:00',before:'06:00:00',weekday:['fri']}}});
 assert.equal(editedConditions[0].before, '06:00:00');
-assert(timeRow.children[0].textContent.includes('22:00:00'));
+assert(timeRow.children[0].children[1].textContent.includes('22:00:00'));
+let notifyCondition, stopped = false;
+const liveUI = conditionsEditor({callWS: async () => '{{ true }}', connection: {subscribeMessage: async callback => { notifyCondition = callback; return () => { stopped = true; }; }}}, [{condition:'state',entity_id:'select.mode',state:'Home'}], () => {});
+await new Promise(resolve => setTimeout(resolve,0));
+notifyCondition({result:'false'});
+assert.equal(liveUI.children[1].textContent, 'Currently hidden');
+assert.equal(liveUI.children[2].children[0].children[2].textContent, 'Does not pass');
+notifyCondition({result:'true'});
+assert.equal(liveUI.children[1].textContent, 'Currently visible');
+liveUI.destroy(); assert(stopped);
 const workspace = new Workspace(); workspace.setConfig({}); workspace.hass = {states:{}};
 assert.equal(workspace.selectedPage, 'home');
 workspace.addPage('home');

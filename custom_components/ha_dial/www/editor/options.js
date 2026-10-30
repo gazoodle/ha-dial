@@ -36,15 +36,15 @@ function validateConditions(conditions) {
 }
 
 export function openOptions(editor, pageId, entityId) {
-  editor.querySelector('.options-dialog')?.remove();
+  editor.querySelector('.edit-options-dialog')?.remove();
   const page = editor.config.pages.find((candidate) => candidate.id === pageId);
   const entities = editor.entities(pageId);
   const original = entityId ? entities.find((item) => (typeof item === 'string' ? item : item.entity_id) === entityId) : page;
   const item = typeof original === 'string' ? {entity_id:original} : {...original};
   const domain = entityId?.split('.')[0];
-  const dialog = document.createElement('dialog'); dialog.className = 'options-dialog';
+  const dialog = document.createElement('dialog'); dialog.className = 'options-dialog edit-options-dialog';
   dialog.setAttribute('aria-label', entityId ? `Edit ${domain} control` : 'Edit page');
-  const heading = document.createElement('h3'); heading.textContent = entityId ? `Edit ${domain} control` : 'Page appearance and visibility';
+  const heading = document.createElement('h3'); heading.textContent = entityId ? `Edit ${domain} control` : 'Page appearance';
   const hint = document.createElement('p'); hint.textContent = 'Conditions are evaluated in Home Assistant. Visibility is not access control.';
   const error = document.createElement('p'); error.setAttribute('role','alert');
   const form = document.createElement('ha-form');
@@ -77,10 +77,11 @@ export function openOptions(editor, pageId, entityId) {
   }
   const advanced = document.createElement('details'), summary = document.createElement('summary'); summary.textContent = 'Advanced style';
   const css = document.createElement('textarea'); css.rows = 8; css.setAttribute('aria-label','Advanced style declarations');
+  let syncAppearance = () => {};
   const writeCss = () => { css.value = appearanceKeys.filter((key)=>draft[key] !== undefined && draft[key] !== '').map((key)=>`${key}: ${draft[key]};`).join('\n'); };
   css.value = item.css || ''; if (!css.value) writeCss();
   for (const field of [form, appearanceForm, conditionForm]) field.addEventListener('value-changed', (event)=>{event.stopPropagation();for (const item of field.schema) draft[item.name] = event.detail.value[item.name];writeCss();});
-  css.addEventListener('change', ()=>{try {draft={...draft,...declarations(css.value)};appearanceForm.data=draft;error.textContent='';}catch(reason){error.textContent=reason.message;}});
+  css.addEventListener('change', ()=>{try {draft={...draft,...declarations(css.value)};appearanceForm.data=draft;syncAppearance();error.textContent='';}catch(reason){error.textContent=reason.message;}});
   advanced.append(summary, css);
   const save = document.createElement('button'); save.type='button'; save.textContent='Apply';
   save.addEventListener('click', ()=>{
@@ -111,9 +112,53 @@ export function openOptions(editor, pageId, entityId) {
   const visibility = document.createElement('details'), visibilityTitle = document.createElement('summary'); visibilityTitle.textContent = 'Visibility conditions'; visibility.append(visibilityTitle,hint,conditionForm);
   const body = document.createElement('div'); body.className = 'options-body'; body.append(error,form,appearance,visibility);
   if (editor.panelMode) {
-    visibility.remove();
+    body.replaceChildren(error);
     const gallery = document.createElement('div'); gallery.className = 'options-galleries';
-    body.insertBefore(gallery, appearance);
+    const tabs = document.createElement('div'); tabs.className = 'dialog-tabs'; tabs.setAttribute('role','tablist'); tabs.setAttribute('aria-label','Appearance settings');
+    const panels = [gallery, document.createElement('div'), document.createElement('div')];
+    const controls = document.createElement('div'); controls.className='appearance-controls';
+    const updates = [];
+    const title = document.createElement('h4'); title.textContent='Display'; controls.append(title);
+    for (const [key,low,high] of [['border-width',1,4],['font-size',6,16],['icon-size',12,28],...(!domain?[['orbit-radius',70,90]]:[])]) {
+      const row=document.createElement('label'); row.className='slider-row';
+      const name=document.createElement('span'); name.textContent=labels[key];
+      const input=document.createElement('input'); input.type='range'; input.min=low; input.max=high; input.step=1; input.setAttribute('aria-label',labels[key]);
+      const value=document.createElement('output');
+      const sync=()=>{input.value=draft[key] ?? defaults[key]; value.textContent=input.value;}; updates.push(sync); sync();
+      input.addEventListener('input',()=>{draft[key]=Number(input.value);value.textContent=input.value;writeCss();});
+      row.append(name,input,value); controls.append(row);
+    }
+    const border=document.createElement('label'); border.className='switch-row'; const borderName=document.createElement('span'); borderName.textContent='Outer border';
+    const toggle=document.createElement('input'); toggle.type='checkbox'; toggle.setAttribute('aria-label','Outer border');
+    const syncBorder=()=>{toggle.checked=draft['outer-border'] !== false;}; updates.push(syncBorder); syncBorder();
+    toggle.addEventListener('change',()=>{draft['outer-border']=toggle.checked;writeCss();}); border.append(borderName,toggle); controls.append(border);
+    const raster=document.createElement('div'); raster.className='raster-row'; const rasterLabel=document.createElement('span'); rasterLabel.textContent='Rendering'; raster.append(rasterLabel);
+    const segments=document.createElement('div'); segments.className='dialog-tabs'; segments.setAttribute('role','group'); segments.setAttribute('aria-label','Rendering');
+    const modes=['smooth','crisp'].map(mode=>{const button=document.createElement('button');button.type='button';button.textContent=mode;button.addEventListener('click',()=>{draft.raster=mode;syncRaster();writeCss();});segments.append(button);return button;});
+    const syncRaster=()=>modes.forEach((button,index)=>button.setAttribute('aria-pressed',String((draft.raster || 'smooth') === ['smooth','crisp'][index]))); updates.push(syncRaster); syncRaster(); raster.append(segments); controls.append(raster);
+    const coloursTitle=document.createElement('h4'); coloursTitle.textContent='Colour overrides'; controls.append(coloursTitle);
+    const colours=document.createElement('div'); colours.className='colour-grid';
+    for (const [key,fallback] of [['accent','#ff8b2d'],['background','#060707'],['text','#fff7eb']]) {
+      const row=document.createElement('div');row.className='colour-choice';const label=document.createElement('label');label.textContent=labels[key];
+      const input=document.createElement('input');input.type='color';input.setAttribute('aria-label',labels[key]);
+      const reset=document.createElement('button');reset.type='button';reset.className='chip';reset.textContent='Use theme';
+      const sync=()=>{input.value=draft[key] || fallback;reset.disabled=!draft[key];};updates.push(sync);sync();
+      input.addEventListener('input',()=>{draft[key]=input.value;sync();writeCss();});reset.addEventListener('click',()=>{delete draft[key];sync();writeCss();});
+      label.append(input);row.append(label,reset);colours.append(row);
+    }
+    controls.append(colours);syncAppearance=()=>updates.forEach(update=>update());
+    panels[1].append(form,controls); panels[2].append(css);
+    const names = ['Styles & themes','Options','Advanced'];
+    const buttons = names.map((name,index) => {
+      const tab = document.createElement('button'); tab.type='button'; tab.textContent=name; tab.setAttribute('role','tab');
+      tab.id=`dial-tab-${index}`; tab.setAttribute('aria-controls',`dial-panel-${index}`);
+      panels[index].id=`dial-panel-${index}`; panels[index].setAttribute('role','tabpanel'); panels[index].setAttribute('aria-labelledby',tab.id);
+      const activate = () => buttons.forEach((button,i)=>{button.setAttribute('aria-selected',String(i===index)); button.tabIndex=i===index?0:-1; panels[i].hidden=i!==index;});
+      tab.addEventListener('click',activate);
+      tab.addEventListener('keydown',event=>{if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return; event.preventDefault(); const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(index+(event.key==='ArrowRight'?1:-1)+buttons.length)%buttons.length; buttons[next].click(); buttons[next].focus();});
+      tabs.append(tab); return tab;
+    });
+    body.append(tabs,...panels); buttons[0].click();
     let request = 0;
     const updateGallery = async () => {
       const sequence = ++request;

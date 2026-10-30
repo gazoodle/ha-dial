@@ -3,12 +3,21 @@ import { DOMAINS } from './editor/catalogue.js';
 import { conditionsEditor } from './editor/conditions.js';
 
 class HaDialPanelEditor extends customElements.get('ha-dial-card-editor') {
+  disconnectedCallback() { this.conditionEditor?.destroy(); }
   render() {
     if (!this.config || !this._hass) return;
     if (!this.initialised) {
       this.initialised = true;
-      this.innerHTML = `<div class="editor-workspace"><section class="editor-tree"><div class="section-title"><div><span class="eyebrow">YOUR DIAL</span><h3>Pages</h3></div><button class="chip add-page" type="button">+ Page</button></div><p class="editor-help">Choose a page or control to edit it. Drag the handle to rearrange.</p><div class="tree"></div></section><section class="inspector"><div class="inspector-content"></div></section></div><details class="advanced-details"><summary>Advanced · template &amp; theme</summary><ha-form class="settings"></ha-form><ha-form class="advanced"></ha-form></details><span class="sr-only" role="status"></span>`;
+      this.innerHTML = `<div class="editor-workspace"><section class="editor-tree"><div class="section-title"><div><span class="eyebrow">YOUR DIAL</span><h3>Pages</h3></div><button class="chip add-page" type="button">+ Page</button></div><p class="editor-help">Choose a page or control to edit it. Drag the handle to rearrange.</p><div class="tree"></div></section><section class="inspector"><div class="inspector-content"></div></section></div><div class="advanced-details"><button class="chip dial-settings" type="button">Dial settings</button></div><dialog class="dial-settings-dialog options-dialog" aria-label="Dial settings"><header class="options-head"><h3>Dial settings</h3></header><div class="options-body"><div class="dialog-tabs" role="tablist" aria-label="Dial settings"><button type="button" role="tab" aria-selected="true" data-settings-tab="theme">Theme</button><button type="button" role="tab" aria-selected="false" data-settings-tab="template">Advanced</button></div><div class="theme-settings" role="tabpanel"><ha-form class="settings"></ha-form></div><div class="template-settings" role="tabpanel" hidden><ha-form class="advanced"></ha-form></div></div><footer class="options-foot"><button type="button" class="settings-done">Done</button></footer></dialog><span class="sr-only" role="status"></span>`;
       this.querySelector('.add-page').addEventListener('click', () => this.addPage(this.selectedPage || this.config.pages[0]?.id));
+      const settingsDialog = this.querySelector('.dial-settings-dialog');
+      this.querySelector('.dial-settings').addEventListener('click', () => settingsDialog.showModal());
+      this.querySelector('.settings-done').addEventListener('click', () => settingsDialog.close());
+      for (const tab of this.querySelectorAll('[data-settings-tab]')) tab.addEventListener('click', () => {
+        for (const sibling of this.querySelectorAll('[data-settings-tab]')) sibling.setAttribute('aria-selected',String(sibling === tab));
+        this.querySelector('.theme-settings').hidden = tab.dataset.settingsTab !== 'theme';
+        this.querySelector('.template-settings').hidden = tab.dataset.settingsTab !== 'template';
+      });
       for (const name of ['settings','advanced']) this.querySelector('.' + name).addEventListener('value-changed', event => {
         event.stopPropagation(); this.changed({...this.config, ...event.detail.value});
       });
@@ -66,6 +75,7 @@ class HaDialPanelEditor extends customElements.get('ha-dial-card-editor') {
   }
 
   renderInspector() {
+    this.conditionEditor?.destroy();
     const panel = this.querySelector('.inspector-content'); panel.replaceChildren();
     const page = this.config.pages.find(item => item.id === this.selectedPage); if (!page) return;
     const entity = this.selectedEntity;
@@ -92,7 +102,7 @@ class HaDialPanelEditor extends customElements.get('ha-dial-card-editor') {
     }
     const entry = entity ? this.entities(page.id).find(item => (typeof item === 'string' ? item : item.entity_id) === entity) : page;
     const visibilityTitle = document.createElement('p'); visibilityTitle.className = 'inspector-label'; visibilityTitle.textContent = 'VISIBILITY'; panel.append(visibilityTitle);
-    panel.append(conditionsEditor(this._hass, typeof entry === 'string' ? [] : entry.conditions, conditions => {
+    this.conditionEditor = conditionsEditor(this._hass, typeof entry === 'string' ? [] : entry.conditions, conditions => {
       const pages = this.config.pages.map(item => {
         if (item.id !== page.id) return item;
         if (!entity) return {...item,conditions};
@@ -100,7 +110,7 @@ class HaDialPanelEditor extends customElements.get('ha-dial-card-editor') {
         const updated = {...item,entities}; delete updated.lights; return updated;
       });
       this.changed({...this.config,pages}); this.treePages = pages;
-    }));
+    }); panel.append(this.conditionEditor);
   }
 }
 

@@ -1,10 +1,65 @@
 """Time visibility transitions and authoritative gallery scenes."""
 
 import asyncio
+import sys
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from jinja2.nativetypes import NativeEnvironment
+
+
+def test_condition_template_endpoint_validates_and_requires_admin(integration):
+    case = integration
+
+    async def run():
+        await case.code._ws_condition_template(case.hass, case.connection, {"id": 1, "condition": {"condition": "state", "entity_id": "select.example", "state": "Home"}})
+        assert "select.example" in case.connection.send_result.call_args.args[1]
+        await case.code._ws_condition_template(case.hass, case.connection, {"id": 2, "condition": {"condition": "state"}})
+        assert case.connection.send_error.call_args.args[1] == "invalid_condition"
+        case.connection.user.is_admin = False
+        await case.code._ws_condition_template(case.hass, case.connection, {"id": 3, "condition": {"condition": "state"}})
+        assert case.connection.send_error.call_args.args[1] == "unauthorized"
+
+    asyncio.run(run())
+
+
+def test_state_condition_watches_hidden_page_and_updates(integration, dial, monkeypatch):
+    case = integration
+    env = NativeEnvironment()
+    env.globals["states"] = lambda entity: case.hass.states[entity].state
+
+    class Template:
+        def __init__(self, source, hass):
+            self.source = source
+
+        def async_render(self, variables=None, parse_result=True):
+            return env.from_string(self.source).render(**(variables or {}))
+
+    dial.module("homeassistant.helpers.template", Template=Template)
+    runtime = sys.modules[case.code._install_definition.__module__]
+    monkeypatch.setattr(runtime, "_push", AsyncMock())
+    case.hass.states["select.example"] = SimpleNamespace(state="Away", attributes={})
+    source = {"pages": [
+        {"id": "home", "title": "Home"},
+        {"id": "room", "title": "Room", "parent": "home", "conditions": [
+            {"condition": "state", "entity_id": "select.example", "state": "Home"}
+        ]},
+    ]}
+
+    async def run():
+        await case.code._ws_configure(case.hass, case.connection, {"id": 1, "device": "demo", "definition": source})
+        assert case.data["definitions"]["demo"]["tree"]["items"] == []
+        callback = next(callback for entities, callback in case.watches if "select.example" in entities)
+        case.hass.states["select.example"].state = "Home"
+        callback(None)
+        assert case.data["definitions"]["demo"]["tree"]["items"][0]["id"] == "room"
+        case.hass.states["select.example"].state = "Away"
+        callback(None)
+        assert case.data["definitions"]["demo"]["tree"]["items"] == []
+        await asyncio.gather(*case.tasks)
+
+    asyncio.run(run())
 
 
 def test_time_visibility_changes_at_scheduled_boundaries(integration, dial, monkeypatch):

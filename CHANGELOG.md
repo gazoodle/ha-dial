@@ -1,5 +1,10 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b6
+
+- Watch visibility condition entities directly and show live condition results using Home Assistant template subscriptions.
+- Use Home Assistant state selectors and condition icons, with tabbed dialogs, sliders, switches and colour controls.
+
 ## 2026.10.1-b5
 
 - Add server-rendered Atlas style and theme galleries and inline visibility condition editing.

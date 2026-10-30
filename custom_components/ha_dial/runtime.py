@@ -343,6 +343,7 @@ async def _install_definition(
         state["definitions"][device] = updated
         state["navigators"][device] = updated_navigator
         watch_condition_times(updated)
+        watch_condition_entities(updated)
         _watch_definition_entities(hass, device, updated)
         hass.async_create_task(_push(hass, device, updated_navigator.current()))
 
@@ -387,7 +388,16 @@ async def _install_definition(
             for hour, minute, second in (value.split(":") for value in current_definition.get("_condition_times", []))
         ]
 
+    def watch_condition_entities(current_definition):
+        unsubs = state.setdefault("condition_entity_unsubs", {})
+        if unsubscribe := unsubs.pop(device, None):
+            unsubscribe()
+        entities = current_definition.get("_condition_entities", [])
+        if entities:
+            unsubs[device] = async_track_state_change_event(hass, entities, conditions_changed)
+
     watch_condition_times(definition)
+    watch_condition_entities(definition)
     if condition_sources:
         condition_trackers[device] = async_track_template_result(
             hass,

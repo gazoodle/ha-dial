@@ -121,6 +121,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         websocket_api.async_register_command(hass, _ws_subscribe)
         websocket_api.async_register_command(hass, _ws_definitions)
         websocket_api.async_register_command(hass, _ws_gallery)
+        websocket_api.async_register_command(hass, _ws_condition_template)
         state["registered"] = True
 
     from .transport import watch_transports
@@ -328,6 +329,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         for unsubscribe in callbacks:
             unsubscribe()
     state.get("condition_time_unsubs", {}).clear()
+    for unsubscribe in state.get("condition_entity_unsubs", {}).values():
+        unsubscribe()
+    state.get("condition_entity_unsubs", {}).clear()
     for unsubscribe in state.get("definition_unsubs", {}).values():
         unsubscribe()
     state.get("definition_unsubs", {}).clear()
@@ -353,6 +357,25 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/condition_template", vol.Required("condition"): dict}
+)
+@websocket_api.async_response
+@_require_server
+async def _ws_condition_template(hass, connection, msg) -> None:
+    if not connection.user or not connection.user.is_admin:
+        connection.send_error(msg["id"], "unauthorized", "Administrator access required")
+        return
+    from .visibility import condition_template
+
+    try:
+        source = condition_template(msg["condition"])
+    except (ValueError, TypeError, KeyError) as error:
+        connection.send_error(msg["id"], "invalid_condition", str(error))
+        return
+    connection.send_result(msg["id"], source)
 
 
 @websocket_api.websocket_command(
@@ -558,6 +581,8 @@ async def _ws_subscribe(hass, connection, msg) -> None:
     def remove():
         unsubscribe()
         if _is_preview(device):
+            if cancel_entities := state.get("condition_entity_unsubs", {}).pop(device, None):
+                cancel_entities()
             for cancel_time in state.get("condition_time_unsubs", {}).pop(device, []):
                 cancel_time()
             if tracker := state.get("condition_trackers", {}).pop(device, None):
