@@ -1,5 +1,9 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b7
+
+- Replace browser confirmations with styled dialogs; choose whether to keep or remove nested subpages when removing a page.
+
 ## 2026.10.1-b6
 
 - Watch visibility condition entities directly and show live condition results using Home Assistant template subscriptions.

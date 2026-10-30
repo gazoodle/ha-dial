@@ -14,6 +14,10 @@ the prototype's browser controls, cramped card-editor layout and scrolling actio
 During this panel iteration the owner authorises the commits needed for subsequent build
 cycles; preserve unrelated staged changes. Why: repeated commit questions delayed iteration.
 
+Panel confirmations use the house-styled dialog, not browser prompts. Removing a page offers
+keeping its subpages or removing all descendants, with the count. Why: on 2026-10-30 the owner
+rejected the browser prompt and wanted an explicit choice about children.
+
 ## Independent versions — Casa Mia rules (2026-10-29)
 
 Firmware and HA Dial Server have separate versions. Before changing runtime code, run

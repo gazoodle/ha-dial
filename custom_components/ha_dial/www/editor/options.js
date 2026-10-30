@@ -35,6 +35,19 @@ function validateConditions(conditions) {
   }
 }
 
+export function confirmDialog(host, {title, message, choices, confirm, action}) {
+  const dialog = document.createElement('dialog'); dialog.className = 'options-dialog confirm-dialog'; dialog.setAttribute('aria-label',title);
+  const head = document.createElement('header'); head.className='options-head'; const heading=document.createElement('h3'); heading.textContent=title; head.append(heading);
+  const body=document.createElement('div'); body.className='options-body'; const description=document.createElement('p'); description.textContent=message; body.append(description);
+  let selected=choices?.[0]?.value;
+  if (choices) {
+    const group=document.createElement('fieldset'); group.className='confirm-choices'; const legend=document.createElement('legend'); legend.textContent='What should happen to the subpages?'; group.append(legend);
+    for (const choice of choices) { const label=document.createElement('label'); label.className='confirm-choice'; const radio=document.createElement('input'); radio.type='radio'; radio.name='page-removal'; radio.value=choice.value; radio.checked=choice.value===selected; radio.addEventListener('change',()=>{selected=choice.value;}); const text=document.createElement('span'); const name=document.createElement('strong'); name.textContent=choice.label; const detail=document.createElement('small'); detail.textContent=choice.detail; text.append(name,detail); label.append(radio,text); group.append(label); } body.append(group);
+  }
+  const foot=document.createElement('footer'); foot.className='options-foot'; const cancel=document.createElement('button'); cancel.type='button'; cancel.textContent='Cancel'; cancel.addEventListener('click',()=>dialog.close()); const submit=document.createElement('button'); submit.type='button'; submit.className='destructive'; submit.textContent=confirm; submit.addEventListener('click',()=>{dialog.close(); action(selected);}); foot.append(cancel,submit);
+  dialog.addEventListener('close',()=>dialog.remove()); dialog.append(head,body,foot); host.append(dialog); dialog.showModal();
+}
+
 export function openOptions(editor, pageId, entityId) {
   editor.querySelector('.edit-options-dialog')?.remove();
   const page = editor.config.pages.find((candidate) => candidate.id === pageId);

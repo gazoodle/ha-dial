@@ -1,4 +1,4 @@
-import { openOptions } from './editor/options.js';
+import { confirmDialog, openOptions } from './editor/options.js';
 import { DOMAINS } from './editor/catalogue.js';
 import { conditionsEditor } from './editor/conditions.js';
 
@@ -90,7 +90,7 @@ class HaDialPanelEditor extends customElements.get('ha-dial-card-editor') {
     if (entity) actions.append(button('Remove control', () => { this.selectedEntity = undefined; this.setEntities(page.id,this.entities(page.id).filter(item => (typeof item === 'string' ? item : item.entity_id) !== entity)); }, 'danger'));
     else {
       actions.append(button('+ Subpage', () => this.addPage(page.id)));
-      if (page.parent) actions.append(button('Remove page', () => { if (!window.confirm('Remove this page? Its subpages will move up one level.')) return; this.selectedPage = page.parent; this.changed({...this.config,pages:this.config.pages.filter(item => item.id !== page.id).map(item => item.parent === page.id ? {...item,parent:page.parent} : item)}); this.renderTree(); }, 'danger'));
+      if (page.parent) actions.append(button('Remove page', () => this.removePage(page), 'danger'));
     }
     panel.append(actions);
     if (!entity) {
@@ -111,6 +111,19 @@ class HaDialPanelEditor extends customElements.get('ha-dial-card-editor') {
       });
       this.changed({...this.config,pages}); this.treePages = pages;
     }); panel.append(this.conditionEditor);
+  }
+
+  removePage(page) {
+    const descendants = new Set([page.id]);
+    let size; do { size = descendants.size; for (const item of this.config.pages) if (descendants.has(item.parent)) descendants.add(item.id); } while (size !== descendants.size);
+    const count = descendants.size - 1, noun = count === 1 ? 'subpage' : 'subpages';
+    confirmDialog(this, {title:'Remove page', message:`Remove “${page.title || 'Untitled page'}” and its controls? This takes effect when you save and apply.`, confirm:'Remove page',
+      choices: count ? [
+        {value:'move',label:`Move subpages up (${count} total)`,detail:'Direct subpages move to the parent page; their own subpages stay with them.'},
+        {value:'remove',label:`Remove ${count === 1 ? 'the' : 'all'} ${count} ${noun}`,detail:'Remove every nested subpage and its controls too.'},
+      ] : undefined,
+      action: choice => { this.selectedPage=page.parent; this.selectedEntity=undefined; const pages=this.config.pages.filter(item=>choice === 'remove' ? !descendants.has(item.id) : item.id !== page.id).map(item=>choice !== 'remove' && item.parent === page.id ? {...item,parent:page.parent} : item); this.changed({...this.config,pages}); this.renderTree(); }
+    });
   }
 }
 

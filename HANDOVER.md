@@ -2,6 +2,11 @@
 
 ## Admin panel prototype
 
+Integration b7 replaces panel browser confirmations with styled dialogs. Page removal offers
+moving direct subpages up while retaining their hierarchy, or removing all descendants; the
+count covers every descendant. The local browser mock showed the dialog and editor tests exercised
+both choices. b7 was deployed to the HA config share; restart HA and refresh the browser.
+
 Integration b6 adds direct state listeners for visibility, live condition indicators based on
 HA template subscriptions, HA state selectors and condition icons, and tabbed appearance/settings
 dialogs with sliders, switches and colour swatches. b6 was deployed to the HA config share and
