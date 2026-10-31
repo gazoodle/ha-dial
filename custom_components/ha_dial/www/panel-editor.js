@@ -1,9 +1,9 @@
 import { confirmDialog, openOptions } from './editor/options.js';
-import { DOMAINS, PAGED_STYLES } from './editor/catalogue.js';
+import { CONTROL_STYLES, DOMAINS, PAGED_STYLES, SETTINGS } from './editor/catalogue.js';
 import { conditionsEditor } from './editor/conditions.js';
 
 const LEFT_OUT = {hidden:'hidden in HA',disabled:'disabled',diagnostic:'diagnostic or configuration',unsupported:'not supported on the Dial',excluded:'excluded by you',not_exposed:'not exposed to Assist',security:'security items left out',out_of_scope:'outside this floor or area'};
-const styleName = (style) => style.replace(/^NAV-/,'').toLowerCase();
+const styleName = (style) => style.replace(/^(NAV|CAM)-/,'').toLowerCase();
 
 class HaDialPanelEditor extends customElements.get('ha-dial-card-editor') {
   disconnectedCallback() { this.conditionEditor?.destroy(); }
@@ -138,17 +138,19 @@ class HaDialPanelEditor extends customElements.get('ha-dial-card-editor') {
     panel.append(actions);
 
     const form = document.createElement('ha-form'); form.hass = this._hass;
-    const labels = {scope:'Covers',floor_id:'Floor',area_id:'Area',random:'Random style on every page',long_style:'Style for pages over 8 items',assist_only:'Only entities exposed to Assist',include_security:'Include locks, alarms and doors',exclude:'Leave out these entities'};
+    const labels = {scope:'Covers',floor_id:'Floor',area_id:'Area',random:'Random style on every page',long_style:'Style for pages over 8 items',camera_style:'Camera style',picture_mode:'Camera picture',assist_only:'Only entities exposed to Assist',include_security:'Include locks, alarms and doors',exclude:'Leave out these entities'};
     const helpers = {random:'Shows off every style. A page keeps its style until you shuffle.',long_style:'Any style works up to 8 items. Longer pages need one that scrolls or pages.',include_security:'They always ask for confirmation.',assist_only:'Reads your Assist settings and never changes them.'};
     form.computeLabel = (field) => labels[field.name]; form.computeHelper = (field) => helpers[field.name];
     const fill = () => {
       const current = options(), scope = current.area_id !== undefined ? 'area' : current.floor_id !== undefined ? 'floor' : 'home';
-      form.data = {long_style:'NAV-LIST',include_security:true,random:false,assist_only:false,exclude:[],...current,scope};
+      form.data = {long_style:'NAV-LIST',camera_style:'CAM-PORTAL',picture_mode:'default',include_security:true,random:false,assist_only:false,exclude:[],...current,scope};
       form.schema = [
         {name:'scope',selector:{select:{options:[{value:'home',label:'Whole home'},{value:'floor',label:'One floor'},{value:'area',label:'One area'}]}}},
         ...(scope === 'floor' ? [{name:'floor_id',selector:{floor:{}}}] : scope === 'area' ? [{name:'area_id',selector:{area:{}}}] : []),
         {name:'random',selector:{boolean:{}}},
         {name:'long_style',selector:{select:{options:PAGED_STYLES.map(value => ({value,label:styleName(value)}))}}},
+        {name:'camera_style',selector:{select:{options:CONTROL_STYLES.camera.map(value => ({value,label:styleName(value)}))}}},
+        {name:'picture_mode',selector:{select:{options:[{value:'default',label:'Style default'},...SETTINGS['picture-mode'].choices.map(value => ({value,label:value}))]}}},
         {name:'assist_only',selector:{boolean:{}}},{name:'include_security',selector:{boolean:{}}},
         {name:'exclude',selector:{entity:{multiple:true,filter:{domain:DOMAINS}}}},
       ];
@@ -157,6 +159,7 @@ class HaDialPanelEditor extends customElements.get('ha-dial-card-editor') {
     form.addEventListener('value-changed', event => {
       event.stopPropagation();
       const {scope, ...values} = event.detail.value, explorer = {...options(),...values};
+      if (explorer.picture_mode === 'default') delete explorer.picture_mode;
       if (scope !== 'floor') delete explorer.floor_id; else explorer.floor_id ??= '';
       if (scope !== 'area') delete explorer.area_id; else explorer.area_id ??= '';
       store(explorer); fill(); refresh();

@@ -10,16 +10,17 @@ import re
 from dataclasses import dataclass, field
 from hashlib import sha256
 
-from .appearance import validate_options
+from .appearance import CHOICES, validate_options
 from .assets import usable_icon
-from .catalogue import CONTROL_TYPES, NAV_STYLES, PAGED_STYLES
+from .catalogue import CAMERA_STYLES, CONTROL_TYPES, NAV_STYLES, PAGED_STYLES
 
 MAX_SHOWN = 8  # A page over this needs a style that scrolls or pages, and an area splits by function.
 ASSISTANT = "conversation"
 HIDDEN_CATEGORIES = {"config", "diagnostic"}
 CONFIRMED_COVERS = {"garage", "gate", "door"}
 SECURITY_DOMAINS = {"lock", "alarm_control_panel"}
-FIELDS = {"floor_id", "area_id", "assist_only", "include_security", "exclude", "random", "shuffle", "long_style", "pages"}
+PICTURE_DOMAINS = {"camera", "image"}
+FIELDS = {"floor_id", "area_id", "assist_only", "include_security", "exclude", "random", "shuffle", "long_style", "camera_style", "picture_mode", "pages"}
 OVERRIDE_FIELDS = {"style", "theme", "icon", "appearance", "css"}
 DEFAULT_LONG_STYLE = "NAV-LIST"
 # Order on a page; anything else goes in Other.
@@ -90,6 +91,10 @@ def validate_explorer(options) -> None:
         raise TypeError("shuffle must be a whole number")
     if options.get("long_style", DEFAULT_LONG_STYLE) not in PAGED_STYLES:
         raise ValueError("Pages over 8 items need a style that scrolls or pages")
+    if options.get("camera_style", "CAM-PORTAL") not in CAMERA_STYLES:
+        raise ValueError("Unknown camera style")
+    if "picture_mode" in options and options["picture_mode"] not in CHOICES["picture-mode"][2]:
+        raise ValueError("Unknown picture treatment")
     exclude = options.get("exclude", [])
     if not isinstance(exclude, list) or not all(isinstance(entity, str) and re.fullmatch(r"[a-z_]+\.[a-z0-9_]{1,248}", entity) for entity in exclude):
         raise ValueError("Excluded entities must be HA entity ids")
@@ -314,6 +319,11 @@ def _dress(items: list[dict], parent: dict, options: dict) -> None:
     """Give each generated page its style, then whatever its own override says."""
     for item in items:
         if "children" not in item:
+            if item["entity_id"].partition(".")[0] in PICTURE_DOMAINS:
+                item["style"] = options.get("camera_style", item["style"])
+                # Left out, each camera style keeps its own default treatment.
+                if "picture_mode" in options:
+                    item["appearance"] = {"picture-mode": options["picture_mode"]}
             continue
         override = options.get("pages", {}).get(item["id"], {})
         item["style"] = page_style(item["id"], len(item["children"]), parent["style"], options)

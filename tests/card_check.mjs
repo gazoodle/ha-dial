@@ -307,6 +307,12 @@ assert(explorerText().some((text) => text.startsWith("Kitchen (1)")), "generated
 assert(!explorerText().includes("+ Subpage"), "its contents come from the home");
 const explorerForm = inspectorNodes().find((node) => node.tag === "ha-form");
 const changeExplorer = (value) => explorerForm.events["value-changed"]({ stopPropagation() {}, detail: { value } });
+changeExplorer({ ...explorerForm.data, camera_style: "CAM-RADAR", picture_mode: "tint" });
+assert.equal(explorerSpace.config.pages[2].explorer.camera_style, "CAM-RADAR");
+assert.equal(explorerSpace.config.pages[2].explorer.picture_mode, "tint");
+assert.deepEqual(explorerForm.schema.find((field) => field.name === "camera_style").selector.select.options.map((option) => option.label).sort(), ["cinema", "portal", "radar"]);
+changeExplorer({ ...explorerForm.data, picture_mode: "default" });
+assert.equal("picture_mode" in explorerSpace.config.pages[2].explorer, false, "the style's own default isn't stored as a choice");
 const shuffleChip = inspectorNodes().find((node) => node.textContent === "Shuffle styles");
 assert.equal(shuffleChip.hidden, true, "Shuffle only appears for Random");
 changeExplorer({ ...explorerForm.data, random: true });

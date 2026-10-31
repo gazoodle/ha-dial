@@ -34,8 +34,8 @@ def build_definition(hass, pages: list, default_theme: str) -> dict:
         ):
             raise ValueError("Page controls must be lists")
         lights = [*page.get("lights", []), *page.get("entities", [])]
-        if not isinstance(lights, list) or len(lights) > 8:
-            raise ValueError(f"Page {page_id} can select at most 8 controls")
+        if not isinstance(lights, list):
+            raise ValueError("Page controls must be lists")
         by_id[page_id] = {**page, "theme": theme, "lights": lights}
 
     children_by_parent = {}
@@ -112,8 +112,8 @@ def build_definition(hass, pages: list, default_theme: str) -> dict:
             generated, _ = explore(home, page["explorer"], base)
             items += generated
             style = page_style("", len(items), default, page["explorer"])
-        elif len(items) > MAX_SHOWN:
-            raise ValueError(f"Page {page_id} can show at most {MAX_SHOWN} items")
+        elif len(items) > MAX_SHOWN and style not in PAGED_STYLES:
+            raise ValueError(f"Page {page['title']} can show at most {MAX_SHOWN} items in this style. Choose one that scrolls or pages, such as List or Snake.")
         return {
             "id": page_id,
             "title": page["title"],

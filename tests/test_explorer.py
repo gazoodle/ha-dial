@@ -252,6 +252,8 @@ def test_generated_pages_inherit_the_explorers_look(dial):
         {"assist_only": "yes"},
         {"shuffle": True},
         {"long_style": "NAV-ORBIT"},
+        {"camera_style": "NAV-LIST"},
+        {"picture_mode": "sepia"},
         {"exclude": ["not an entity"]},
         {"pages": {"x": {"style": "CHR-TRICOMPAX"}}},
         {"pages": {"x": {"nonsense": 1}}},
@@ -371,6 +373,51 @@ def test_the_slot_counts_against_the_owners_page(dial, home_of_rooms):
     full = [{"id": f"p{n}", "title": f"Page {n}", "parent": "home"} for n in range(7)]
     with pytest.raises(ValueError, match="at most 8"):
         definition.build_definition(home_of_rooms, [*own_pages(), *full, explorer_page()], "ember")
+
+
+@pytest.mark.parametrize("kind", ["pages", "controls", "both"])
+def test_a_hand_built_page_can_go_past_eight_in_a_style_that_scrolls(dial, kind):
+    definition, catalogue = dial.load("definition"), dial.load("catalogue")
+    hass = SimpleNamespace(states={})
+    entities = [f"light.l{n}" for n in range(12 if kind == "controls" else 6 if kind == "both" else 0)]
+    subpages = [{"id": f"p{n}", "title": f"Page {n}", "parent": "home"} for n in range(12 if kind == "pages" else 6 if kind == "both" else 0)]
+    for style in catalogue.PAGED_STYLES:
+        built = definition.build_definition(hass, [{"id": "home", "title": "Home", "style": style, "entities": entities}, *subpages], "ember")
+        assert len(built["tree"]["items"]) == 12
+    with pytest.raises(ValueError, match="scrolls or pages"):
+        definition.build_definition(hass, [{"id": "home", "title": "Home", "style": "NAV-ORBIT", "entities": entities}, *subpages], "ember")
+
+
+def picture_home(explorer):
+    return explorer.Home(entities=[explorer.Entity("camera.gate", "Gate"), explorer.Entity("image.drive", "Drive"), explorer.Entity("light.a", "A")])
+
+
+def test_cameras_use_the_chosen_style_and_treatment(dial):
+    explorer = dial.load("explorer")
+    items = {item["entity_id"]: item for item in controls(build(explorer, picture_home(explorer), camera_style="CAM-RADAR", picture_mode="dither")[0])}
+    for entity in ("camera.gate", "image.drive"):
+        assert items[entity]["style"] == "CAM-RADAR"
+        assert items[entity]["appearance"] == {"picture-mode": "dither"}
+    assert "appearance" not in items["light.a"] and not items["light.a"]["style"].startswith("CAM-")
+
+
+def test_cameras_keep_their_defaults_when_nothing_is_chosen(dial):
+    explorer = dial.load("explorer")
+    camera = next(item for item in controls(build(explorer, picture_home(explorer))[0]) if item["entity_id"] == "camera.gate")
+    assert camera["style"] == "CAM-PORTAL" and "appearance" not in camera
+
+
+def test_a_generated_camera_reaches_its_picture_in_the_chosen_style(dial):
+    explorer, definition, frames = dial.load("explorer"), dial.load("definition"), dial.load("frames")
+    items, _ = build(explorer, picture_home(explorer), camera_style="CAM-CINEMA", picture_mode="mono")
+    definition.validate_definition({"tree": {"id": "r", "title": "Home", "style": "NAV-LIST", "items": items}})
+    navigator = dial.load("navigator").Navigator(definition={"tree": {"id": "r", "title": "Home", "style": "NAV-LIST", "items": items}})
+    navigator.input("touch", "x_other")
+    navigator.input("touch", "camera.gate")
+    view = navigator.current()
+    assert view["style"] == "CAM-CINEMA"
+    key = frames.frame_key(view)
+    assert key is not None and "camera.gate" in key and "mono" in key
 
 
 def test_the_explorer_page_uses_its_own_style_while_it_fits(dial):

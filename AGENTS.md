@@ -59,6 +59,8 @@ Explorer is an item, not a Dial mode: it takes one slot on a page, beside the ow
 pages. Why: on 2026-10-31 the owner ruled "it doesn't take over the dial". A generated page of 8 or fewer
 items can use any navigation style, and only a longer one is limited to styles that scroll or page. Why:
 the owner ruled that styles must not be ignored out of hand. Random is stable per page until Shuffle.
+The same limit applies to hand-built pages: over 8 items is allowed in any style that scrolls or pages.
+Why: on 2026-10-31 the owner pointed out that some navigators can hold more, and Snake can by scrolling.
 
 Explorer never calls `async_should_expose`, because that saves a default and so changes exposure settings.
 Turning the dial never moves a cover that needs confirming, and Stop never waits on a prompt. Why: a

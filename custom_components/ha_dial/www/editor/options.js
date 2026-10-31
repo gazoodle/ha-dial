@@ -258,7 +258,7 @@ export function openOptions(editor, pageId, entityId, generated) {
     };
     const children = generated?.children || editor.config.pages.filter(candidate => candidate.parent === pageId).map(({title,icon})=>({title,icon}));
     // An Explorer's pages use navigation styles only, and only ones that can show them all.
-    const styleScope = generated ? {nav_only:true,...(generated.count > 8 ? {long:true} : {})} : {};
+    const styleScope = generated ? {nav_only:true,...(generated.count > 8 ? {long:true} : {})} : !entityId && children.length + entities.length > 8 ? {long:true} : {};
     let previewSequence=0, timer;
     schedulePreview = () => {
       const sequence=++previewSequence; clearTimeout(timer); status.textContent='Updating preview…';

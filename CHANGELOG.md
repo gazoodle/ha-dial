@@ -1,5 +1,10 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b22
+
+- A hand-built page can now go past 8 items in a style that scrolls or pages: List, Grid, Snake, Compass, Ribbon, Rolodex or Pager. Its style gallery offers only those while it holds more than 8.
+- Explorer now offers a camera style and picture treatment for its cameras and images.
+
 ## 2026.10.1-b21
 
 - New Explorer: an item you add to any page, beside your own items and pages, that fills itself from your floors, areas and entities. It can cover the whole home, one floor or one area. Pages of up to 8 items can use any navigation style; longer ones use a style that scrolls or pages. Each page can have its own look, or Random shows off every style. The panel lists what was left out and why, and locks, alarms and doors always ask for confirmation.
