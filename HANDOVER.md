@@ -24,7 +24,7 @@ inspected contact sheets. The owner reviews sheets by phone; an approved sheet c
 - On the Dial: peak heap with v5 scenes, draw time for the 490-segment worst case (NAV-LIST in Crisp),
   rotary feel on faces, and how Crisp's moiré looks on the panel. Only the owner can judge the last two.
 - Cameras became tree entities in integration b12, b13 added the preview zoom slider, and b17 added colour, mono,
-  tint and dither for every picture. b16 is the build on HA, copied on 2026-10-31 and its files verified, HA restart pending; firmware unchanged at b5. Panning and
+  tint and dither for every picture. b17 is the build on HA, copied on 2026-10-31 and its files verified, HA restart pending; firmware unchanged at b5. Panning and
   the panel's column growth have only run against test stubs, so check them in a real browser.
 - Camera and Photo faces and the frame transport are implemented in integration b11 and firmware b5,
   deployed 2026-10-31 with approval (b5 reported by the Dial, b11 files verified) but not activated:
