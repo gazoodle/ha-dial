@@ -20,6 +20,8 @@ CONTROL_TYPES = {
     "input_select": ("selector", "CTL-SELECTOR-INSTRUMENT", "mdi:format-list-bulleted"),
     "number": ("number", "CTL-SELECTOR-INSTRUMENT", "mdi:numeric"),
     "input_number": ("number", "CTL-SELECTOR-INSTRUMENT", "mdi:numeric"),
+    "camera": ("camera", "CAM-PORTAL", "mdi:cctv"),
+    "image": ("camera", "CAM-PORTAL", "mdi:image"),
     "button": ("button", "CTL-SCENE-INSTRUMENT", "mdi:gesture-tap"),
     "input_button": ("button", "CTL-SCENE-INSTRUMENT", "mdi:gesture-tap"),
 }
@@ -51,7 +53,8 @@ IMAGE_STYLES = CAMERA_STYLES | {"WAT-PHOTOS"}
 DATA_STYLES = {f"DAT-{name}" for name in ("AREA", "RADAR", "BANDS", "SPARK")}
 # Faces resolve time and sources in HA. Only chronographs show seconds, so only they tick each second.
 FACE_STYLES = CHRONOGRAPH_STYLES | AMBIENT_STYLES | WATCH_STYLES | DATA_STYLES | CAMERA_STYLES
-PAGE_STYLES = NAV_STYLES | FACE_STYLES
+# A camera is an entity in the tree, as a light is, so its faces are that entity's styles (2026-10-31).
+PAGE_STYLES = NAV_STYLES | (FACE_STYLES - CAMERA_STYLES)
 # The sources each face reads, and how many metrics it shows: the editor asks for these and no others.
 CLOCK_SOURCES = ("timezone",)
 FACE_SOURCES = {
@@ -62,9 +65,9 @@ FACE_SOURCES = {
     "CHR-WORLDTIMER": {"fields": (*CLOCK_SOURCES, "world_zones", "reserve_entity"), "metrics": 0},
     "AMB-STATUS": {"fields": (*CLOCK_SOURCES, "weather_entity"), "metrics": 3},
     "WAT-PHOTOS": {"fields": (*CLOCK_SOURCES, "image_entity", "refresh_entity", "weather_entity"), "metrics": 0},
-    "CAM-PORTAL": {"fields": ("image_entity", "refresh_entity"), "metrics": 0},
-    "CAM-CINEMA": {"fields": ("image_entity", "refresh_entity"), "metrics": 0},
-    "CAM-RADAR": {"fields": ("image_entity", "refresh_entity", "detection_entity"), "metrics": 0},
+    "CAM-PORTAL": {"fields": ("refresh_entity", "action_entities"), "metrics": 0},
+    "CAM-CINEMA": {"fields": ("refresh_entity",), "metrics": 0},
+    "CAM-RADAR": {"fields": ("refresh_entity", "detection_entity"), "metrics": 0},
     "WAT-MODULAR": {"fields": CLOCK_SOURCES, "metrics": 3},
     "WAT-RINGS": {"fields": CLOCK_SOURCES, "metrics": 3},
     "DAT-AREA": {"fields": (*CLOCK_SOURCES, "history_hours"), "metrics": 1},
@@ -79,6 +82,8 @@ LEVEL_DOMAINS = {"light", "cover", "climate", "media_player", "fan", "number", "
 
 
 def control_styles(domain: str) -> set[str]:
+    if domain in {"camera", "image"}:
+        return set(CAMERA_STYLES)
     base = CONTROL_TYPES[domain][1].removesuffix("-INSTRUMENT")
     # Alternative graphics differ only as instruments; the shapes ignore the graphic, so offer them once.
     graphics = set()

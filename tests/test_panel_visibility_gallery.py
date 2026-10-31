@@ -121,7 +121,7 @@ def test_gallery_uses_domain_styles_and_real_scene(integration):
             "id": 2, "page": {"title": "Home"}, "theme": "ember",
         })
         navigation = integration.connection.send_result.call_args.args[1]
-        assert len(navigation["styles"]) == 34
+        assert len(navigation["styles"]) == 31
         assert len(navigation["styles"]["NAV-ORBIT"]["regions"]) >= 4
         await integration.code._ws_gallery(integration.hass, integration.connection, {
             "id": 3, "page": {"title": "Home", "appearance": {"background": "#123456"}},

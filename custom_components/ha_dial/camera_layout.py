@@ -34,7 +34,7 @@ def _warn(c: Canvas, image: dict | None, y, under=None) -> None:
 
 
 def cam_portal(c, clock, o):
-    """A clean snapshot, its age, and the page's first destinations as direct actions."""
+    """A clean snapshot, its age, and up to two bound entities as direct actions."""
     image = _picture(c, clock, 120, 98, 144, 112, 16)
     _status_pill(c, image)
     if image:

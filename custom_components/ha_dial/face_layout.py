@@ -309,7 +309,7 @@ FACES = {
 
 
 def _direct_actions(c: Canvas, items: list, selected: int) -> list[dict]:
-    """The Portal's first two destinations as buttons, so its actions are whatever the page binds."""
+    """The Portal's bound entities as buttons; pressing one opens that entity's own control."""
     from .navigation_layout import icon_for
 
     regions = []

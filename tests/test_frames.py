@@ -21,8 +21,8 @@ def png(colour=RED, size=(300, 200)):
     return out.getvalue()
 
 
-def page(style="CAM-PORTAL", **clock):
-    return {"id": "gate", "kind": "menu", "title": "Example", "items": [], "style": style, "clock": {"image_entity": "camera.example", **clock}}
+def page(style="CAM-PORTAL", entity="camera.example", **clock):
+    return {"id": "control:" + entity, "kind": "control", "entity_id": entity, "title": "Example", "items": [], "style": style, "clock": clock}
 
 
 @pytest.fixture
@@ -109,6 +109,7 @@ def test_capture_on_entry_and_events_never_on_republish(integration, dial, camer
         await settle()
         assert len(camera.calls) == 2
         frames.request_frame(hass, "dial", {"id": "nav", "style": "NAV-ORBIT"}, publish)
+        assert frames.frame_key({**view, "entity_id": "light.example"}) is None
         frames.request_frame(hass, "dial", view, publish)  # Coming back counts as entering.
         await settle()
         assert len(camera.calls) == 3
@@ -118,12 +119,19 @@ def test_capture_on_entry_and_events_never_on_republish(integration, dial, camer
 
 def test_camera_state_is_not_a_trigger_but_an_image_entity_is(integration, dial):
     clock = dial.load("chronograph")
+    frames = dial.load("frames")
     # A camera's state event fires when its access token rotates, which would be a hidden timer.
-    assert clock.source_entities(page()) == set()
-    assert clock.source_entities(page(image_entity="image.example")) == {"image.example"}
+    frames.mark_stale(integration.hass, "camera.example")
+    assert "camera.example" not in integration.hass.data["ha_dial"].get("frame_dirty", set())
+    frames.mark_stale(integration.hass, "image.example")
+    assert "image.example" in integration.hass.data["ha_dial"]["frame_dirty"]
     assert clock.source_entities(page(refresh_entity="event.bell", detection_entity="binary_sensor.person")) == {"event.bell", "binary_sensor.person"}
+    photos = {"style": "WAT-PHOTOS", "clock": {"image_entity": "image.example"}}
+    assert clock.source_entities(photos) == {"image.example"}
     with pytest.raises(ValueError):
         clock.validate_clock({"image_entity": "light.example"})
+    with pytest.raises(ValueError):
+        clock.validate_clock({"action_entities": ["light.a", "light.b", "light.c"]})
 
 
 def test_failure_keeps_the_last_picture_and_does_not_retry_in_a_loop(integration, dial, camera, caplog):
@@ -184,7 +192,7 @@ def test_held_frames_are_bounded_and_scenes_declare_version_six(integration, dia
     frames, scene = dial.load("frames"), dial.load("scene")
     hass = integration.hass
     for index in range(frames.KEEP_FRAMES + 3):
-        view = page(image_entity=f"camera.example_{index}")
+        view = page(entity=f"camera.example_{index}")
         asyncio.run(frames.capture(hass, view, frames.frame_key(view)))
     assert len(hass.data["ha_dial"]["frames"]) == frames.KEEP_FRAMES
     view = page()
@@ -195,3 +203,80 @@ def test_held_frames_are_bounded_and_scenes_declare_version_six(integration, dia
     assert frames.scene_frames(hass, drawn).keys() == {str(clock["image"]["crc"])}
     missing = scene.compile_scene({**view, "_clock": {**clock, "image": {"error": "NO IMAGE"}}})
     assert missing["version"] == 5 and frames.scene_frames(hass, missing) == {}
+
+
+def camera_definition(integration, dial, **clock):
+    definition = dial.load("definition")
+    pages = [{"id": "root", "title": "Home", "entities": [{"entity_id": "camera.gate", "style": "CAM-PORTAL", "clock": clock}, "light.example"]}]
+    return definition.build_definition(integration.hass, pages, "ember")
+
+
+def test_a_camera_is_an_entity_and_its_faces_are_not_page_styles(integration, dial):
+    catalogue, definition = dial.load("catalogue"), dial.load("definition")
+    assert catalogue.CONTROL_TYPES["camera"][1] == "CAM-PORTAL"
+    assert catalogue.control_styles("camera") == catalogue.control_styles("image") == catalogue.CAMERA_STYLES
+    assert not catalogue.PAGE_STYLES & catalogue.CAMERA_STYLES
+    assert "WAT-PHOTOS" in catalogue.PAGE_STYLES
+    with pytest.raises(ValueError):
+        definition.build_definition(integration.hass, [{"id": "root", "title": "Home", "style": "CAM-PORTAL"}], "ember")
+    with pytest.raises(ValueError):
+        camera_definition(integration, dial, action_entities=["camera.other"])
+    view = dial.load("navigator").Navigator(definition=camera_definition(integration, dial)).input("press")
+    assert (view["kind"], view["style"], view["entity_id"]) == ("control", "CAM-PORTAL", "camera.gate")
+    drawn = dial.load("scene").compile_scene({**view, "_clock": {"hour": 1, "minute": 2, "date": "X", "image": {"error": "NO IMAGE"}}})
+    assert {region["id"] for region in drawn["regions"]} == {"back", "home"}
+
+
+def test_a_camera_button_opens_its_control_and_back_returns_to_the_camera(integration, dial):
+    nav = dial.load("navigator").Navigator(definition=camera_definition(integration, dial, action_entities=["light.example", "switch.example"]))
+    camera = nav.input("press")
+    assert [item["id"] for item in camera["items"]] == ["light.example", "switch.example"]
+    assert nav.input("rotate_right")["selected"] == 1
+    assert nav.input("rotate_right")["selected"] == 0
+    opened = nav.input("press")
+    assert opened["entity_id"] == "light.example"
+    assert nav.previous()["entity_id"] == "camera.gate"
+    assert nav.input("back")["entity_id"] == "camera.gate"
+    assert nav.input("touch", "switch.example")["entity_id"] == "switch.example"
+    assert nav.input("home")["kind"] == "menu" and nav.control_parent is None
+    nav.input("press")
+    assert nav.input("back")["kind"] == "menu"
+
+
+def test_opening_a_control_from_a_camera_does_not_operate_it(integration, dial, camera):
+    runtime = dial.load("runtime")
+    hass = integration.hass
+    definition = camera_definition(integration, dial, action_entities=["light.example"])
+
+    async def run():
+        await runtime._install_definition(hass, "dial", {"pages": []}, definition)
+        await runtime._input(hass, "dial", "press")
+        for task in list(hass.data["ha_dial"].get("frame_tasks", {}).values()):
+            await task
+        opened = await runtime._input(hass, "dial", "press")
+        assert opened["entity_id"] == "light.example"
+        light_calls = [call for call in hass.services.async_call.call_args_list if call.args[0] == "light"]
+        assert not light_calls, "pressing a camera's button must only open the control"
+        await runtime._input(hass, "dial", "press")
+        assert any(call.args[0] == "light" for call in hass.services.async_call.call_args_list)
+        hass.data["ha_dial"]["definition_unsubs"].pop("dial")()
+
+    asyncio.run(run())
+
+
+def test_the_gallery_offers_a_cameras_styles_with_its_picture(integration, dial, camera):
+    hass, connection = integration.hass, integration.connection
+
+    async def run():
+        await integration.code._ws_gallery(hass, connection, {
+            "id": 1, "page": {"title": "Home", "entities": ["camera.gate"]}, "entity": "camera.gate", "theme": "ember",
+        })
+
+    asyncio.run(run())
+    connection.send_error.assert_not_called()
+    result = connection.send_result.call_args.args[1]
+    catalogue = dial.load("catalogue")
+    assert set(result["styles"]) == catalogue.CAMERA_STYLES
+    for scene in result["styles"].values():
+        crc = next(element["crc"] for element in scene["elements"] if element["op"] == "image")
+        assert str(crc) in result["frames"]

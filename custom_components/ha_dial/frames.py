@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from io import BytesIO
 
-from .catalogue import IMAGE_STYLES
+from .catalogue import CAMERA_STYLES, IMAGE_STYLES
 from .const import DOMAIN
 from .scene import view_theme
 
@@ -109,7 +109,12 @@ def render_frame(raw: bytes, spec: dict, theme: dict, crisp: bool) -> bytes:
 def frame_key(view: dict) -> tuple | None:
     """What makes a frame distinct; a theme or mode change needs a new treatment."""
     style = view.get("style")
-    entity = view.get("clock", {}).get("image_entity")
+    if style in CAMERA_STYLES:
+        entity = view.get("entity_id", "")
+        if entity.partition(".")[0] not in {"camera", "image"}:
+            return None
+    else:
+        entity = view.get("clock", {}).get("image_entity")
     if style not in IMAGE_STYLES or not entity:
         return None
     theme, options = view_theme(view)
@@ -184,6 +189,9 @@ def request_frame(hass, device: str, view: dict, publish) -> None:
 
 
 def mark_stale(hass, entity: str) -> None:
+    # A camera's own state event fires when its access token rotates, so it would act as a timer.
+    if entity.startswith("camera."):
+        return
     hass.data[DOMAIN].setdefault("frame_dirty", set()).add(entity)
 
 

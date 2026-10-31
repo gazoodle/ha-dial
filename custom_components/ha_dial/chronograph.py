@@ -10,8 +10,9 @@ from .frames import resolve_frame
 
 CLOCK_FIELDS = {
     "timezone", "world_zones", "moon_entity", "reserve_entity", "weather_entity", "metrics", "history_hours",
-    "image_entity", "refresh_entity", "detection_entity",
+    "image_entity", "refresh_entity", "detection_entity", "action_entities",
 }
+MAX_ACTIONS = 2
 METRIC_FIELDS = {"entity_id", "label", "minimum", "maximum"}
 MAX_METRICS = 6
 DEFAULT_ZONES = ["UTC", "Europe/London", "America/New_York", "Asia/Tokyo"]
@@ -62,6 +63,12 @@ def validate_clock(value):
         entity = value.get(field, "")
         if not isinstance(entity, str) or entity and not re.fullmatch(r"[a-z_]+\.[a-z0-9_]{1,248}", entity):
             raise ValueError(f"{field} needs an HA entity")
+    actions = value.get("action_entities", [])
+    if not isinstance(actions, list) or len(actions) > MAX_ACTIONS:
+        raise ValueError(f"A camera takes at most {MAX_ACTIONS} action entities")
+    for entity in actions:
+        if not isinstance(entity, str) or not re.fullmatch(r"[a-z_]+\.[a-z0-9_]{1,248}", entity):
+            raise ValueError("Camera actions need HA entities")
     metrics = value.get("metrics", [])
     if not isinstance(metrics, list) or len(metrics) > MAX_METRICS:
         raise ValueError(f"Faces take at most {MAX_METRICS} metrics")

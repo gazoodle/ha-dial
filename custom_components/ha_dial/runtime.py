@@ -97,10 +97,15 @@ async def _input(
             return _navigator(hass, device).current()
         sequences[device] = input_sequence
     navigator = _navigator(hass, device)
-    was_control = navigator.current().get("kind") == "control"
+    before = navigator.current()
+    was_control = before.get("kind") == "control"
     if action == "ready":
         _sync_control(hass, navigator)
     view = navigator.input(action, item, value)
+    # A camera's button opens another control with this same press. That press chose the control and
+    # must not also operate it: without this, opening a light from a camera would toggle the light.
+    if was_control and view.get("id") != before.get("id"):
+        was_control = False
     if _is_preview(device) and navigator.control is not None:
         if was_control:
             preview_feedback(navigator.control, action, item)
@@ -278,8 +283,12 @@ def _watch_definition_entities(
     forget_history(hass)
     entities = {item["entity_id"] for item in leaf_items(definition["tree"])}
     faces = [view for view in state["navigators"][device].views.values() if view.get("style") in FACE_STYLES]
+    # A camera in the tree is a face too: its sources and age need the same events and minute tick.
+    leaves = list(leaf_items(definition["tree"]))
+    faces += [item for item in leaves if item.get("style") in FACE_STYLES]
     for view in faces:
         entities |= source_entities(view)
+    entities |= {action["entity_id"] for item in leaves for action in item.get("action_items", [])}
     # Seconds are only pushed for faces that show them; every other face redraws on the minute.
     seconds = any(view["style"] in CHRONOGRAPH_STYLES for view in faces)
 

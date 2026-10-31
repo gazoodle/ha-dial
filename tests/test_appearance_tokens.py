@@ -83,7 +83,7 @@ def test_styles_for_a_domain_are_all_different(dial, raster):
         drawings = {
             style: json.dumps(
                 scene.compile_scene(
-                    {"kind": "control", "id": "c", "domain": domain, "title": "Example", "style": style, "appearance": {"raster": raster}, **LEVEL}
+                    {"kind": "control", "id": "c", "domain": domain, "title": "Example", "style": style, "appearance": {"raster": raster}, "_clock": CLOCK, **LEVEL}
                 )["elements"]
             )
             for style in styles

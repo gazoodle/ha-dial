@@ -1,5 +1,11 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b12
+
+- **Breaking: a page saved with a camera style no longer loads.** Add the camera to the page as an entity instead; there is no migration.
+- Cameras and image entities are now added to the tree like any other entity, with Portal, Cinema and Radar as their styles.
+- Portal's two action buttons are entities you bind, and each opens that entity's own control, with Back returning to the camera. Opening a control never operates it.
+
 ## 2026.10.1-b11
 
 - **Requires firmware 2026.10.1-b5 for pictures.** Pages without a picture still work on b4.

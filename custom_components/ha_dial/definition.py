@@ -76,6 +76,7 @@ def build_definition(hass, pages: list, default_theme: str) -> dict:
                 raise ValueError(f"Page {page_id} must select a supported HA entity")
             profile, style, icon = CONTROL_TYPES[entity_id.partition(".")[0]]
             state = hass.states.get(entity_id)
+            action_items = [_action_item(hass, action) for action in options.get("clock", {}).get("action_entities", [])]
             label = state.attributes.get("friendly_name") if state else None
             items.append(
                 {
@@ -90,6 +91,7 @@ def build_definition(hass, pages: list, default_theme: str) -> dict:
                     "label_override": bool(options.get("label")),
                     "profile": profile,
                     "style": options.get("style", style),
+                    **({"action_items": action_items} if action_items else {}),
                 }
             )
         if len(items) > 8:
@@ -115,6 +117,23 @@ def build_definition(hass, pages: list, default_theme: str) -> dict:
     if sum(1 for _ in _page_ids(definition["tree"])) != len(pages):
         raise ValueError("Every page must connect to the root")
     return definition
+
+
+def _action_item(hass, entity_id: str) -> dict:
+    """A camera's action button: the same item a page would hold, so it opens the same control."""
+    domain = entity_id.partition(".")[0]
+    if domain not in CONTROL_TYPES or domain in {"camera", "image"}:
+        raise ValueError(f"A camera can't use {entity_id} as an action")
+    profile, style, icon = CONTROL_TYPES[domain]
+    state = hass.states.get(entity_id)
+    return {
+        "id": entity_id,
+        "label": (state.attributes.get("friendly_name") if state else None) or entity_id.split(".", 1)[1].replace("_", " ").title(),
+        "icon": (state.attributes.get("icon", icon) if state else icon),
+        "entity_id": entity_id,
+        "profile": profile,
+        "style": style,
+    }
 
 
 def _page_ids(page: dict):

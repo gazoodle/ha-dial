@@ -71,6 +71,8 @@ class Navigator:
                         "css",
                         "confirm",
                         "label_override",
+                        "clock",
+                        "action_items",
                     )
                     if key in child
                 }
@@ -115,6 +117,8 @@ class Navigator:
         self.view_id = self.root_id
         self.selected = 0
         self.control: dict | None = None
+        # The camera a control was opened from, so that Back returns to it and not to the page.
+        self.control_parent: dict | None = None
         self.clock_snapshot: dict | None = None
 
     def _items(self, page_id=None):
@@ -145,6 +149,8 @@ class Navigator:
         return view
 
     def previous(self) -> dict | None:
+        if self.control_parent is not None:
+            return deepcopy(self.control_parent)
         page = deepcopy(self.views[self.view_id])
         page["items"] = self._items()
         if self.control is not None:
@@ -178,6 +184,7 @@ class Navigator:
             return self.current()
         if action == "home":
             self.control = None
+            self.control_parent = None
             self.view_id, self.selected = self.root_id, 0
             return self.current()
         if action == "back":
@@ -188,6 +195,8 @@ class Navigator:
                 if action in {"press", "rotate_left", "rotate_right", "touch"}:
                     self.control = None
                 return self.current()
+            if self.control.get("items"):
+                return self._camera_input(action, item_id)
             if not self.control["available"]:
                 return self.current()
             if self.control.get("confirmation"):
@@ -290,6 +299,25 @@ class Navigator:
             self._activate(items[self.selected])
         return self.current()
 
+    def _camera_input(self, action: str, item_id: str | None) -> dict:
+        """A camera's buttons work like a menu: turn to choose, press to open that control."""
+        items = self.control["items"]
+        if action in {"rotate_left", "rotate_right"}:
+            step = -1 if action == "rotate_left" else 1
+            self.control["selected"] = (self.control.get("selected", 0) + step) % len(items)
+            return self.current()
+        if action == "press":
+            target = items[self.control.get("selected", 0) % len(items)]
+        elif action == "touch":
+            target = next((item for item in items if item["id"] == item_id), None)
+        else:
+            target = None
+        if target is not None:
+            parent = self.control
+            self._activate(target)
+            self.control_parent = parent
+        return self.current()
+
     def _activate(self, item: dict) -> None:
         if item.get("settings"):
             self.control = {
@@ -317,7 +345,7 @@ class Navigator:
             self.control = {
                 **{
                     key: item[key]
-                    for key in ("appearance", "css", "confirm", "label_override")
+                    for key in ("appearance", "css", "confirm", "label_override", "clock")
                     if key in item
                 },
                 "appearance": {
@@ -360,13 +388,13 @@ class Navigator:
                 "available": True,
                 "pending": False,
                 "back": True,
-                "items": [],
+                "items": item.get("action_items", []),
                 "selected": 0,
             }
 
     def _back(self) -> None:
         if self.control is not None:
-            self.control = None
+            self.control, self.control_parent = self.control_parent, None
             return
         view = self.views[self.view_id]
         if parent := view.get("parent"):

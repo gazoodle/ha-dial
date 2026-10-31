@@ -539,9 +539,10 @@ Page styles cover navigation (**Orbit**, **Pointer**, **Rolodex**, **Petals**, *
 **Reflections**) and data (**Area**, **Radar**, **Bands**, **Spark**). Each domain has its own **Instrument**
 graphic and big-type **Editorial**; anything with a level also offers **Column**, **Segment** and **Tumbler**.
 The entity selector offers light, switch, cover, climate, media player, fan, alarm, lock, vacuum,
-sensor, binary sensor, weather, timer, calendar, scene, select/input select, number/input number and
+sensor, binary sensor, weather, timer, calendar, camera, image, scene, select/input select, number/input number and
 button/input button. Sensor instruments include energy, air quality, water, vehicle and data.
-Camera faces (**Portal**, **Cinema**, **Radar**) and watch **Photos** show a camera or image entity.
+Add a camera or image entity to a page like any other entity; **Portal**, **Cinema** and **Radar** are its
+styles. The watch face **Photos** is a page style that shows a bound camera or image entity.
 
 Faces show real sources only. The page's Options tab asks for the sources its style reads: time zone,
 weather, a history window, and metric sensors with an optional maximum, which Rings and Bands fill
@@ -551,8 +552,8 @@ only chronographs update each second.
 
 A picture is captured when you enter its page and when a bound entity fires: pick a motion or doorbell
 entity as **New picture when this changes**, or use an image entity, which updates itself. Otherwise it
-stays as captured and shows its age. Portal offers the page's first two destinations as direct action
-buttons. Radar shows a bound detection sensor's state, and its confidence if the sensor reports one; it
+stays as captured and shows its age. Portal can show two bound entities as action
+buttons: turn to choose, press to open that entity's control, Back to return. Radar shows a bound detection sensor's state, and its confidence if the sensor reports one; it
 draws no detection boxes. The Dial must be able to reach HA's internal URL over plain HTTP. If it can't,
 the card reports why and the page shows NO LINK. Crisp renders pictures as a two-colour dither.
 

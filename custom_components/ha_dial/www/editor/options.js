@@ -1,4 +1,4 @@
-import { CONTROL_STYLES, CRISP_DEFAULTS, DEFAULTS, DEFAULT_STYLES, FACE_SOURCES, NAV_STYLES, SETTINGS, STYLE_SETTINGS } from './catalogue.js';
+import { CONTROL_STYLES, CRISP_DEFAULTS, DEFAULTS, DEFAULT_STYLES, DOMAINS, FACE_SOURCES, NAV_STYLES, SETTINGS, STYLE_SETTINGS } from './catalogue.js';
 import { renderScene } from '../scene.js';
 
 const number = (min, max, step = 1) => ({ number: { min, max, step, mode: 'box' } });
@@ -71,16 +71,18 @@ export function openOptions(editor, pageId, entityId) {
   let options;
   try { options = {...page.appearance, ...declarations(page.css), ...item.appearance, ...declarations(item.css)}; }
   catch (reason) { error.textContent = reason.message; options = {...item.appearance}; }
-  let draft = {...item,...options,clock_timezone:item.clock?.timezone || '',clock_world_zones:(item.clock?.world_zones || ['UTC','Europe/London','America/New_York','Asia/Tokyo']).join(', '),clock_moon_entity:item.clock?.moon_entity || '',clock_reserve_entity:item.clock?.reserve_entity || '',clock_weather_entity:item.clock?.weather_entity || '',clock_history_hours:item.clock?.history_hours ?? 24,clock_image_entity:item.clock?.image_entity || '',clock_refresh_entity:item.clock?.refresh_entity || '',clock_detection_entity:item.clock?.detection_entity || '',...Object.fromEntries((item.clock?.metrics || []).flatMap((metric,index)=>[[`metric_${index}_entity`,metric.entity_id],[`metric_${index}_label`,metric.label || ''],[`metric_${index}_minimum`,metric.minimum],[`metric_${index}_maximum`,metric.maximum]])),confirm:item.confirm ?? ['lock','alarm_control_panel','scene','button','input_button'].includes(domain), conditions:item.conditions || []};
+  let draft = {...item,...options,clock_timezone:item.clock?.timezone || '',clock_world_zones:(item.clock?.world_zones || ['UTC','Europe/London','America/New_York','Asia/Tokyo']).join(', '),clock_moon_entity:item.clock?.moon_entity || '',clock_reserve_entity:item.clock?.reserve_entity || '',clock_weather_entity:item.clock?.weather_entity || '',clock_history_hours:item.clock?.history_hours ?? 24,clock_image_entity:item.clock?.image_entity || '',clock_action_0:item.clock?.action_entities?.[0] || '',clock_action_1:item.clock?.action_entities?.[1] || '',clock_refresh_entity:item.clock?.refresh_entity || '',clock_detection_entity:item.clock?.detection_entity || '',...Object.fromEntries((item.clock?.metrics || []).flatMap((metric,index)=>[[`metric_${index}_entity`,metric.entity_id],[`metric_${index}_label`,metric.label || ''],[`metric_${index}_minimum`,metric.minimum],[`metric_${index}_maximum`,metric.maximum]])),confirm:item.confirm ?? ['lock','alarm_control_panel','scene','button','input_button'].includes(domain), conditions:item.conditions || []};
   const metricSettings = (metric) => { const metrics = Array.from({length:6},(_,index)=>index).filter(index=>draft[`metric_${index}_entity`]).map(metric); return metrics.length ? {metrics} : {}; };
-  const clockSettings = () => ({...(draft.clock_timezone ? {timezone:draft.clock_timezone.trim()} : {}),world_zones:draft.clock_world_zones.split(',').map(zone=>zone.trim()).filter(Boolean),...(draft.clock_moon_entity ? {moon_entity:draft.clock_moon_entity} : {}),...(draft.clock_reserve_entity ? {reserve_entity:draft.clock_reserve_entity} : {}),...(draft.clock_weather_entity ? {weather_entity:draft.clock_weather_entity} : {}),...(draft.clock_image_entity ? {image_entity:draft.clock_image_entity} : {}),...(draft.clock_refresh_entity ? {refresh_entity:draft.clock_refresh_entity} : {}),...(draft.clock_detection_entity ? {detection_entity:draft.clock_detection_entity} : {}),...(Number.isInteger(draft.clock_history_hours) && draft.clock_history_hours !== 24 ? {history_hours:draft.clock_history_hours} : {}),...metricSettings(index=>({entity_id:draft[`metric_${index}_entity`],...(draft[`metric_${index}_label`] ? {label:draft[`metric_${index}_label`]} : {}),...(Number.isFinite(draft[`metric_${index}_minimum`]) ? {minimum:draft[`metric_${index}_minimum`]} : {}),...(Number.isFinite(draft[`metric_${index}_maximum`]) ? {maximum:draft[`metric_${index}_maximum`]} : {})}))});
+  const clockSettings = () => ({...(draft.clock_timezone ? {timezone:draft.clock_timezone.trim()} : {}),...(domain ? {} : {world_zones:draft.clock_world_zones.split(',').map(zone=>zone.trim()).filter(Boolean)}),...(draft.clock_action_0 || draft.clock_action_1 ? {action_entities:[draft.clock_action_0,draft.clock_action_1].filter(Boolean)} : {}),...(draft.clock_moon_entity ? {moon_entity:draft.clock_moon_entity} : {}),...(draft.clock_reserve_entity ? {reserve_entity:draft.clock_reserve_entity} : {}),...(draft.clock_weather_entity ? {weather_entity:draft.clock_weather_entity} : {}),...(draft.clock_image_entity ? {image_entity:draft.clock_image_entity} : {}),...(draft.clock_refresh_entity ? {refresh_entity:draft.clock_refresh_entity} : {}),...(draft.clock_detection_entity ? {detection_entity:draft.clock_detection_entity} : {}),...(Number.isInteger(draft.clock_history_hours) && draft.clock_history_hours !== 24 ? {history_hours:draft.clock_history_hours} : {}),...metricSettings(index=>({entity_id:draft[`metric_${index}_entity`],...(draft[`metric_${index}_label`] ? {label:draft[`metric_${index}_label`]} : {}),...(Number.isFinite(draft[`metric_${index}_minimum`]) ? {minimum:draft[`metric_${index}_minimum`]} : {}),...(Number.isFinite(draft[`metric_${index}_maximum`]) ? {maximum:draft[`metric_${index}_maximum`]} : {})}))});
   for (const field of [form, appearanceForm, conditionForm]) { field.hass = editor._hass; field.data = draft; }
   const sourceSelectors = {timezone:['clock_timezone',{text:{}}],world_zones:['clock_world_zones',{text:{}}],moon_entity:['clock_moon_entity',{entity:{domain:'sensor'}}],reserve_entity:['clock_reserve_entity',{entity:{domain:'sensor'}}],weather_entity:['clock_weather_entity',{entity:{domain:'weather'}}],history_hours:['clock_history_hours',number(1,168)],image_entity:['clock_image_entity',{entity:{domain:['camera','image']}}],refresh_entity:['clock_refresh_entity',{entity:{}}],detection_entity:['clock_detection_entity',{entity:{}}]};
   const sourceFields = () => {
-    const sources = !domain && FACE_SOURCES[draft.style || item.style];
+    const sources = FACE_SOURCES[draft.style || item.style || (domain ? DEFAULT_STYLES[domain] : '')];
     if (!sources) return [];
+    const actionSelector = {entity:{domain:DOMAINS.filter((name)=>!['camera','image'].includes(name))}};
     return [
-      ...sources.fields.map((field)=>({name:sourceSelectors[field][0],selector:sourceSelectors[field][1]})),
+      ...sources.fields.filter((field)=>field !== 'action_entities').map((field)=>({name:sourceSelectors[field][0],selector:sourceSelectors[field][1]})),
+      ...(sources.fields.includes('action_entities') ? [{name:'clock_action_0',selector:actionSelector},{name:'clock_action_1',selector:actionSelector}] : []),
       ...Array.from({length:sources.metrics},(_,index)=>[{name:`metric_${index}_entity`,selector:{entity:{}}},{name:`metric_${index}_label`,selector:{text:{}}},{name:`metric_${index}_minimum`,selector:number(-100000,100000,0.1)},{name:`metric_${index}_maximum`,selector:number(-100000,100000,0.1)}]).flat(),
     ];
   };
@@ -89,7 +91,7 @@ export function openOptions(editor, pageId, entityId) {
     {name:'icon',selector:{icon:{}}},
     ...sourceFields(),
     ...(!editor.panelMode ? [{name:'style',selector:select(domain ? CONTROL_STYLES[domain] : NAV_STYLES)}, {name:'theme',selector:select(['ember','verdant','cobalt','rose','acid','alloy'])}] : []),
-    ...(domain && !['sensor','binary_sensor','weather','calendar'].includes(domain) ? [{name:'confirm',selector:{boolean:{}}}] : []),
+    ...(domain && !['sensor','binary_sensor','weather','calendar','camera','image'].includes(domain) ? [{name:'confirm',selector:{boolean:{}}}] : []),
   ];
   form.schema = pageFields();
   const currentStyle = () => draft.style || item.style || (domain ? DEFAULT_STYLES[domain] : 'NAV-ORBIT');
@@ -102,7 +104,7 @@ export function openOptions(editor, pageId, entityId) {
     field.computeLabel = (item) => {
       const metric = item.name.match(/^metric_(\d)_(\w+)$/);
       if (metric) return `Metric ${Number(metric[1]) + 1} ${{entity:'sensor',label:'label',minimum:'minimum',maximum:'maximum or goal'}[metric[2]]}`;
-      return ({clock_timezone:'Clock time zone (blank uses HA)',clock_world_zones:'World time zones (comma separated IANA names)',clock_moon_entity:'Moon phase sensor (Moonphase face)',clock_reserve_entity:'Power reserve sensor (Worldtimer, %)',clock_weather_entity:'Weather',clock_history_hours:'History to plot (hours)',clock_image_entity:'Picture (camera or image entity)',clock_refresh_entity:'New picture when this changes (optional)',clock_detection_entity:'Detection sensor (optional)'})[item.name] || labels[item.name] || item.name;
+      return ({clock_timezone:'Clock time zone (blank uses HA)',clock_world_zones:'World time zones (comma separated IANA names)',clock_moon_entity:'Moon phase sensor (Moonphase face)',clock_reserve_entity:'Power reserve sensor (Worldtimer, %)',clock_weather_entity:'Weather',clock_history_hours:'History to plot (hours)',clock_image_entity:'Picture (camera or image entity)',clock_refresh_entity:'New picture when this changes (optional)',clock_detection_entity:'Detection sensor (optional)',clock_action_0:'First action button (optional)',clock_action_1:'Second action button (optional)'})[item.name] || labels[item.name] || item.name;
     };
     field.computeHelper = (item) => ({icon:'Material Design Icons (bundled for offline rendering).',accent:'Optional #RRGGBB override.',background:'Optional #RRGGBB override.',text:'Optional #RRGGBB override.',confirm:'Locks and alarms always require confirmation; PIN-protected actions remain unavailable.'})[item.name];
   }
@@ -126,7 +128,7 @@ export function openOptions(editor, pageId, entityId) {
       }
       for (const name of ['accent','background','text','surface','secondary','quiet','grid']) if (styling[name] && !/^#[a-f\d]{6}$/i.test(styling[name])) throw new Error(`${name} needs a #RRGGBB colour.`);
       const updated = {...item,appearance:styling,conditions:draft.conditions || []};
-      if (!domain) updated.clock = clockSettings();
+      if (!domain || ['camera','image'].includes(domain)) updated.clock = clockSettings();
       delete updated.css;
       for (const name of [entityId?'label':'title','icon','style','theme','confirm']) {
         if (draft[name] !== undefined && draft[name] !== '') updated[name]=draft[name]; else delete updated[name];
@@ -231,7 +233,7 @@ export function openOptions(editor, pageId, entityId) {
     preview.append(previewTitle,canvas,status);
     const layout=document.createElement('div'); layout.className='appearance-layout'; layout.append(body,preview); body=layout;
     const currentPage = () => {
-      const updated = {...item,...draft,...(!domain ? {clock:clockSettings()} : {}),appearance:Object.fromEntries(appearanceKeys.filter(key=>draft[key] !== undefined && draft[key] !== '').map(key=>[key,draft[key]]))}; delete updated.css;
+      const updated = {...item,...draft,...(!domain || ['camera','image'].includes(domain) ? {clock:clockSettings()} : {}),appearance:Object.fromEntries(appearanceKeys.filter(key=>draft[key] !== undefined && draft[key] !== '').map(key=>[key,draft[key]]))}; delete updated.css;
       return entityId ? {...page,entities:entities.map(entry => (typeof entry === 'string' ? entry : entry.entity_id) === entityId ? updated : entry),lights:[]} : updated;
     };
     const children = editor.config.pages.filter(candidate => candidate.parent === pageId).map(({title,icon})=>({title,icon}));

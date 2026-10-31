@@ -2,7 +2,7 @@
 
 import math
 
-READ_ONLY = {"sensor", "binary_sensor", "weather", "calendar"}
+READ_ONLY = {"sensor", "binary_sensor", "weather", "calendar", "camera", "image"}
 CONFIRM = {"lock", "alarm_control_panel", "scene", "button", "input_button"}
 
 

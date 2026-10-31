@@ -315,6 +315,12 @@ Both 32 KiB buffers are released when no current scene needs them. Browsers get 
 base64 alongside the scene over the WebSocket. Rounded corners and Crisp's two-colour dither are baked
 in by HA, so the renderers only blit. The URL must be plain HTTP, because the Dial has no trust store.
 
+Cameras and image entities are tree entities whose styles are `CAM-*`; the watch face `WAT-PHOTOS` is a
+page style with a bound image source. Portal's two action entities behave as a small menu inside the
+camera's view: pressing one opens that entity's own control, keeping its confirmations and capability
+rules, and Back returns to the camera. HA only runs a command if the control pressed is still current
+afterwards, so the press that opens a control never operates it.
+
 Capture happens on entering a page and on events from a bound refresh entity or image entity. There is
 no timer, so a stale picture shows its age instead. A camera entity's own state is deliberately not a
 trigger, because it fires when the access token rotates. No detection boxes are drawn: nothing generic

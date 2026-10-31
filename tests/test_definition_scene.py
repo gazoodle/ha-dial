@@ -184,7 +184,7 @@ def test_mixed_domain_tree_and_template_defaults(dial):
     with pytest.raises(ValueError, match="supported HA entity"):
         definition.build_definition(
             hass,
-            [{"id": "root", "title": "Home", "entities": ["camera.demo"]}],
+            [{"id": "root", "title": "Home", "entities": ["update.demo"]}],
             "ember",
         )
     with pytest.raises(ValueError, match="lists"):
