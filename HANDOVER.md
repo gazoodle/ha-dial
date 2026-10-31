@@ -24,9 +24,9 @@ inspected contact sheets. The owner reviews sheets by phone; an approved sheet c
 - On the Dial: peak heap with v5 scenes, draw time for the 490-segment worst case (NAV-LIST in Crisp),
   rotary feel on faces, and how Crisp's moiré looks on the panel. Only the owner can judge the last two.
 - Cameras became tree entities in integration b12, b13 added the preview zoom slider, and b17 added colour, mono,
-  tint and dither for every picture. b18 is the build on HA, copied on 2026-10-31 and its files verified, HA restart pending; firmware unchanged at b5. Panning and
+  tint and dither for every picture. b19 is the build on HA, copied on 2026-10-31 and its files verified, HA restart pending; firmware unchanged at b5. Panning and
   the panel's column growth have only run against test stubs, so check them in a real browser.
-- b19 adds Snake navigation (`snake_path.py`), committed but not yet deployed. Its dialog has only run against test stubs;
+- b19 adds Snake navigation (`snake_path.py`). Its dialog has only run against test stubs;
   check it in the live panel, and turning through a long snake on the Dial. A snake too big for the space shrinks its
   path evenly while its icons keep their size, so sliders near their limits can appear to stop growing it.
 - Camera and Photo faces and the frame transport are implemented in integration b11 and firmware b5,
