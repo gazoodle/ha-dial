@@ -55,6 +55,15 @@ Snake is the owner's own navigation design: rows read top to bottom in alternati
 by one line. Twist rotates the whole snake as one, not each row or turn, and icons stay upright. Icons
 go per row or along the path, including on the returns. Why: the owner's direction, 2026-10-31.
 
+Explorer is an item, not a Dial mode: it takes one slot on a page, beside the owner's own items and
+pages. Why: on 2026-10-31 the owner ruled "it doesn't take over the dial". A generated page of 8 or fewer
+items can use any navigation style, and only a longer one is limited to styles that scroll or page. Why:
+the owner ruled that styles must not be ignored out of hand. Random is stable per page until Shuffle.
+
+Explorer never calls `async_should_expose`, because that saves a default and so changes exposure settings.
+Turning the dial never moves a cover that needs confirming, and Stop never waits on a prompt. Why: a
+garage door could move on an accidental turn, and stopping one is the safe action.
+
 Layouts declare the settings they read in `appearance.py`, and the dialog is generated from that
 table. `tests/test_appearance_tokens.py` fails on a declared setting with no effect, on two styles
 for a domain that draw the same scene, and on glyph masks in Crisp. Why: 31 of 72 slider positions

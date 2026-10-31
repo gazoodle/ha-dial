@@ -37,6 +37,7 @@ from .scene import compile_scene
 from .visibility import filter_definition
 
 _LOGGER = logging.getLogger(__name__)
+REGISTRY_SETTLE_SECONDS = 1
 
 
 def _navigator(hass: HomeAssistant, device: str) -> Navigator:
@@ -273,6 +274,47 @@ def _template_definition(result) -> dict:
     return definition
 
 
+def _watch_home(hass: HomeAssistant, device: str, rebuild) -> None:
+    """Rebuild an Explorer when the home's structure changes. A bulk change arrives as many events."""
+    from homeassistant.helpers import area_registry as ar
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+    from homeassistant.helpers import floor_registry as fr
+    from homeassistant.helpers.event import async_call_later
+    from homeassistant.helpers.start import async_at_started
+
+    pending = None
+
+    @callback
+    def fire(_now) -> None:
+        nonlocal pending
+        pending = None
+        rebuild(None)
+
+    @callback
+    def changed(_event=None) -> None:
+        nonlocal pending
+        if pending:
+            pending()
+        pending = async_call_later(hass, REGISTRY_SETTLE_SECONDS, fire)
+
+    cancels = [
+        hass.bus.async_listen(event, changed)
+        for event in (ar.EVENT_AREA_REGISTRY_UPDATED, dr.EVENT_DEVICE_REGISTRY_UPDATED, er.EVENT_ENTITY_REGISTRY_UPDATED, fr.EVENT_FLOOR_REGISTRY_UPDATED)
+    ]
+    # YAML and helper entities only appear as states, and most have appeared by the time HA has started.
+    if not hass.is_running:
+        cancels.append(async_at_started(hass, changed))
+
+    def unsubscribe() -> None:
+        if pending:
+            pending()
+        for cancel in cancels:
+            cancel()
+
+    hass.data[DOMAIN].setdefault("explorer_unsubs", {})[device] = unsubscribe
+
+
 def _watch_definition_entities(
     hass: HomeAssistant, device: str, definition: dict
 ) -> None:
@@ -424,6 +466,9 @@ async def _install_definition(
             return
         try:
             updated = _render_definition(hass, source)
+            # A registry event is often about something the Dial doesn't show, such as a firmware version.
+            if updated == state["definitions"].get(device):
+                return
             current = state["navigators"].get(device)
             replacement = Navigator(definition=updated)
             replacement.settings_enabled = state.get("settings_enabled", {}).get(
@@ -461,6 +506,10 @@ async def _install_definition(
 
     watch_condition_times(definition)
     watch_condition_entities(definition)
+    if unsubscribe_home := state.setdefault("explorer_unsubs", {}).pop(device, None):
+        unsubscribe_home()
+    if any("explorer" in page for page in source.get("pages", [])) and not source.get("template"):
+        _watch_home(hass, device, conditions_changed)
     if condition_sources:
         condition_trackers[device] = async_track_template_result(
             hass,

@@ -141,6 +141,7 @@ def integration(dial):
         async_track_time_change=lambda *args, **kwargs: lambda: None,
         async_track_template_result=track,
         async_track_time_interval=lambda *args: None,
+        async_call_later=lambda *args: lambda: None,
     )
     spec = importlib.util.spec_from_file_location(
         "dial_test",

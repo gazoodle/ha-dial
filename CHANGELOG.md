@@ -1,5 +1,10 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b21
+
+- New Explorer: an item you add to any page, beside your own items and pages, that fills itself from your floors, areas and entities. It can cover the whole home, one floor or one area. Pages of up to 8 items can use any navigation style; longer ones use a style that scrolls or pages. Each page can have its own look, or Random shows off every style. The panel lists what was left out and why, and locks, alarms and doors always ask for confirmation.
+- The Pager style's dots no longer overflow on a long page.
+
 ## 2026.10.1-b20
 
 - Turning the dial no longer moves a cover that needs confirming; opening and closing still ask. Stop on a cover now acts at once, so stopping a moving door never waits on a prompt.

@@ -23,7 +23,7 @@ def icon_name(view: dict, o: dict) -> str:
     return outline if o["icon-style"] == "outline" and outline in icon_names() else name
 
 
-def _value(c, view, o, y=116, size=None, under=None):
+def _value(c, view, o, y: float = 116, size=None, under=None):
     from .control_layout import value_element
 
     value_element(c, view, o, 120, y + o["value-offset"], size or o["value-size"], under)

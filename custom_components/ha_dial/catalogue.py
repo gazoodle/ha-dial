@@ -44,6 +44,8 @@ NAV_STYLES = {
         "SNAKE",  # The owner's own design (2026-10-31).
     )
 }
+# These show part of a long page and move through it; the others show every item at once.
+PAGED_STYLES = {"NAV-" + name for name in ("LIST", "GRID", "SNAKE", "COMPASS", "RIBBON", "ROLODEX", "PAGER")}
 READOUTS = {"ENERGY", "AIR", "VEHICLE", "WATER", "DATA"}
 CHRONOGRAPH_STYLES = {f"CHR-{name}" for name in ("TRICOMPAX", "WORLDTIMER", "SKELETON", "MOONPHASE")}
 AMBIENT_STYLES = {f"AMB-{name}" for name in ("SOLAR", "TYPOGRAPHIC", "ORBITAL", "STATUS")}

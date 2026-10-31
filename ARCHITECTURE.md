@@ -351,3 +351,11 @@ consuming a normal orbit destination. The selected settings view requests the co
 diagnostic interface; its geometry and network details belong to the existing firmware-owned
 maintenance UI exception. The local policy gates it even if HA sends a settings request.
 Disabling closes the page. Recovery input remains independent of this optional menu entry.
+
+## Explorer
+
+A page in a hand-built tree can carry `explorer` options, and `build_definition` then fills it from
+`explorer.py`. `read_home` is the only part that touches HA, and it never writes. Generated pages are
+ordinary tree nodes with stable ids, so the Navigator, visibility filter and scene code treat them like any
+other. The 8-item limit is a property of a style, in `PAGED_STYLES`, not of the tree. Registry events rebuild
+the definition after a one-second settle, and `Navigator.restore` returns to the nearest surviving page.

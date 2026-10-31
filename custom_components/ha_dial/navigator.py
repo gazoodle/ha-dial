@@ -303,13 +303,15 @@ class Navigator:
 
     def _camera_input(self, action: str, item_id: str | None) -> dict:
         """A camera's buttons work like a menu: turn to choose, press to open that control."""
-        items = self.control["items"]
+        control = self.control
+        assert control is not None
+        items = control["items"]
         if action in {"rotate_left", "rotate_right"}:
             step = -1 if action == "rotate_left" else 1
-            self.control["selected"] = (self.control.get("selected", 0) + step) % len(items)
+            control["selected"] = (control.get("selected", 0) + step) % len(items)
             return self.current()
         if action == "press":
-            target = items[self.control.get("selected", 0) % len(items)]
+            target = items[control.get("selected", 0) % len(items)]
         elif action == "touch":
             target = next((item for item in items if item["id"] == item_id), None)
         else:

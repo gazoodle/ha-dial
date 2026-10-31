@@ -121,13 +121,15 @@ def _window(path: _Path, stops: list[float], focus: int, o: dict, rest: int) -> 
     return range(low, high)
 
 
-def _strokes(path, stops, window, selected, radius, o, rotate) -> Snake:
+def _strokes(path, stops, window, selected, radius, o, rotate, tails=True) -> Snake:
     """The line between icons, stopping short of each so nothing has to blend through a ring."""
     snake = Snake()
     twist = o["snake-twist"]
     clearance = o["snake-clearance"]
     offsets = (0,) if o["snake-edge"] == "single" else (-o["snake-gap"], o["snake-gap"])
-    for n in range(max(window.start - 1, 0), min(window.stop, len(stops) - 1)):
+    first_gap = max(window.start - 1, 0) if tails else window.start
+    last_gap = min(window.stop, len(stops) - 1) if tails else window.stop - 1
+    for n in range(first_gap, last_gap):
         first, last = stops[n] + radius(n) + clearance, stops[n + 1] - radius(n + 1) - clearance
         if n < window.start:
             first = max(first, last - TAIL)
@@ -181,9 +183,11 @@ def arrange(count: int, selected: int, o: dict, rest: int) -> Snake:
     while True:
         path, stops = _placed(count, o, scale)
         window = _window(path, stops, focus, o, rest)
+        # Centred and sized on the icons and their line. A tail may reach past that, but not past the ring.
+        body = _extent(_strokes(path, stops, window, selected, radius, o, rotated, tails=False), window, stops, path, radius, rotated, margin)
         points = _extent(_strokes(path, stops, window, selected, radius, o, rotated), window, stops, path, radius, rotated, margin)
-        left, right = min(x - r for x, _, r in points), max(x + r for x, _, r in points)
-        top, bottom = min(y - r for _, y, r in points), max(y + r for _, y, r in points)
+        left, right = min(x - r for x, _, r in body), max(x + r for x, _, r in body)
+        top, bottom = min(y - r for _, y, r in body), max(y + r for _, y, r in body)
         # Whole pixels, so a twist-free snake keeps its rows and turns on the pixel grid.
         dx, dy = round(120 - (left + right) / 2), round(middle - (top + bottom) / 2)
         far = max(hypot(x + dx - 120, y + dy - 120) + r for x, y, r in points)

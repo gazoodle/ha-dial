@@ -26,6 +26,12 @@ inspected contact sheets. The owner reviews sheets by phone; an approved sheet c
 - Cameras became tree entities in integration b12, b13 added the preview zoom slider, and b17 added colour, mono,
   tint and dither for every picture. b19 is the build on HA, copied on 2026-10-31 and its files verified, HA restart pending; firmware unchanged at b5. Panning and
   the panel's column growth have only run against test stubs, so check them in a real browser.
+- b21 adds Explorer (`explorer.py`) and b20 the cover safety fixes, both committed and not yet deployed. Explorer has only
+  run against stand-in registries shaped from HA's source, with its HA calls type-checked. First real checks: a live home,
+  rebuilds as the registries change and after an HA restart, and the panel's Explorer settings. The cover control's
+  confirm screen is cramped: "CLOSED" sits on a bar and touches "CONFIRM OPEN?".
+- Until 2026-10-31 the scratch Pyright config checked nothing, because its paths weren't relative, so earlier clean results
+  meant little. It now covers the integration with HA's types; the one remaining error is `aiohttp` missing from the venv.
 - b19 adds Snake navigation (`snake_path.py`). Its dialog has only run against test stubs;
   check it in the live panel, and turning through a long snake on the Dial. A snake too big for the space shrinks its
   path evenly while its icons keep their size, so sliders near their limits can appear to stop growing it.

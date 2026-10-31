@@ -16,6 +16,7 @@ settings = {
 exports = {
     "DOMAINS": list(catalogue["CONTROL_TYPES"]),
     "NAV_STYLES": sorted(catalogue["PAGE_STYLES"]),
+    "PAGED_STYLES": sorted(catalogue["PAGED_STYLES"]),
     "CONTROL_STYLES": {
         domain: sorted(catalogue["control_styles"](domain))
         for domain in catalogue["CONTROL_TYPES"]

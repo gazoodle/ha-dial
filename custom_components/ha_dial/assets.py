@@ -20,7 +20,7 @@ def _text_mask(text: str, size: int, colour: str, tracking: int = 0, weight: int
     # Advances come from the whole string so that kerning survives letter-spacing.
     offsets = [font.getlength(text[:index]) + spacing * index for index in range(len(text))]
     width = ceil((offsets[-1] + font.getlength(text[-1]) if text else 0) + 2 * (weight + 1))
-    ascent, descent = font.getmetrics()
+    ascent, descent = font.getmetrics()  # pyright: ignore[reportAttributeAccessIssue]  # Always a FreeType font here.
     height = ascent + descent + 2 * (weight + 1)
     image = Image.new("L", (max(1, width), max(1, height)))
     draw = ImageDraw.Draw(image)

@@ -5,7 +5,8 @@ from __future__ import annotations
 THEMES = {"ember", "verdant", "cobalt", "rose", "acid", "alloy"}
 from .appearance import validate_options
 from .assets import usable_icon
-from .catalogue import CONTROL_TYPES, PAGE_STYLES, STYLES, control_styles
+from .catalogue import CONTROL_TYPES, NAV_STYLES, PAGE_STYLES, PAGED_STYLES, STYLES, control_styles
+from .explorer import MAX_SHOWN, explore, page_style, read_home, validate_explorer
 
 
 def build_definition(hass, pages: list, default_theme: str) -> dict:
@@ -23,6 +24,8 @@ def build_definition(hass, pages: list, default_theme: str) -> dict:
         if not isinstance(title, str) or not title or len(title) > 64:
             raise ValueError("Each page needs a title of at most 64 characters")
         validate_options(page)
+        if "explorer" in page:
+            validate_explorer(page["explorer"])
         theme = page.get("theme", default_theme)
         if theme not in THEMES:
             raise ValueError(f"Unknown theme on page {page_id}")
@@ -44,27 +47,33 @@ def build_definition(hass, pages: list, default_theme: str) -> dict:
             "The page tree needs exactly one root (leave its parent empty)"
         )
 
+    home = None
+    reached = set()
+
     def make_page(page: dict, ancestors: frozenset[str]) -> dict:
+        nonlocal home
         page_id = page["id"]
         if page_id in ancestors:
             raise ValueError("Page parent links cannot contain a cycle")
-        children = children_by_parent.get(page_id, [])
-        items = [
-            {
-                "id": child["id"],
-                "label": child["title"],
-                "theme": child["theme"],
-                "style": child.get("style", "NAV-ORBIT"),
-                **{
-                    key: child[key]
-                    for key in ("appearance", "css", "conditions", "clock")
-                    if key in child
-                },
-                "icon": child.get("icon", "mdi:folder"),
-                "children": make_page(child, ancestors | {page_id})["items"],
-            }
-            for child in children
-        ]
+        reached.add(page_id)
+        items = []
+        for child in children_by_parent.get(page_id, []):
+            made = make_page(child, ancestors | {page_id})
+            items.append(
+                {
+                    "id": child["id"],
+                    "label": child["title"],
+                    "theme": child["theme"],
+                    "style": made["style"],
+                    **{
+                        key: child[key]
+                        for key in ("appearance", "css", "conditions", "clock")
+                        if key in child
+                    },
+                    "icon": child.get("icon", "mdi:folder"),
+                    "children": made["items"],
+                }
+            )
         for entity in page["lights"]:
             options = entity if isinstance(entity, dict) else {"entity_id": entity}
             entity_id = options.get("entity_id")
@@ -95,13 +104,21 @@ def build_definition(hass, pages: list, default_theme: str) -> dict:
                     **({"action_items": action_items} if action_items else {}),
                 }
             )
-        if len(items) > 8:
-            raise ValueError(f"Page {page_id} can show at most 8 items")
+        style = page.get("style", "NAV-ORBIT")
+        if "explorer" in page:
+            home = home or read_home(hass)
+            default = style if "style" in page and style in NAV_STYLES else "NAV-LIST"
+            base = {"style": default, "theme": page["theme"], **{key: page[key] for key in ("appearance", "css") if key in page}}
+            generated, _ = explore(home, page["explorer"], base)
+            items += generated
+            style = page_style("", len(items), default, page["explorer"])
+        elif len(items) > MAX_SHOWN:
+            raise ValueError(f"Page {page_id} can show at most {MAX_SHOWN} items")
         return {
             "id": page_id,
             "title": page["title"],
             "theme": page["theme"],
-            "style": page.get("style", "NAV-ORBIT"),
+            "style": style,
             **{
                 key: page[key]
                 for key in ("appearance", "css", "conditions", "clock")
@@ -115,7 +132,7 @@ def build_definition(hass, pages: list, default_theme: str) -> dict:
             raise ValueError(f"Unknown parent page {page['parent']}")
     definition = {"tree": make_page(roots[0], frozenset())}
     validate_definition(definition)
-    if sum(1 for _ in _page_ids(definition["tree"])) != len(pages):
+    if len(reached) != len(pages):
         raise ValueError("Every page must connect to the root")
     return definition
 
@@ -135,13 +152,6 @@ def _action_item(hass, entity_id: str) -> dict:
         "profile": profile,
         "style": style,
     }
-
-
-def _page_ids(page: dict):
-    yield page["id"]
-    for item in page.get("items", []):
-        if "children" in item:
-            yield from _page_ids({"id": item["id"], "items": item["children"]})
 
 
 def validate_definition(definition: dict) -> None:
@@ -166,8 +176,9 @@ def validate_definition(definition: dict) -> None:
         if page.get("style", "NAV-ORBIT") not in PAGE_STYLES:
             raise ValueError("Unknown navigation style")
         items = page.get("items", [])
-        if not isinstance(items, list) or len(items) > 8:
-            raise ValueError("Each page must have at most 8 items")
+        # The limit belongs to the style: over this many, only one that moves through them shows them all.
+        if not isinstance(items, list) or (len(items) > MAX_SHOWN and page.get("style", "NAV-ORBIT") not in PAGED_STYLES):
+            raise ValueError("Each page must have at most 8 items, unless its style scrolls or pages")
         ids: set[str] = set()
         for item in items:
             if not isinstance(item, dict):

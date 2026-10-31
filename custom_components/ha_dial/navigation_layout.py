@@ -349,9 +349,12 @@ def _pager(c, view, items, selected, o):
         c.disc(120, 88, radius, theme["bg"] if c.crisp else glow, theme["primary"], o["selected-border"])
         c.icon(icon_for(items[selected], o), 120, 88, o["selected-icon-size"] + 26, theme["secondary"], None if c.crisp else glow)
     c.text(_selected_label(items, selected, view).upper(), 120, 152 + o["title-offset"], o["font-size"] + 4, theme["text"], tracking=o["tracking"], weight=1, max_width=170)
-    spacing = min(10, 150 // count)
-    for index in range(count):
-        x = 120 + (index - (count - 1) / 2) * spacing
+    # A window of dots: an Explorer's page can be long, and each dot is a scene element.
+    dots = min(count, 15)
+    first = max(0, min(selected - dots // 2, count - dots))
+    spacing = min(10, 150 // dots)
+    for index in range(first, first + dots):
+        x = 120 + (index - first - (dots - 1) / 2) * spacing
         if index == selected:
             c.disc(x, 176, 3, theme["primary"], None)
         else:

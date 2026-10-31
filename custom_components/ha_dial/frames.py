@@ -81,19 +81,20 @@ def render_frame(raw: bytes, spec: dict, theme: dict, crisp: bool, mode: str) ->
     if spec["treatment"] == "photo":
         # Darken towards the bottom, where the time sits on the photograph.
         shade = Image.linear_gradient("L").resize(image.size)
-        shade = shade.point(lambda value: max(0, (value - 90) * 220 // 165))
+        shade = shade.point(lambda value: max(0, (value - 90) * 220 // 165))  # pyright: ignore[reportOperatorIssue]  # An int for an "L" image.
         image = Image.composite(Image.new("RGB", image.size, (0, 0, 0)), image, shade)
 
     if mode == "dither":
         # Ordered dither to two theme colours.
         ink, ground = _rgb(theme["secondary"]), _rgb(theme["bg"])
         gray = ImageOps.autocontrast(ImageOps.grayscale(image), cutoff=2)
-        pixels = gray.load()
+        levels = gray.tobytes()
         image = Image.new("RGB", gray.size, ground)
         target = image.load()
+        assert target is not None
         for y in range(gray.height):
             for x in range(gray.width):
-                if pixels[x, y] * 17 // 256 > BAYER[y % 4][x % 4]:
+                if levels[y * gray.width + x] * 17 // 256 > BAYER[y % 4][x % 4]:
                     target[x, y] = ink
     elif mode == "tint":
         image = Image.blend(image, Image.new("RGB", image.size, _rgb(theme["primary"])), 0.22)

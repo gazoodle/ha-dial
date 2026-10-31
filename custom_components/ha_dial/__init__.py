@@ -122,6 +122,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         websocket_api.async_register_command(hass, _ws_subscribe)
         websocket_api.async_register_command(hass, _ws_definitions)
         websocket_api.async_register_command(hass, _ws_gallery)
+        websocket_api.async_register_command(hass, _ws_explorer)
         websocket_api.async_register_command(hass, _ws_condition_template)
         state["registered"] = True
 
@@ -363,6 +364,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     for unsubscribe in state.get("definition_unsubs", {}).values():
         unsubscribe()
     state.get("definition_unsubs", {}).clear()
+    for unsubscribe in state.get("explorer_unsubs", {}).values():
+        unsubscribe()
+    state.get("explorer_unsubs", {}).clear()
     from .transport import async_clear_views
 
     await async_clear_views(hass)
@@ -555,7 +559,7 @@ async def _ws_reset(hass, connection, msg) -> None:
             for key in ("template_trackers", "condition_trackers"):
                 if tracker := state.get(key, {}).pop(device, None):
                     tracker.async_remove()
-            for key in ("condition_entity_unsubs", "definition_unsubs"):
+            for key in ("condition_entity_unsubs", "definition_unsubs", "explorer_unsubs"):
                 if unsubscribe := state.get(key, {}).pop(device, None):
                     unsubscribe()
             for unsubscribe in state.get("condition_time_unsubs", {}).pop(device, []):
@@ -581,7 +585,8 @@ async def _ws_definitions(hass, connection, msg) -> None:
 @websocket_api.websocket_command(
     {vol.Required("type"): f"{DOMAIN}/gallery", vol.Required("page"): dict,
      vol.Optional("entity"): str, vol.Optional("theme", default="ember"): str,
-     vol.Optional("children", default=[]): [dict], vol.Optional("preview_only", default=False): bool}
+     vol.Optional("children", default=[]): [dict], vol.Optional("preview_only", default=False): bool,
+     vol.Optional("nav_only", default=False): bool, vol.Optional("long", default=False): bool}
 )
 @websocket_api.async_response
 @_require_server
@@ -589,7 +594,7 @@ async def _ws_gallery(hass, connection, msg) -> None:
     if not connection.user or not connection.user.is_admin:
         connection.send_error(msg["id"], "unauthorized", "Administrator access required")
         return
-    from .catalogue import PAGE_STYLES, control_styles
+    from .catalogue import NAV_STYLES, PAGE_STYLES, PAGED_STYLES, control_styles
     from .chronograph import resolve_clock
     from .catalogue import IMAGE_STYLES
     from .frames import capture, frame_key, scene_frames
@@ -600,6 +605,8 @@ async def _ws_gallery(hass, connection, msg) -> None:
     try:
         page = {**msg["page"], "id": "gallery", "parent": ""}
         page.pop("conditions", None)
+        # Thumbnails of an Explorer's pages use stand-in children; they needn't rebuild the home.
+        page.pop("explorer", None)
         entity = msg.get("entity")
         if entity:
             entries = [*page.get("lights", []), *page.get("entities", [])]
@@ -630,7 +637,7 @@ async def _ws_gallery(hass, connection, msg) -> None:
             scene = compile_scene(view)
             connection.send_result(msg["id"], {"scene": scene, "frames": scene_frames(hass, scene)})
             return
-        styles = sorted(control_styles(entity.split(".", 1)[0]) if entity else PAGE_STYLES)
+        styles = sorted(control_styles(entity.split(".", 1)[0]) if entity else PAGED_STYLES if msg.get("long") else NAV_STYLES if msg.get("nav_only") else PAGE_STYLES)
         # From the unresolved view: a resolved one carries the selected style's picture, and every
         # thumbnail would then show that one treatment.
         unresolved = nav.current()
@@ -643,6 +650,25 @@ async def _ws_gallery(hass, connection, msg) -> None:
         })
     except (ValueError, TypeError, KeyError, StopIteration) as error:
         connection.send_error(msg["id"], "invalid_format", str(error))
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/explorer", vol.Required("options"): dict, vol.Optional("style", default="NAV-LIST"): str})
+@websocket_api.async_response
+@_require_server
+async def _ws_explorer(hass, connection, msg) -> None:
+    """What an Explorer would show right now, and what it leaves out and why."""
+    if not connection.user or not connection.user.is_admin:
+        connection.send_error(msg["id"], "unauthorized", "Administrator access required")
+        return
+    from .explorer import explore, outline, page_style, read_home, validate_explorer
+
+    try:
+        validate_explorer(msg["options"])
+        items, counts = explore(read_home(hass), msg["options"], {"style": msg["style"], "theme": "ember"})
+    except (TypeError, ValueError) as error:
+        connection.send_error(msg["id"], "invalid_format", str(error))
+        return
+    connection.send_result(msg["id"], {"items": outline(items), "style": page_style("", len(items), msg["style"], msg["options"]), **counts})
 
 
 @websocket_api.websocket_command(
@@ -688,6 +714,8 @@ async def _ws_subscribe(hass, connection, msg) -> None:
             if tracker := state.get("template_trackers", {}).pop(device, None):
                 tracker.async_remove()
             if watch := state.get("definition_unsubs", {}).pop(device, None):
+                watch()
+            if watch := state.get("explorer_unsubs", {}).pop(device, None):
                 watch()
             for key in (
                 "navigators",

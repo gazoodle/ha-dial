@@ -54,16 +54,18 @@ export function confirmDialog(host, {title, message, choices, confirm, action}) 
   dialog.addEventListener('close',()=>dialog.remove()); dialog.append(head,body,foot); host.append(dialog); dialog.showModal();
 }
 
-export function openOptions(editor, pageId, entityId) {
+// `generated` is set for an Explorer: `key` names one of its generated pages, otherwise it's the Explorer itself.
+export function openOptions(editor, pageId, entityId, generated) {
   editor.querySelector('.edit-options-dialog')?.remove();
   const page = editor.config.pages.find((candidate) => candidate.id === pageId);
   const entities = editor.entities(pageId);
-  const original = entityId ? entities.find((item) => (typeof item === 'string' ? item : item.entity_id) === entityId) : page;
+  const overrideKey = generated?.key;
+  const original = entityId ? entities.find((item) => (typeof item === 'string' ? item : item.entity_id) === entityId) : overrideKey ? {title:generated.label,style:generated.style,...page.explorer.pages?.[overrideKey]} : page;
   const item = typeof original === 'string' ? {entity_id:original} : {...original};
   const domain = entityId?.split('.')[0];
   const dialog = document.createElement('dialog'); dialog.className = 'options-dialog edit-options-dialog';
   dialog.setAttribute('aria-label', entityId ? `Edit ${domain} control` : 'Edit page');
-  const heading = document.createElement('h3'); heading.textContent = entityId ? `Edit ${domain} control` : 'Page appearance';
+  const heading = document.createElement('h3'); heading.textContent = entityId ? `Edit ${domain} control` : overrideKey ? `${generated.label} appearance` : 'Page appearance';
   const hint = document.createElement('p'); hint.textContent = 'Conditions are evaluated in Home Assistant. Visibility is not access control.';
   const error = document.createElement('p'); error.setAttribute('role','alert');
   const form = document.createElement('ha-form');
@@ -88,7 +90,7 @@ export function openOptions(editor, pageId, entityId) {
     ];
   };
   const pageFields = () => [
-    {name: entityId ? 'label' : 'title', selector:{text:{}}},
+    ...(overrideKey ? [] : [{name: entityId ? 'label' : 'title', selector:{text:{}}}]),
     {name:'icon',selector:{icon:{}}},
     ...sourceFields(),
     ...(!editor.panelMode ? [{name:'style',selector:select(domain ? CONTROL_STYLES[domain] : NAV_STYLES)}, {name:'theme',selector:select(['ember','verdant','cobalt','rose','acid','alloy'])}] : []),
@@ -128,6 +130,14 @@ export function openOptions(editor, pageId, entityId) {
         if (setting.kind === 'choice' && styling[key] !== undefined && !setting.choices.includes(styling[key])) throw new Error(`${setting.label} must be one of ${setting.choices.join(', ')}.`);
       }
       for (const name of ['accent','background','text','surface','secondary','quiet','grid']) if (styling[name] && !/^#[a-f\d]{6}$/i.test(styling[name])) throw new Error(`${name} needs a #RRGGBB colour.`);
+      if (overrideKey) {
+        const override = {...page.explorer.pages?.[overrideKey],...(Object.keys(styling).length ? {appearance:styling} : {})};
+        for (const name of ['icon','theme']) if (draft[name]) override[name]=draft[name];
+        // Pinned only if chosen: otherwise a Random page would stop following Shuffle just by being opened.
+        if (draft.style && draft.style!==generated.style) override.style=draft.style;
+        storeOverride(override);
+        return;
+      }
       const updated = {...item,appearance:styling,conditions:draft.conditions || []};
       if (!domain || ['camera','image'].includes(domain)) updated.clock = clockSettings();
       delete updated.css;
@@ -144,6 +154,13 @@ export function openOptions(editor, pageId, entityId) {
       dialog.close(); dialog.remove();
     } catch(reason) { error.textContent=reason.message; }
   });
+  const storeOverride = (override) => {
+    const {[overrideKey]:_previous, ...others} = page.explorer.pages || {};
+    const explorer = {...page.explorer,pages:{...others,...(override ? {[overrideKey]:override} : {})}};
+    editor.changed({...editor.config,pages:editor.config.pages.map((candidate)=>candidate.id===pageId?{...candidate,explorer}:candidate)});
+    editor.renderTree();
+    dialog.close(); dialog.remove();
+  };
   const cancel = document.createElement('button'); cancel.type='button'; cancel.textContent='Cancel'; cancel.addEventListener('click',()=>{dialog.close();dialog.remove();});
   const head = document.createElement('header'); head.className = 'options-head'; head.append(heading);
   const appearance = document.createElement('details'), appearanceTitle = document.createElement('summary'); appearanceTitle.textContent = 'Detailed appearance'; appearance.append(appearanceTitle,appearanceForm,advanced);
@@ -239,7 +256,9 @@ export function openOptions(editor, pageId, entityId) {
       const updated = {...item,...draft,...(!domain || ['camera','image'].includes(domain) ? {clock:clockSettings()} : {}),appearance:Object.fromEntries(appearanceKeys.filter(key=>draft[key] !== undefined && draft[key] !== '').map(key=>[key,draft[key]]))}; delete updated.css;
       return entityId ? {...page,entities:entities.map(entry => (typeof entry === 'string' ? entry : entry.entity_id) === entityId ? updated : entry),lights:[]} : updated;
     };
-    const children = editor.config.pages.filter(candidate => candidate.parent === pageId).map(({title,icon})=>({title,icon}));
+    const children = generated?.children || editor.config.pages.filter(candidate => candidate.parent === pageId).map(({title,icon})=>({title,icon}));
+    // An Explorer's pages use navigation styles only, and only ones that can show them all.
+    const styleScope = generated ? {nav_only:true,...(generated.count > 8 ? {long:true} : {})} : {};
     let previewSequence=0, timer;
     schedulePreview = () => {
       const sequence=++previewSequence; clearTimeout(timer); status.textContent='Updating preview…';
@@ -257,7 +276,7 @@ export function openOptions(editor, pageId, entityId) {
       const sequence = ++request;
       const current = currentPage();
       try {
-        const data = await editor._hass.callWS({type:'ha_dial/gallery',page:current,children,...(entityId ? {entity:entityId} : {}),theme:editor.config.theme || 'ember'});
+        const data = await editor._hass.callWS({type:'ha_dial/gallery',page:current,children,...(entityId ? {entity:entityId} : {}),...styleScope,theme:editor.config.theme || 'ember'});
         if (sequence !== request || !dialog.isConnected) return;
         gallery.replaceChildren();
         for (const [key, headingText] of [['styles','Atlas style'],['themes','Theme']]) {
@@ -279,6 +298,10 @@ export function openOptions(editor, pageId, entityId) {
     updateGallery(); schedulePreview();
   }
   const foot = document.createElement('footer'); foot.className = 'options-foot'; foot.append(cancel,save);
+  if (overrideKey && page.explorer.pages?.[overrideKey]) {
+    const clear = document.createElement('button'); clear.type='button'; clear.textContent='Use Explorer defaults'; clear.addEventListener('click',()=>storeOverride(null));
+    foot.prepend(clear);
+  }
   dialog.append(head,body,foot);
   dialog.addEventListener('close',()=>dialog.remove());
   editor.append(dialog); dialog.showModal();

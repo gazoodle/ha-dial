@@ -156,6 +156,21 @@ def examples(scene):
                     ],
                 }
             )
+    # An Explorer's long pages, which only the styles that move through their items may show.
+    for raster in ("crisp", "smooth"):
+        for style in ("NAV-LIST", "NAV-GRID", "NAV-SNAKE", "NAV-COMPASS", "NAV-RIBBON", "NAV-ROLODEX", "NAV-PAGER"):
+            yield scene.compile_scene(
+                {
+                    "kind": "menu",
+                    "id": "root",
+                    "title": "Example room",
+                    "style": style,
+                    "selected": 17,
+                    "back": True,
+                    "appearance": {"raster": raster},
+                    "items": [{"id": f"p{n}", "label": f"Page {n}", "icon": "mdi:folder"} for n in range(40)],
+                }
+            )
     # A twisted snake reaches angles and diagonals no other design does.
     for raster in ("crisp", "smooth"):
         for twist, extra in ((-140, {}), (30, {"snake-width": 3}), (200 - 360, {"snake-placement": "along path", "snake-edge": "single"})):
