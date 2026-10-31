@@ -6,8 +6,12 @@ from math import isfinite
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .catalogue import FACE_STYLES
+from .frames import resolve_frame
 
-CLOCK_FIELDS = {"timezone", "world_zones", "moon_entity", "reserve_entity", "weather_entity", "metrics", "history_hours"}
+CLOCK_FIELDS = {
+    "timezone", "world_zones", "moon_entity", "reserve_entity", "weather_entity", "metrics", "history_hours",
+    "image_entity", "refresh_entity", "detection_entity",
+}
 METRIC_FIELDS = {"entity_id", "label", "minimum", "maximum"}
 MAX_METRICS = 6
 DEFAULT_ZONES = ["UTC", "Europe/London", "America/New_York", "Asia/Tokyo"]
@@ -51,6 +55,13 @@ def validate_clock(value):
     weather = value.get("weather_entity", "")
     if not isinstance(weather, str) or weather and not re.fullmatch(r"weather\.[a-z0-9_]{1,248}", weather):
         raise ValueError("The weather source needs an HA weather entity")
+    image = value.get("image_entity", "")
+    if not isinstance(image, str) or image and not re.fullmatch(r"(camera|image)\.[a-z0-9_]{1,248}", image):
+        raise ValueError("The picture source needs an HA camera or image entity")
+    for field in ("refresh_entity", "detection_entity"):
+        entity = value.get(field, "")
+        if not isinstance(entity, str) or entity and not re.fullmatch(r"[a-z_]+\.[a-z0-9_]{1,248}", entity):
+            raise ValueError(f"{field} needs an HA entity")
     metrics = value.get("metrics", [])
     if not isinstance(metrics, list) or len(metrics) > MAX_METRICS:
         raise ValueError(f"Faces take at most {MAX_METRICS} metrics")
@@ -66,7 +77,11 @@ def source_entities(view: dict) -> set[str]:
     if view.get("style") not in FACE_STYLES:
         return set()
     settings = view.get("clock", {})
-    entities = {settings.get(field) for field in ("moon_entity", "reserve_entity", "weather_entity")}
+    entities = {settings.get(field) for field in ("moon_entity", "reserve_entity", "weather_entity", "refresh_entity", "detection_entity")}
+    # A camera's own state event fires whenever its access token rotates, so it would act as a timer.
+    # An image entity's state is its last-updated time, which is exactly the event wanted.
+    if settings.get("image_entity", "").startswith("image."):
+        entities.add(settings["image_entity"])
     entities |= {metric["entity_id"] for metric in settings.get("metrics", [])}
     if view["style"] in {"AMB-SOLAR", "WAT-SOLAR"}:
         entities.add(SUN_ENTITY)
@@ -132,6 +147,21 @@ def _weather(hass, entity):
     return {"state": state.state, "temperature": "--" if temperature is None else f"{temperature:g}{attributes.get('temperature_unit', '°')}"}
 
 
+def _detection(hass, entity):
+    """What the bound entity reports, including confidence only if it reports one."""
+    state = hass.states.get(entity) if entity else None
+    if state is None:
+        return None
+    attributes = getattr(state, "attributes", {}) or {}
+    label = attributes.get("friendly_name") or entity.partition(".")[2].replace("_", " ")
+    active = state.state not in {"off", "unknown", "unavailable", "idle", "0"}
+    score = next((attributes[name] for name in ("confidence", "score") if isinstance(attributes.get(name), (int, float))), None)
+    text = f"{label} · {'DETECTED' if active else 'CLEAR'}"
+    if active and score is not None:
+        text += f" · {round(score * 100 if score <= 1 else score)}%"
+    return {"active": active, "text": text.upper()}
+
+
 def resolve_clock(hass, view, now: datetime | None = None):
     if view.get("style") not in FACE_STYLES:
         return view
@@ -172,5 +202,7 @@ def resolve_clock(hass, view, now: datetime | None = None):
             "sun": _sun(hass, local),
             "weather": _weather(hass, settings.get("weather_entity")),
             "metrics": [_metric(hass, metric, series) for metric in settings.get("metrics", [])],
+            "image": resolve_frame(hass, view),
+            "detection": _detection(hass, settings.get("detection_entity")),
         },
     }

@@ -249,6 +249,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.bus.async_listen("esphome.ha_dial_scene_status", scene_status)
     )
 
+    @callback
+    def frame_status(event: Event) -> None:
+        device, error = event.data.get("device"), event.data.get("error", "")
+        if not isinstance(device, str) or state.get("unloading"):
+            return
+        details = (device, event.data.get("elapsed_ms"), event.data.get("free_heap"), event.data.get("largest_block"))
+        if error:
+            _LOGGER.warning("Dial %s could not fetch a frame: %s (%s ms, free heap %s, largest block %s)", device, error, *details[1:])
+        else:
+            _LOGGER.info("Dial %s fetched a frame in %s ms (free heap %s, largest block %s)", *details)
+        state.setdefault("frame_status", {})[device] = str(error)
+        async_dispatcher_send(hass, f"{DOMAIN}_scene_{device}", _scene_result(hass, device, _navigator(hass, device).current()))
+
+    entry.async_on_unload(hass.bus.async_listen("esphome.ha_dial_frame_status", frame_status))
+    if "ha_dial_frame_view" not in hass.data:
+        # Views can't be unregistered, so this survives reloads; it serves nothing while unloaded.
+        from .frame_view import FrameView
+
+        hass.data["ha_dial_frame_view"] = True
+        hass.http.register_view(FrameView(hass))
+
     if light_entity:
 
         async def light_changed(_event: Event[EventStateChangedData]) -> None:
@@ -570,6 +591,8 @@ async def _ws_gallery(hass, connection, msg) -> None:
         return
     from .catalogue import PAGE_STYLES, control_styles
     from .chronograph import resolve_clock
+    from .catalogue import IMAGE_STYLES
+    from .frames import capture, frame_key, scene_frames
     from .history import ensure_history
     from .definition import build_definition
     from .scene import THEMES, compile_scene
@@ -597,14 +620,21 @@ async def _ws_gallery(hass, connection, msg) -> None:
             nav.input("press")
             _sync_control(hass, nav)
         await ensure_history(hass, nav.current())
+        for style in IMAGE_STYLES if not entity else ():
+            candidate = {**nav.current(), "style": style}
+            if (key := frame_key(candidate)) and key not in hass.data[DOMAIN].get("frames", {}):
+                await capture(hass, candidate, key)
         view = resolve_clock(hass, nav.current())
         if msg.get("preview_only"):
-            connection.send_result(msg["id"], {"scene": compile_scene(view)})
+            scene = compile_scene(view)
+            connection.send_result(msg["id"], {"scene": scene, "frames": scene_frames(hass, scene)})
             return
         styles = sorted(control_styles(entity.split(".", 1)[0]) if entity else PAGE_STYLES)
+        style_scenes = {style: compile_scene(resolve_clock(hass, {**view, "style": style})) for style in styles}
         connection.send_result(msg["id"], {
             "style": view.get("style"), "theme": view.get("theme"),
-            "styles": {style: compile_scene(resolve_clock(hass, {**view, "style": style})) for style in styles},
+            "frames": {key: value for scene in style_scenes.values() for key, value in scene_frames(hass, scene).items()},
+            "styles": style_scenes,
             "themes": {theme: compile_scene({**view, "theme": theme}) for theme in THEMES},
         })
     except (ValueError, TypeError, KeyError, StopIteration) as error:

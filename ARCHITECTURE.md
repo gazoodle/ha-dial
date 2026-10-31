@@ -304,6 +304,22 @@ Measured 2026-10-31 across 1,368 scenes (every style, theme and mode, with eight
 titles): at most 21,880 bytes for a paired envelope against the 24,576 limit, 38 elements against 64,
 and 490 line segments in one scene. Peak heap and draw time on the Dial are not yet measured.
 
+Scene v6 (2026-10-31) adds `image`, for camera and photo faces: a centred rectangle with a size, a
+scale of 1 or 2, a CRC, a URL and a placeholder colour. Only scenes with a picture declare version 6.
+Pixels never travel in the JSON. HA crops and treats the picture into big-endian RGB565 and serves it
+at `/api/ha_dial/frame/<token>`; the unauthenticated token is unguessable, opens one frame and lapses
+after five minutes, so the Dial holds no HA credential. The Dial streams into a second fixed buffer on
+its own task, so a slow network can't stall rotary input, and swaps only after length and CRC pass; a
+failure leaves the old picture up and is reported with free heap on `esphome.ha_dial_frame_status`.
+Both 32 KiB buffers are released when no current scene needs them. Browsers get the same bytes as
+base64 alongside the scene over the WebSocket. Rounded corners and Crisp's two-colour dither are baked
+in by HA, so the renderers only blit. The URL must be plain HTTP, because the Dial has no trust store.
+
+Capture happens on entering a page and on events from a bound refresh entity or image entity. There is
+no timer, so a stale picture shows its age instead. A camera entity's own state is deliberately not a
+trigger, because it fires when the access token rotates. No detection boxes are drawn: nothing generic
+in HA reports them, and only the bound entity's state and confidence are shown.
+
 Scene v4 adds `polyline`: an ordered list of 2–128 integer pixel-coordinate pairs and a
 stroke colour. HA samples curves; both consumers join the resolved points using their shared
 Bresenham raster. Coordinates must be within 0–239. Older scene versions cannot carry this

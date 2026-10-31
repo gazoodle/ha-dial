@@ -11,6 +11,8 @@
 
 namespace esphome::ha_dial {
 inline constexpr size_t MAX_VIEW_BYTES = 24576;
+// Provisional, from the backlog's starting size. Raise it only from heap measured on the Dial.
+inline constexpr size_t MAX_FRAME_BYTES = 32768;
 int hex_value(char value);
 Color scene_colour(const std::string &value, const Color &fallback);
 struct SceneElement {
@@ -20,7 +22,8 @@ struct SceneElement {
   int x{0}, y{0}, x2{0}, y2{0}, radius{0}, start{0}, end{0}, width{1}, mask_width{0}, mask_height{0};
   Color stroke{Color::BLACK}, fill{Color::BLACK}, colour{Color::BLACK}, background{Color::BLACK};
   bool has_stroke{false}, has_fill{false}, solid{false}, cap{false}, smooth{false};
-  std::string pixels;
+  uint32_t crc{0};
+  std::string pixels;  // Mask data, or an image element's URL: one string saves RAM across 64 elements.
   std::vector<std::pair<uint16_t, uint16_t>> points;
 };
 
@@ -58,7 +61,17 @@ struct SceneHistory {
   }
 };
 
+// The last complete image frame, owned by whoever fetched it. RGB565, big-endian.
+struct FrameView {
+  const uint8_t *pixels{nullptr};
+  int width{0}, height{0};
+  uint32_t crc{0};
+};
+
+// The image element a scene wants, or nullptr. A scene draws at most one.
+const SceneElement *scene_image(const SceneBuffer &scene);
 bool parse_scene(JsonObject source, SceneBuffer &target);
 bool parse_clear_request(JsonObject source, uint64_t applied_revision, uint64_t &revision);
-void draw_scene(display::Display &it, const SceneBuffer &scene, float local_value = std::numeric_limits<float>::quiet_NaN());
+void draw_scene(display::Display &it, const SceneBuffer &scene, float local_value = std::numeric_limits<float>::quiet_NaN(),
+                const FrameView *frame = nullptr);
 }  // namespace esphome::ha_dial

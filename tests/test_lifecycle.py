@@ -29,7 +29,7 @@ def lifecycle(integration, dial, tmp_path):
 
     dial.module("homeassistant.helpers.storage", Store=Store)
     i.data["registered"] = False
-    i.hass.http = SimpleNamespace(async_register_static_paths=AsyncMock())
+    i.hass.http = SimpleNamespace(async_register_static_paths=AsyncMock(), register_view=lambda _view: None)
     i.code.StaticPathConfig = lambda *args: args
     i.code.frontend.add_extra_js_url = Mock()
     i.code.frontend.remove_extra_js_url = Mock()

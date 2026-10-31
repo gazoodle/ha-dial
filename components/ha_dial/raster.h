@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <utility>
 #include <vector>
@@ -55,6 +57,17 @@ template<typename Plot> class Raster {
  private:
   Plot plot_;
 };
+
+// The frame check HA computes with zlib.crc32. Plain bitwise: a frame is checked rarely, and this
+// costs no table in RAM and no dependency the host test can't build.
+inline uint32_t frame_crc32(const uint8_t *data, size_t length) {
+  uint32_t crc = 0xFFFFFFFFu;
+  for (size_t index = 0; index < length; index++) {
+    crc ^= data[index];
+    for (int bit = 0; bit < 8; bit++) crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
+  }
+  return ~crc;
+}
 
 // Coverage rasters. Integer arithmetic only, so card and device agree pixel for pixel.
 // plot(x, y, level) receives a blend level from 1 to 15; hard edges always plot 15.

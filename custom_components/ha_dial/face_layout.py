@@ -308,15 +308,34 @@ FACES = {
 }
 
 
+def _direct_actions(c: Canvas, items: list, selected: int) -> list[dict]:
+    """The Portal's first two destinations as buttons, so its actions are whatever the page binds."""
+    from .navigation_layout import icon_for
+
+    regions = []
+    shown = items[:2]
+    options = {"icon-style": "outline"}
+    for index, item in enumerate(shown):
+        x = round(120 + (index - (len(shown) - 1) / 2) * 44)
+        active = index == selected
+        fill = c.tint(0.2) if active and not c.crisp else c.theme["bg"] if c.crisp else c.theme["surface"]
+        c.disc(x, 178, 16, fill, c.theme["primary"] if active else c.theme["quiet"], 1)
+        c.icon(icon_for(item, options), x, 178, 16, c.theme["secondary"] if active else c.theme["text"], fill)
+        regions.append({"id": item["id"], "x": x, "y": 178, "r": 16})
+    return regions
+
+
 def face_layout(c: Canvas, view: dict, o: dict) -> list[dict]:
     clock = view.get("_clock")
     if not clock:
         c.text("TIME UNAVAILABLE", 120, 118, 9, c.theme["text"], tracking=1, max_width=140)
         return []
-    FACES[view["style"]](c, clock, o)
+    FACES[view["style"]](c, {**clock, "title": view.get("title", "")}, o)
     items = view.get("items", [])
     if not items:
         return []
+    if view["style"] == "CAM-PORTAL":
+        return _direct_actions(c, items, view.get("selected", 0))
     # A face can still front a page: its current destination stays reachable by touch.
     selected = items[view.get("selected", 0) % len(items)]
     c.text(selected["label"], 120, 192, 7, c.theme["primary"], tracking=1, weight=1, max_width=110)

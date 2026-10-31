@@ -4,7 +4,7 @@
 
 Scene v5, the rebuilt Crisp/Smooth, every navigation style, domain graphics and shapes, the settings
 table and generated dialog, and the Ambient, Watch and Data faces are implemented and committed in
-integration b10 and firmware b4. Decisions and their reasons are in AGENTS.md; the design is in
+integration b10 and firmware b4, with pictures added in b11 and b5. Decisions and their reasons are in AGENTS.md; the design is in
 ARCHITECTURE.md under Scene v5.
 
 Verified: full suite, Pyright with HA 2026.10.4 types, Ruff on the touched files, firmware compile,
@@ -23,7 +23,10 @@ inspected contact sheets. The owner reviews sheets by phone; an approved sheet c
   against a live recorder. Check a Data face on real sensors.
 - On the Dial: peak heap with v5 scenes, draw time for the 490-segment worst case (NAV-LIST in Crisp),
   rotary feel on faces, and how Crisp's moiré looks on the panel. Only the owner can judge the last two.
-- Camera and Photo time wait for the image transport in BACKLOG.md. Toybox is dropped.
+- Camera and Photo faces and the frame transport are implemented in integration b11 and firmware b5,
+  committed but not deployed, and tested against fakes only. First real checks: a live camera entity,
+  whether the Dial can reach HA across subnets, and the heap figures HA logs from each fetch. Open
+  items are in BACKLOG.md. Toybox is dropped.
 - Crisp's stroke font folds to unaccented capitals and shows a box for anything else, so a non-Latin
   label is unreadable in Crisp. Decide whether that matters before any release.
 - `tests/fixtures/scenes.json` is now about 1.5 MB. The suite still runs in about 11 seconds.

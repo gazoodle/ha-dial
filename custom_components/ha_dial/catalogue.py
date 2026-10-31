@@ -44,11 +44,13 @@ NAV_STYLES = {
 READOUTS = {"ENERGY", "AIR", "VEHICLE", "WATER", "DATA"}
 CHRONOGRAPH_STYLES = {f"CHR-{name}" for name in ("TRICOMPAX", "WORLDTIMER", "SKELETON", "MOONPHASE")}
 AMBIENT_STYLES = {f"AMB-{name}" for name in ("SOLAR", "TYPOGRAPHIC", "ORBITAL", "STATUS")}
-# Photo time waits for the image transport; Toybox was dropped by the owner on 2026-10-31.
-WATCH_STYLES = {f"WAT-{name}" for name in ("CONTOUR", "MODULAR", "PALETTE", "RINGS", "SOLAR", "REFLECTIONS")}
+# Toybox was dropped by the owner on 2026-10-31.
+WATCH_STYLES = {f"WAT-{name}" for name in ("CONTOUR", "MODULAR", "PALETTE", "RINGS", "SOLAR", "REFLECTIONS", "PHOTOS")}
+CAMERA_STYLES = {f"CAM-{name}" for name in ("PORTAL", "CINEMA", "RADAR")}
+IMAGE_STYLES = CAMERA_STYLES | {"WAT-PHOTOS"}
 DATA_STYLES = {f"DAT-{name}" for name in ("AREA", "RADAR", "BANDS", "SPARK")}
 # Faces resolve time and sources in HA. Only chronographs show seconds, so only they tick each second.
-FACE_STYLES = CHRONOGRAPH_STYLES | AMBIENT_STYLES | WATCH_STYLES | DATA_STYLES
+FACE_STYLES = CHRONOGRAPH_STYLES | AMBIENT_STYLES | WATCH_STYLES | DATA_STYLES | CAMERA_STYLES
 PAGE_STYLES = NAV_STYLES | FACE_STYLES
 # The sources each face reads, and how many metrics it shows: the editor asks for these and no others.
 CLOCK_SOURCES = ("timezone",)
@@ -59,6 +61,10 @@ FACE_SOURCES = {
     "CHR-MOONPHASE": {"fields": (*CLOCK_SOURCES, "moon_entity"), "metrics": 0},
     "CHR-WORLDTIMER": {"fields": (*CLOCK_SOURCES, "world_zones", "reserve_entity"), "metrics": 0},
     "AMB-STATUS": {"fields": (*CLOCK_SOURCES, "weather_entity"), "metrics": 3},
+    "WAT-PHOTOS": {"fields": (*CLOCK_SOURCES, "image_entity", "refresh_entity", "weather_entity"), "metrics": 0},
+    "CAM-PORTAL": {"fields": ("image_entity", "refresh_entity"), "metrics": 0},
+    "CAM-CINEMA": {"fields": ("image_entity", "refresh_entity"), "metrics": 0},
+    "CAM-RADAR": {"fields": ("image_entity", "refresh_entity", "detection_entity"), "metrics": 0},
     "WAT-MODULAR": {"fields": CLOCK_SOURCES, "metrics": 3},
     "WAT-RINGS": {"fields": CLOCK_SOURCES, "metrics": 3},
     "DAT-AREA": {"fields": (*CLOCK_SOURCES, "history_hours"), "metrics": 1},

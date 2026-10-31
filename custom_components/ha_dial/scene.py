@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from . import camera_layout  # noqa: F401 - registers its faces
 from .appearance import appearance
 from .canvas import Canvas
 from .catalogue import CHRONOGRAPH_STYLES, FACE_STYLES
@@ -43,14 +44,19 @@ def _settings_cog(c: Canvas, view: dict, y: int) -> dict | None:
     return {"id": "__settings", "x": 120, "y": y, "r": 17}
 
 
-def compile_scene(view: dict) -> dict:
-    """Return bounded, pixel-positioned drawing instructions for both renderers."""
+def view_theme(view: dict) -> tuple[dict, dict]:
+    """A view's colours and settings, shared with whatever treats its picture."""
     theme = dict(THEMES.get(view.get("theme", "ember"), THEMES["ember"]))
     options = appearance(view)
     for key, target in OVERRIDES.items():
         if key in options:
             theme[target] = options[key]
+    return theme, options
 
+
+def compile_scene(view: dict) -> dict:
+    """Return bounded, pixel-positioned drawing instructions for both renderers."""
+    theme, options = view_theme(view)
     c = Canvas(theme, options["raster"] == "crisp")
     _frame(c, options)
     style = view.get("style", "NAV-ORBIT")
@@ -72,7 +78,8 @@ def compile_scene(view: dict) -> dict:
         regions.append(settings)
 
     return {
-        "version": 5,
+        # Only pictures need version 6, so everything else still draws on version 5 firmware.
+        "version": 6 if any(element["op"] == "image" for element in c.elements) else 5,
         "width": 240,
         "height": 240,
         "background": theme["bg"],

@@ -4,6 +4,7 @@
 #include <atomic>
 #include <memory>
 #include <string>
+#include "frame_fetch.h"
 #include "scene.h"
 #include "setup_state.h"
 #include <esp_event.h>
@@ -55,6 +56,7 @@ class HaDial : public Component, public api::CustomAPIDevice, public AsyncWebHan
   bool ready_() const;
   void flush_value_();
   void draw_pill_(display::Display &display);
+  void sync_frame_();
   void send_input_(const std::string &action, const std::string &item = "",
                    const std::string &value = "");
 
@@ -67,6 +69,7 @@ class HaDial : public Component, public api::CustomAPIDevice, public AsyncWebHan
   int pill_height_{0};
   std::array<ViewItem, 8> items_{};
   SceneHistory scenes_;
+  FrameFetcher frames_;
   bool control_available_{true};
   size_t item_count_{0};
   size_t selected_{0};

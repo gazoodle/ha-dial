@@ -58,28 +58,15 @@ Investigate Improv Serial/BLE only after the standard captive-portal baseline is
 Local Settings, its cog and force-on/off policy remain a separate design task. Onboarding is
 not complete until the whole factory-reset-to-first-control flow works without chat guidance.
 
-## Camera thumbnail screen
+## Camera and photo faces: still open
 
-Owner decision, 2026-10-31: the Atlas's Camera faces (Portal, Cinema, Radar) and Photo time build on
-this transport, after everything else. Toybox was dropped.
+Implemented 2026-10-31 (see ARCHITECTURE.md, Scene v6). Physical checks remain: free heap before,
+during and after a transfer (reported in `esphome.ha_dial_frame_status`, logged by HA), that repeated
+refreshes don't degrade rotary response or API connectivity, and whether the Dial can reach HA at all
+when IoT devices are on another subnet. Consider 160 x 160 frames only if the heap is healthy.
 
-Add a camera view that keeps image processing in Home Assistant. HA should decode, crop and
-resize a camera JPEG, convert it to RGB565, and expose the raw frame through a short-lived,
-device-scoped local URL. The Dial should stream the bytes into a fixed buffer and keep the
-previous complete frame visible until the replacement passes its length and CRC checks.
-
-Start at 128 × 128 (32 KB); test 160 × 160 (50 KB) only if heap measurements remain healthy.
-Both sizes fit completely inside the 240-pixel circular display, leaving the outer area for
-the orange ring, camera name and navigation. Do not put a general Home Assistant access token
-on the device or base64-encode frames into the existing JSON service.
-
-Acceptance criteria:
-
-- Free heap is measured before transfer, during receipt and after releasing the frame.
-- Repeated refreshes do not degrade encoder response or API connectivity.
-- A failed or partial transfer leaves the previous image visible and reports the failure.
-- Frames refresh on screen entry and explicitly configured events, with a conservative timed
-  refresh only while the camera screen is visible.
+Timed refresh while a camera page is visible needs the owner's approval (core: Push, never poll), so
+it isn't built. Detection boxes wait for a concrete source that reports them.
 
 ## Additional UX/domain types
 

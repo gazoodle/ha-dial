@@ -1,5 +1,9 @@
 # HA Dial firmware changelog
 
+## 2026.10.1-b5
+
+- Add scene version 6 image frames: fetched from HA on a background task into a fixed second buffer, swapped only after length and CRC pass, released when no scene needs them, and reported to HA with free heap.
+
 ## 2026.10.1-b4
 
 - Add scene version 5: filled polygons, multi-line segments, solid bands, round caps and integer coverage blending against a declared colour. Larger masks and digit cells are accepted. Requires HA Dial Server 2026.10.1-b10.

@@ -202,6 +202,14 @@ class Canvas:
             return
         self.elements.append({**icon_mask(name, size, colour), "x": _pixel(x), "y": _pixel(y), "background": under or self.theme["bg"]})
 
+    def image(self, x, y, frame: dict, first=False):
+        """A frame the Dial blits; first puts it under everything, for a full-bleed picture."""
+        element = {
+            "op": "image", "x": _pixel(x), "y": _pixel(y), "width": frame["width"], "height": frame["height"],
+            "scale": frame["scale"], "crc": frame["crc"], "url": frame["url"], "fill": self.theme["surface"],
+        }
+        self.elements.insert(0, element) if first else self.elements.append(element)
+
     def number_cell(self, size) -> int:
         return _number_mask(size, "crisp" if self.crisp else "smooth", True)["width"]
 

@@ -46,6 +46,7 @@ void HaDial::setup() {
 }
 
 void HaDial::on_shutdown() {
+  this->frames_.cancel();
   if (this->wifi_handler_ != nullptr)
     esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, this->wifi_handler_);
   if (this->ip_handler_ != nullptr)
@@ -119,6 +120,25 @@ void HaDial::loop() {
   this->was_connected_ = connected;
   if (this->value_dirty_ && millis() - this->last_rotate_ms_ >= VALUE_DEBOUNCE_MS)
     this->flush_value_();
+  FrameOutcome outcome;
+  if (this->frames_.collect(outcome)) {
+    if (outcome.ok) ESP_LOGD(TAG, "Frame %08x received in %u ms", static_cast<unsigned>(outcome.crc), static_cast<unsigned>(outcome.elapsed_ms));
+    else ESP_LOGW(TAG, "Frame %08x failed: %s", static_cast<unsigned>(outcome.crc), outcome.error);
+    if (this->is_connected())
+      this->fire_homeassistant_event("esphome.ha_dial_frame_status",
+                                    {{"device", this->device_}, {"crc", std::to_string(outcome.crc)}, {"error", outcome.error},
+                                     {"elapsed_ms", std::to_string(outcome.elapsed_ms)}, {"free_heap", std::to_string(outcome.free_heap)},
+                                     {"largest_block", std::to_string(outcome.largest_block)}});
+    if (outcome.ok && this->display_ != nullptr) this->display_->update();
+    this->sync_frame_();  // The page may have changed while this frame was on its way.
+  }
+}
+
+// One frame lives on the device, for the current scene; leaving an image page gives the RAM back.
+void HaDial::sync_frame_() {
+  const SceneElement *image = this->scenes_.current != nullptr ? scene_image(*this->scenes_.current) : nullptr;
+  if (image != nullptr) this->frames_.request(*image);
+  else this->frames_.release();
 }
 
 void HaDial::show_view(std::string view) {
@@ -246,6 +266,7 @@ void HaDial::show_view(std::string view) {
     this->value_dirty_ = this->value_pending_ = false;
   }
   this->settings_active_ = this->settings_enabled_ && !clear_requested && incoming_settings;
+  this->sync_frame_();
   this->atlas_received_ = 0;
   if (this->display_ != nullptr)
     this->display_->update();
@@ -279,8 +300,9 @@ void HaDial::draw(display::Display &it) {
     return;
   }
   if (this->scenes_.current != nullptr && this->scenes_.current->valid) {
+    const FrameView frame = this->frames_.view();
     draw_scene(it, *this->scenes_.current,
-               this->has_value_ && (this->value_dirty_ || this->value_pending_) ? this->value_ : std::numeric_limits<float>::quiet_NaN());
+               this->has_value_ && (this->value_dirty_ || this->value_pending_) ? this->value_ : std::numeric_limits<float>::quiet_NaN(), &frame);
     return;
   }
   it.fill(Color::BLACK);

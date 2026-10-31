@@ -541,13 +541,20 @@ graphic and big-type **Editorial**; anything with a level also offers **Column**
 The entity selector offers light, switch, cover, climate, media player, fan, alarm, lock, vacuum,
 sensor, binary sensor, weather, timer, calendar, scene, select/input select, number/input number and
 button/input button. Sensor instruments include energy, air quality, water, vehicle and data.
-Camera and Photo time faces are not implemented; they need an image transport.
+Camera faces (**Portal**, **Cinema**, **Radar**) and watch **Photos** show a camera or image entity.
 
 Faces show real sources only. The page's Options tab asks for the sources its style reads: time zone,
 weather, a history window, and metric sensors with an optional maximum, which Rings and Bands fill
 towards. A source that isn't set or available shows `--`, a chart with no recorded history says NO
 HISTORY, and a reading with no maximum shows no progress. Ambient and watch faces redraw once a minute;
 only chronographs update each second.
+
+A picture is captured when you enter its page and when a bound entity fires: pick a motion or doorbell
+entity as **New picture when this changes**, or use an image entity, which updates itself. Otherwise it
+stays as captured and shows its age. Portal offers the page's first two destinations as direct action
+buttons. Radar shows a bound detection sensor's state, and its confidence if the sensor reports one; it
+draws no detection boxes. The Dial must be able to reach HA's internal URL over plain HTTP. If it can't,
+the card reports why and the page shows NO LINK. Crisp renders pictures as a two-colour dither.
 
 Rotary controls use the entity's current limits and step. Media/fan/cover/vacuum actions
 respect reported capabilities. Sensors, binary sensors, weather and calendars are read-only;

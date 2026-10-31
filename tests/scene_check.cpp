@@ -1,8 +1,10 @@
+#include "raster.h"
 #include "scene.h"
 #include <cassert>
 #include <iostream>
 #include <iterator>
 #include <memory>
+#include <vector>
 
 using namespace esphome::ha_dial;
 int main() {
@@ -13,10 +15,28 @@ int main() {
     auto scene = std::make_unique<SceneBuffer>();
     assert(parse_scene(source, *scene));
     auto display = std::make_unique<esphome::display::Display>();
-    draw_scene(*display, *scene, source["test_local_value"] | std::numeric_limits<float>::quiet_NaN());
+    // Frames travel outside the scene: base64 here, as the browser has them, into the Dial's buffer shape.
+    std::vector<uint8_t> frame_bytes;
+    FrameView frame;
+    if (const SceneElement *image = scene_image(*scene)) {
+      const std::string key = std::to_string(image->crc);
+      const char *encoded = source["test_frames"][key] | "";
+      static const std::string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+      int bits = 0, buffer = 0;
+      for (const char *cursor = encoded; *cursor && *cursor != '='; cursor++) {
+        buffer = (buffer << 6) | static_cast<int>(alphabet.find(*cursor));
+        bits += 6;
+        if (bits >= 8) { bits -= 8; frame_bytes.push_back((buffer >> bits) & 0xFF); }
+      }
+      if (!frame_bytes.empty()) {
+        assert(frame_crc32(frame_bytes.data(), frame_bytes.size()) == image->crc);
+        frame = {frame_bytes.data(), image->mask_width, image->mask_height, image->crc};
+      }
+    }
+    draw_scene(*display, *scene, source["test_local_value"] | std::numeric_limits<float>::quiet_NaN(), &frame);
     std::cout.write(reinterpret_cast<const char *>(display->pixels.data()), display->pixels.size());
     const int version = source["version"];
-    source["version"] = 6;
+    source["version"] = 7;
     auto unknown = std::make_unique<SceneBuffer>();
     assert(!parse_scene(source, *unknown));
     source["version"] = version;
@@ -35,7 +55,20 @@ int main() {
     }
     for (JsonObject element : source["elements"].as<JsonArray>()) {
       const std::string op = element["op"].as<std::string>();
-      if (op == "polygon") {
+      if (op == "image") {
+        source["version"] = 5;
+        assert(!parse_scene(source, *unknown));
+        source["version"] = version;
+        const int width = element["width"];
+        element["width"] = 2000;
+        assert(!parse_scene(source, *unknown));
+        element["width"] = width;
+        const std::string url = element["url"].as<std::string>();
+        element["url"] = "https://example.invalid/frame";
+        assert(!parse_scene(source, *unknown));
+        element["url"] = url;
+        assert(parse_scene(source, *unknown));
+      } else if (op == "polygon") {
         const int x = element["points"][0][0];
         element["points"][0][0] = 960;
         assert(!parse_scene(source, *unknown));

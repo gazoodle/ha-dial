@@ -29,6 +29,7 @@ from .chronograph import resolve_clock, source_entities
 from .const import DOMAIN
 from .controls import control_command, control_state, preview_feedback
 from .definition import THEMES, build_definition, leaf_items, validate_definition
+from .frames import cancel_capture, mark_stale, request_frame, scene_frames
 from .history import ensure_history, forget_history, record_change
 from .navigator import Navigator
 from .protocol import device_payload
@@ -142,6 +143,11 @@ async def _push(hass: HomeAssistant, device: str, view: dict) -> None:
     if state.get("unloading") or device in state.get("resetting", set()) or (device in state.get("stored_definitions", {}) and state["stored_definitions"][device] is None):
         return
     await ensure_history(hass, view)
+
+    async def republish():
+        await _push(hass, device, _navigator(hass, device).current())
+
+    request_frame(hass, device, view, republish)
     view = resolve_clock(hass, view)
     _navigator(hass, device).clock_snapshot = view if view.get("style") in FACE_STYLES else None
     revision = _next_revision(hass, device)
@@ -210,8 +216,11 @@ def _scene_result(hass: HomeAssistant, device: str, view: dict) -> dict:
     snapshot = _navigator(hass, device).clock_snapshot
     if snapshot and (snapshot.get("id"), snapshot.get("style")) == (view.get("id"), view.get("style")):
         view = {**view, "_clock": snapshot["_clock"]}
+    scene = compile_scene(resolve_clock(hass, view))
     return {
-        "scene": compile_scene(resolve_clock(hass, view)),
+        "scene": scene,
+        "frames": scene_frames(hass, scene),
+        "frame_error": state.get("frame_status", {}).get(device, ""),
         "revision": state.get("revisions", {}).get(device, 0),
         "deployment": state.get("deployment_status", {}).get(
             device, "preview" if _is_preview(device) else "waiting"
@@ -281,6 +290,8 @@ def _watch_definition_entities(
         current = navigator.current()
         entity = _event.data.get("entity_id")
         record_change(hass, entity, _event.data.get("new_state"), current.get("clock", {}).get("history_hours", 24))
+        if entity is not None:
+            mark_stale(hass, entity)
         if entity != current.get("entity_id") and entity not in source_entities(current):
             return
         _sync_control(hass, navigator)
@@ -306,6 +317,7 @@ def _watch_definition_entities(
         raise
 
     def unsubscribe():
+        cancel_capture(hass, device)
         for cancel in cleanup:
             cancel()
 

@@ -66,7 +66,7 @@ def integration(dial):
 
     dial.module("homeassistant.components.cover", CoverEntityFeature=CoverEntityFeature)
     dial.module("homeassistant.components.light", ATTR_BRIGHTNESS="brightness")
-    dial.module("homeassistant.components.http", StaticPathConfig=SimpleNamespace)
+    dial.module("homeassistant.components.http", StaticPathConfig=SimpleNamespace, HomeAssistantView=object)
     dial.module("homeassistant.config_entries", ConfigEntry=object)
     dial.module(
         "homeassistant.const",

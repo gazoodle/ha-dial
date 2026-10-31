@@ -1,8 +1,10 @@
 """Feed the same resolved scenes through the real C++ parser and card raster."""
 
+import base64
 import json
 import os
 import subprocess
+import zlib
 from pathlib import Path
 
 import pytest
@@ -22,10 +24,31 @@ FACE_CLOCK = {
 }
 
 
+def _test_frame(width, height):
+    """A deterministic gradient: the parity check needs every pixel known, not a photograph."""
+    data = bytes(
+        value
+        for y in range(height)
+        for x in range(width)
+        for value in (((x * 31 // width) << 3 | (y * 63 // height) >> 3) & 0xFF, ((y * 63 // height) << 5 | (x + y) % 32) & 0xFF)
+    )
+    return data, zlib.crc32(data)
+
+
 def examples(scene):
+    for style, width, height, scale in (("CAM-PORTAL", 144, 112, 1), ("WAT-PHOTOS", 120, 120, 2)):
+        data, crc = _test_frame(width, height)
+        image = {"url": "http://example.invalid/api/ha_dial/frame/example", "crc": crc, "width": width, "height": height, "scale": scale, "age": "2 MIN", "error": None}
+        resolved = scene.compile_scene({
+            "id": "face", "kind": "menu", "title": "Example", "style": style, "back": True, "items": [],
+            "_clock": {**FACE_CLOCK, "image": image, "detection": None},
+        })
+        yield {**resolved, "test_frames": {str(crc): base64.b64encode(data).decode()}}
+        # The same scene before its frame arrives must draw the placeholder on both renderers.
+        yield resolved
     for style in (
         "AMB-SOLAR", "AMB-TYPOGRAPHIC", "AMB-ORBITAL", "AMB-STATUS", "WAT-CONTOUR", "WAT-MODULAR", "WAT-PALETTE",
-        "WAT-RINGS", "WAT-SOLAR", "WAT-REFLECTIONS", "DAT-AREA", "DAT-RADAR", "DAT-BANDS", "DAT-SPARK",
+        "WAT-RINGS", "WAT-SOLAR", "WAT-REFLECTIONS", "CAM-CINEMA", "CAM-RADAR", "DAT-AREA", "DAT-RADAR", "DAT-BANDS", "DAT-SPARK",
     ):
         for raster in ("crisp", "smooth"):
             yield scene.compile_scene({

@@ -3,6 +3,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import display, font, touchscreen
+from esphome.components.esp32 import include_builtin_idf_component
 from esphome.const import CONF_DISPLAY, CONF_FONT, CONF_ID
 
 AUTO_LOAD = ["json", "web_server_base"]
@@ -25,6 +26,7 @@ CONFIG_SCHEMA = cv.Schema(
 
 
 async def to_code(config):
+    include_builtin_idf_component("esp_http_client")
     component = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(component, config)
     cg.add(component.set_device(config[CONF_DEVICE]))

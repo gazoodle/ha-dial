@@ -49,7 +49,7 @@ bool parse_scene(JsonObject source, SceneBuffer &target) {
     target.element_count = target.region_count = 0;
     target.valid = false;
     const int version = source["version"] | 0;
-    if (version < 1 || version > 5 || (source["width"] | 0) != 240 ||
+    if (version < 1 || version > 6 || (source["width"] | 0) != 240 ||
         (source["height"] | 0) != 240 || !valid_colour(source["background"]))
       return false;
     const char *screen = source["screen"];
@@ -84,7 +84,22 @@ bool parse_scene(JsonObject source, SceneBuffer &target) {
         element.cap = input["cap"] | false;
         if ((element.solid || element.cap) && version < 5) return false;
       }
-      if (strcmp(operation, "polygon") == 0) {
+      if (strcmp(operation, "image") == 0) {
+        element.op = 'i';
+        element.x = input["x"] | -1;
+        element.y = input["y"] | -1;
+        element.mask_width = input["width"] | 0;
+        element.mask_height = input["height"] | 0;
+        element.value = input["scale"] | 1;
+        element.crc = input["crc"] | 0u;
+        const char *url = input["url"] | "";
+        if (version < 6 || element.x < 0 || element.x >= 240 || element.y < 0 || element.y >= 240 ||
+            element.mask_width <= 0 || element.mask_height <= 0 || (element.value != 1 && element.value != 2) ||
+            static_cast<size_t>(element.mask_width) * element.mask_height * 2 > MAX_FRAME_BYTES ||
+            strlen(url) > 200 || (*url && strncmp(url, "http://", 7) != 0))
+          return false;
+        element.pixels = url;
+      } else if (strcmp(operation, "polygon") == 0) {
         if (version < 5 || !element.has_fill) return false;
         element.op = 'y';
         JsonArray points = input["points"].as<JsonArray>();
@@ -181,7 +196,8 @@ bool parse_scene(JsonObject source, SceneBuffer &target) {
         element.colour = scene_colour(colour, Color::BLACK);
         element.background = scene_colour(background, Color::BLACK);
       } else if (strcmp(operation, "line") != 0 && strcmp(operation, "polyline") != 0 &&
-                 strcmp(operation, "polygon") != 0 && strcmp(operation, "segments") != 0) {
+                 strcmp(operation, "polygon") != 0 && strcmp(operation, "segments") != 0 &&
+                 strcmp(operation, "image") != 0) {
         return false;
       }
       if ((element.op == 'l' || element.op == 'a' || element.op == 'g') && !element.has_stroke) return false;
@@ -206,7 +222,38 @@ bool parse_scene(JsonObject source, SceneBuffer &target) {
     return true;
 }
 
-void draw_scene(display::Display &it, const SceneBuffer &scene, float local_value) {
+const SceneElement *scene_image(const SceneBuffer &scene) {
+  for (size_t index = 0; index < scene.element_count; index++)
+    if (scene.elements[index].op == 'i') return &scene.elements[index];
+  return nullptr;
+}
+
+// An older frame of the same size stays up while its replacement arrives; anything else shows the
+// placeholder rather than a picture stretched to the wrong shape.
+static void draw_image(display::Display &it, const SceneElement &element, const FrameView *frame) {
+  const int scale = element.value;
+  const int left = element.x - element.mask_width * scale / 2, top = element.y - element.mask_height * scale / 2;
+  const bool usable = frame != nullptr && frame->pixels != nullptr && frame->width == element.mask_width && frame->height == element.mask_height;
+  for (int row = 0; row < element.mask_height; row++) {
+    for (int column = 0; column < element.mask_width; column++) {
+      Color colour = element.fill;
+      if (usable) {
+        const uint8_t *source = frame->pixels + (static_cast<size_t>(row) * element.mask_width + column) * 2;
+        const int rgb565 = source[0] << 8 | source[1];
+        colour = Color(((rgb565 >> 11) & 0x1F) * 255 / 31, ((rgb565 >> 5) & 0x3F) * 255 / 63, (rgb565 & 0x1F) * 255 / 31);
+      } else if (!element.has_fill) {
+        continue;
+      }
+      for (int dy = 0; dy < scale; dy++)
+        for (int dx = 0; dx < scale; dx++) {
+          const int x = left + column * scale + dx, y = top + row * scale + dy;
+          if (x >= 0 && x < 240 && y >= 0 && y < 240) it.draw_pixel_at(x, y, colour);
+        }
+    }
+  }
+}
+
+void draw_scene(display::Display &it, const SceneBuffer &scene, float local_value, const FrameView *frame) {
   Raster raster([&it](int x, int y, Color colour) { it.draw_pixel_at(x, y, colour); });
   const bool local = std::isfinite(local_value);
   const Color background = scene_colour(scene.background, Color::BLACK);
@@ -218,7 +265,9 @@ void draw_scene(display::Display &it, const SceneBuffer &scene, float local_valu
   };
     for (size_t index = 0; index < scene.element_count; index++) {
       const auto &element = scene.elements[index];
-      if (element.op == 'y') {
+      if (element.op == 'i') {
+        draw_image(it, element, frame);
+      } else if (element.op == 'y') {
         coverage_polygon(element.points, element.smooth, shade(element.fill, element.smooth ? element.background : element.fill));
       } else if (element.op == 's') {
         for (size_t point = 0; point + 1 < element.points.size(); point += 2) {

@@ -71,6 +71,8 @@ class HaDialCard extends HTMLElement {
     this.lastRevision = result.revision;
     this.deployment = result.deployment;
     this.scene = result.scene;
+    this.frames = result.frames || {};
+    this.frameError = result.frame_error || "";
     this.error = undefined;
     this.render();
   }
@@ -139,11 +141,11 @@ class HaDialCard extends HTMLElement {
       status.setAttribute("role", "status");
       this.shadowRoot.querySelector(".stage").append(status);
     }
-    status.textContent = ({ preview: "Local preview", waiting: "Waiting for ESPHome device", sent: "Scene sent · awaiting device", applied: "Scene applied on device", failed: "Device deployment failed" })[this.deployment] || "";
+    status.textContent = this.frameError ? `Dial image: ${this.frameError}` : ({ preview: "Local preview", waiting: "Waiting for ESPHome device", sent: "Scene sent · awaiting device", applied: "Scene applied on device", failed: "Device deployment failed" })[this.deployment] || "";
     if (this.scene) {
       const canvas = this.shadowRoot.querySelector("canvas");
       canvas.setAttribute("aria-label", this.scene.label || "HA Dial preview");
-      renderScene(canvas, this.scene);
+      renderScene(canvas, this.scene, this.frames);
     }
   }
 

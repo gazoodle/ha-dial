@@ -121,14 +121,14 @@ def test_gallery_uses_domain_styles_and_real_scene(integration):
             "id": 2, "page": {"title": "Home"}, "theme": "ember",
         })
         navigation = integration.connection.send_result.call_args.args[1]
-        assert len(navigation["styles"]) == 30
+        assert len(navigation["styles"]) == 34
         assert len(navigation["styles"]["NAV-ORBIT"]["regions"]) >= 4
         await integration.code._ws_gallery(integration.hass, integration.connection, {
             "id": 3, "page": {"title": "Home", "appearance": {"background": "#123456"}},
             "theme": "ember", "preview_only": True,
         })
         preview = integration.connection.send_result.call_args.args[1]
-        assert set(preview) == {"scene"}
+        assert set(preview) == {"scene", "frames"}
         assert preview["scene"]["background"].lower() == "#123456"
         assert not any(region["id"].startswith("gallery_") for region in preview["scene"]["regions"])
 

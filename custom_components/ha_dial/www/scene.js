@@ -1,5 +1,5 @@
 // Pixel raster contract mirrored by the firmware and checked with shared scenes.
-export function rasterize(scene, localValue = NaN) {
+export function rasterize(scene, localValue = NaN, frames = {}) {
   const local = Number.isFinite(localValue);
   const data = new Uint8ClampedArray(240 * 240 * 4);
   const colours = new Map();
@@ -142,8 +142,30 @@ export function rasterize(scene, localValue = NaN) {
     if (element.background) wu(x1, y1, x2, y2, shade(element.stroke, element.background));
     else line(x1, y1, x2, y2, element.stroke);
   };
+  const frameBytes = (encoded) => Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
   for (const element of scene.elements) {
-    if (element.op === "polygon") {
+    if (element.op === "image") {
+      // An unknown frame draws the placeholder, exactly as the Dial does before its fetch completes.
+      const bytes = frames[element.crc] ? frameBytes(frames[element.crc]) : null;
+      const scale = element.scale || 1;
+      const left = element.x - Math.trunc(element.width * scale / 2), top = element.y - Math.trunc(element.height * scale / 2);
+      const put = (x, y, r, g, b) => {
+        if (x < 0 || x >= 240 || y < 0 || y >= 240) return;
+        data.set([r, g, b, 255], (y * 240 + x) * 4);
+      };
+      const [fr, fg, fb] = element.fill ? colour(element.fill) : [0, 0, 0];
+      for (let row = 0; row < element.height; row++) {
+        for (let column = 0; column < element.width; column++) {
+          if (!bytes && !element.fill) continue;
+          let r = fr, g = fg, b = fb;
+          if (bytes) {
+            const at = (row * element.width + column) * 2, value = bytes[at] << 8 | bytes[at + 1];
+            r = Math.floor(((value >> 11) & 31) * 255 / 31); g = Math.floor(((value >> 5) & 63) * 255 / 63); b = Math.floor((value & 31) * 255 / 31);
+          }
+          for (let dy = 0; dy < scale; dy++) for (let dx = 0; dx < scale; dx++) put(left + column * scale + dx, top + row * scale + dy, r, g, b);
+        }
+      }
+    } else if (element.op === "polygon") {
       polygon(element.points, Boolean(element.background), shade(element.fill, element.background || element.fill));
     } else if (element.op === "segments") {
       for (let index = 0; index + 3 < element.lines.length; index += 4)
@@ -211,9 +233,9 @@ export function rasterize(scene, localValue = NaN) {
   return data;
 }
 
-export function renderScene(canvas, scene) {
+export function renderScene(canvas, scene, frames = {}) {
   const ctx = canvas.getContext("2d");
   const image = ctx.createImageData(240, 240);
-  image.data.set(rasterize(scene));
+  image.data.set(rasterize(scene, NaN, frames));
   ctx.putImageData(image, 0, 0);
 }

@@ -1,5 +1,11 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b11
+
+- **Requires firmware 2026.10.1-b5 for pictures.** Pages without a picture still work on b4.
+- Add Camera faces (Portal, Cinema, Radar) and watch Photos, from camera or image entities, captured on page entry and on bound entity events. A capture failure keeps the last picture and says so.
+- The Dial must reach HA's internal URL over plain HTTP. Frames are served at an unauthenticated, expiring, single-frame URL.
+
 ## 2026.10.1-b10
 
 - **Breaking: requires firmware 2026.10.1-b4.** HA now emits scene version 5, which older firmware rejects while keeping its last screen. Upload the firmware, then restart HA and refresh the browser.
