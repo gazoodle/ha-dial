@@ -2,6 +2,20 @@ import { renderScene } from "./scene.js";
 
 import { defaultConfig } from "./editor.js";
 
+const ZOOM_KEY = "ha-dial-preview-zoom";
+const ZOOM_MIN = 100, ZOOM_MAX = 400, ZOOM_STEP = 25;
+// One Dial pixel per CSS pixel is the point where hard edges start being honest rather than ragged.
+const SCREEN_PIXELS = 240;
+
+// Per browser, because a phone and a Mac want different sizes. Storage can be blocked or empty, and
+// the preview must still work, so this only ever falls back to 100%.
+function storedZoom() {
+  try {
+    const value = Number(localStorage.getItem(ZOOM_KEY));
+    return value >= ZOOM_MIN && value <= ZOOM_MAX ? Math.round(value / ZOOM_STEP) * ZOOM_STEP : ZOOM_MIN;
+  } catch { return ZOOM_MIN; }
+}
+
 class HaDialCard extends HTMLElement {
   constructor() {
     super();
@@ -23,18 +37,22 @@ class HaDialCard extends HTMLElement {
   setConfig(config) {
     const device = String(config.device || "preview").replaceAll("-", "_");
     if (!/^[a-z0-9_]{1,64}$/.test(device)) throw new Error("Invalid HA Dial device name");
-    const zoom = config.zoom ?? 100;
-    if (!Number.isFinite(zoom) || zoom < 100 || zoom > 300) throw new Error("Preview zoom must be between 100 and 300 percent");
-    const next = { ...config, device, zoom };
+    const { zoom: _retired, ...rest } = config;
+    const next = { ...rest, device };
     if (JSON.stringify(next) !== JSON.stringify(this.config)) this.configVersion++;
     this.config = next;
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
-      this.shadowRoot.innerHTML = `<style>${HaDialCard.styles}</style><ha-card><div class="stage"><div class="dial"><img class="frame" src="/ha_dial/dial-frame.png" alt="" draggable="false"><canvas width="240" height="240" tabindex="0" aria-label="HA Dial preview"></canvas><button class="click-chip" data-action="press" aria-label="Click dial"><span>CLICK</span></button></div><button class="spin left" data-action="rotate_left" aria-label="Rotate left"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="sweep" d="M75 79A37 37 0 1 1 86 42"/><path class="head" d="M74 39L96 39L85 59Z"/></svg></button><button class="spin right" data-action="rotate_right" aria-label="Rotate right"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="sweep" d="M75 79A37 37 0 1 1 86 42"/><path class="head" d="M74 39L96 39L85 59Z"/></svg></button><p role="alert" hidden></p></div></ha-card>`;
+      this.shadowRoot.innerHTML = `<style>${HaDialCard.styles}</style><ha-card><label class="zoom"><span>Zoom</span><input type="range" min="${ZOOM_MIN}" max="${ZOOM_MAX}" step="${ZOOM_STEP}" aria-label="Preview zoom"><output></output></label><div class="viewport"><div class="stage"><div class="dial"><img class="frame" src="/ha_dial/dial-frame.png" alt="" draggable="false"><canvas width="240" height="240" tabindex="0" aria-label="HA Dial preview"></canvas><button class="click-chip" data-action="press" aria-label="Click dial"><span>CLICK</span></button></div><button class="spin left" data-action="rotate_left" aria-label="Rotate left"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="sweep" d="M75 79A37 37 0 1 1 86 42"/><path class="head" d="M74 39L96 39L85 59Z"/></svg></button><button class="spin right" data-action="rotate_right" aria-label="Rotate right"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="sweep" d="M75 79A37 37 0 1 1 86 42"/><path class="head" d="M74 39L96 39L85 59Z"/></svg></button><p role="alert" hidden></p></div></div></ha-card>`;
       this.shadowRoot.addEventListener("click", (event) => {
         const action = event.target.closest("button")?.dataset.action;
         if (action) this.input(action);
       });
+      this.shadowRoot.querySelector(".zoom input").addEventListener("input", (event) => {
+        this.applyZoom(Number(event.target.value));
+        try { localStorage.setItem(ZOOM_KEY, String(this.zoom)); } catch { /* Remembering is a convenience. */ }
+      });
+      this.applyZoom(storedZoom());
       const canvas = this.shadowRoot.querySelector("canvas");
       canvas.addEventListener("click", (event) => this.touch(event));
       canvas.addEventListener("keydown", (event) => {
@@ -42,8 +60,23 @@ class HaDialCard extends HTMLElement {
         if (action) { event.preventDefault(); this.input(action); }
       });
     }
-    this.shadowRoot.querySelector("ha-card").style.setProperty("--dial-card-width", `${360 * zoom / 100}px`);
     this.load();
+  }
+
+  // Enlarges the whole rectangle. The viewport scrolls, so a phone pans around what no longer fits.
+  applyZoom(zoom) {
+    this.zoom = zoom;
+    const width = 360 * zoom / 100, card = this.shadowRoot.querySelector("ha-card");
+    card.style.setProperty("--dial-zoom", String(zoom / 100));
+    card.style.setProperty("--dial-card-width", `${width}px`);
+    // At 100% the card still shrinks to fit a narrow phone; past that it deliberately doesn't.
+    card.style.setProperty("--dial-stage-width", zoom === ZOOM_MIN ? "100%" : `${width}px`);
+    // A layout around the card, such as the panel, can make room for it.
+    this.style.setProperty("--dial-preview-width", zoom === ZOOM_MIN ? "" : `${width}px`);
+    this.shadowRoot.querySelector(".zoom input").value = String(zoom);
+    this.shadowRoot.querySelector(".zoom output").textContent = `${zoom}%`;
+    const canvas = this.shadowRoot.querySelector("canvas");
+    canvas.style.imageRendering = (canvas.getBoundingClientRect?.().width ?? 0) >= SCREEN_PIXELS ? "pixelated" : "auto";
   }
 
   set hass(hass) { this._hass = hass; this.load(); }
@@ -149,7 +182,7 @@ class HaDialCard extends HTMLElement {
     }
   }
 
-  getCardSize() { return Math.ceil(5 * (this.config?.zoom ?? 100) / 100); }
+  getCardSize() { return 5; }
   static getConfigElement() { return document.createElement("ha-dial-card-editor"); }
   static getStubConfig() {
     return defaultConfig();
@@ -157,20 +190,25 @@ class HaDialCard extends HTMLElement {
 
   static styles = `
     ha-card { display:block; width:min(100%,var(--dial-card-width,360px)); margin-inline:auto; overflow:hidden; background:radial-gradient(circle at 50% 24%,#3d4248,#16181b 70%); }
-    .stage { position:relative; width:100%; aspect-ratio:1; display:grid; place-items:center; padding:22px 22px 48px; box-sizing:border-box; }
-    [role=status] { position:absolute; bottom:20px; left:80px; right:80px; margin:0; text-align:center; font-size:11px; line-height:16px; overflow-wrap:anywhere; }
+    .zoom { display:grid; grid-template-columns:auto minmax(0,1fr) 44px; align-items:center; gap:10px; padding:8px 14px; font:500 12px/16px system-ui,sans-serif; color:#ff8b2d; background:#16181b; }
+    .zoom input { width:100%; accent-color:#ff8b2d; cursor:pointer; }
+    .zoom output { text-align:right; font-variant-numeric:tabular-nums; }
+    .viewport { overflow:auto; max-height:85dvh; overscroll-behavior:contain; }
+    /* Every measure scales, so the whole rectangle grows rather than only the Dial inside it. */
+    .stage { position:relative; width:var(--dial-stage-width,100%); aspect-ratio:1; margin-inline:auto; display:grid; place-items:center; padding:calc(22px * var(--dial-zoom,1)) calc(22px * var(--dial-zoom,1)) calc(48px * var(--dial-zoom,1)); box-sizing:border-box; }
+    [role=status] { position:absolute; bottom:calc(20px * var(--dial-zoom,1)); left:calc(80px * var(--dial-zoom,1)); right:calc(80px * var(--dial-zoom,1)); margin:0; text-align:center; font-size:calc(11px * var(--dial-zoom,1)); line-height:calc(16px * var(--dial-zoom,1)); overflow-wrap:anywhere; }
     .dial { position:relative; width:86%; aspect-ratio:472/475; }
     /* Visible artwork bounds at alpha > 8: (37,1)–(509,476) in the 512 px asset. */
     .frame { position:absolute; left:-7.839%; top:-.211%; display:block; width:108.475%; height:auto; pointer-events:none; }
     canvas { position:absolute; left:15.148%; top:15.263%; display:block; width:69.703%; height:auto; aspect-ratio:1; border-radius:50%; }
-    .spin { position:absolute; bottom:16px; width:64px; height:64px; padding:8px; box-sizing:border-box; border:0; border-radius:50%; background:none; color:#ff8b2d; opacity:.38; cursor:pointer; transition:opacity .15s,filter .15s; }
-    .spin.left { left:16px; transform:scaleX(-1); }.spin.right { right:16px; }
+    .spin { position:absolute; bottom:calc(16px * var(--dial-zoom,1)); width:calc(64px * var(--dial-zoom,1)); height:calc(64px * var(--dial-zoom,1)); padding:calc(8px * var(--dial-zoom,1)); box-sizing:border-box; border:0; border-radius:50%; background:none; color:#ff8b2d; opacity:.38; cursor:pointer; transition:opacity .15s,filter .15s; }
+    .spin.left { left:calc(16px * var(--dial-zoom,1)); transform:scaleX(-1); }.spin.right { right:calc(16px * var(--dial-zoom,1)); }
     .spin svg { display:block; width:100%; height:100%; overflow:visible; }
     .spin .sweep { fill:none; stroke:currentColor; stroke-width:9; stroke-linecap:butt; }
     .spin .head { fill:currentColor; }
     .spin:hover,.spin:focus-visible { opacity:.95; filter:drop-shadow(0 0 4px #ff8b2d60); }
     /* Casa Mia cm-chip dimensions; orange translucent treatment over the M5 mark. */
-    .click-chip { position:absolute; left:50%; top:90.316%; transform:translate(-50%,-50%); display:inline-flex; align-items:center; justify-content:center; gap:4px; box-sizing:border-box; border:0; border-radius:12px; padding:3px 10px; box-shadow:inset 0 0 0 1px currentColor; color:#ff8b2d; background:transparent; opacity:.55; font:500 10px/16px system-ui,sans-serif; letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; cursor:pointer; transition:opacity .15s,box-shadow .15s,filter .15s; }
+    .click-chip { position:absolute; left:50%; top:90.316%; transform:translate(-50%,-50%); display:inline-flex; align-items:center; justify-content:center; gap:4px; box-sizing:border-box; border:0; border-radius:calc(12px * var(--dial-zoom,1)); padding:calc(3px * var(--dial-zoom,1)) calc(10px * var(--dial-zoom,1)); box-shadow:inset 0 0 0 1px currentColor; color:#ff8b2d; background:transparent; opacity:.55; font:500 calc(10px * var(--dial-zoom,1))/calc(16px * var(--dial-zoom,1)) system-ui,sans-serif; letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; cursor:pointer; transition:opacity .15s,box-shadow .15s,filter .15s; }
     .click-chip span { opacity:0; }
     .click-chip:hover span,.click-chip:focus-visible span { opacity:1; }
     .click-chip:hover,.click-chip:focus-visible { opacity:.95; background:color-mix(in srgb,#ff8b2d 28%,#15110f 72%); box-shadow:inset 0 0 0 1px currentColor,0 0 0 3px #ff8b2d59; filter:brightness(1.08); }

@@ -428,10 +428,10 @@ the compiled setup interface replaces the cached scene. Touch faults have a sepa
 
 ### Preview size
 
-Set **Preview zoom (%)** in the card editor from 100% to 300% to enlarge the Dial on the
-dashboard. The preview fits the available card width; give the card more dashboard columns
-when necessary. YAML uses `zoom: 200` for twice the default maximum width. This changes
-only the browser preview size; the physical Dial and resolved scene stay at 240 × 240.
+Use the **Zoom** slider above the preview to enlarge the whole rectangle from 100% to 400%, Dial
+artwork and controls included. Where it no longer fits, drag to pan around it; on a wide screen the
+panel gives it more room first. Each browser remembers its own zoom, and it isn't part of your Dial's
+configuration. The device screen is unchanged.
 
 ### What resets and removals retain
 

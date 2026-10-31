@@ -1,5 +1,9 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b13
+
+- Add a Zoom slider to the preview, enlarging the whole rectangle up to 400% with panning where it no longer fits. Each browser remembers its own zoom. This replaces the card editor's Preview zoom setting, and a saved `zoom` value is ignored.
+
 ## 2026.10.1-b12
 
 - **Breaking: a page saved with a camera style no longer loads.** Add the camera to the page as an entity instead; there is no migration.

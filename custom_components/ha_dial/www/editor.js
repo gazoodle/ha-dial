@@ -2,7 +2,7 @@ import { openOptions } from './editor/options.js';
 import { DOMAINS } from './editor/catalogue.js';
 
 export function defaultConfig() {
-  return { device: "preview", zoom: 100, theme: "ember", pages: [{ id: "home", title: "Home", parent: "", lights: [] }], template: "" };
+  return { device: "preview", theme: "ember", pages: [{ id: "home", title: "Home", parent: "", lights: [] }], template: "" };
 }
 
 const THEMES = ["ember", "verdant", "cobalt", "rose", "acid", "alloy"];
@@ -59,8 +59,8 @@ class HaDialEditor extends HTMLElement {
     const settings = this.querySelector(".settings"), advanced = this.querySelector(".advanced");
     for (const form of [settings, advanced]) {
       form.hass = this._hass; form.data = this.config;
-      form.computeLabel = (field) => ({ device: "Dial device", theme: "Default page theme", zoom: "Preview zoom (%)", template: "Template" })[field.name] || field.name;
-      form.computeHelper = (field) => ({ device: "Choose an installed Dial, or Preview for local simulation. Add new Dials through the ESPHome integration.", zoom: "Enlarge the dashboard preview within the available width. The device screen is unchanged.", template: "Return a tree object or JSON. Jinja macros and HA custom_templates are supported; pages and theme are available as variables." })[field.name];
+      form.computeLabel = (field) => ({ device: "Dial device", theme: "Default page theme", template: "Template" })[field.name] || field.name;
+      form.computeHelper = (field) => ({ device: "Choose an installed Dial, or Preview for local simulation. Add new Dials through the ESPHome integration.", template: "Return a tree object or JSON. Jinja macros and HA custom_templates are supported; pages and theme are available as variables." })[field.name];
     }
     const services = this._hass.services?.esphome;
     if (!this.settingsSchema || services !== this.deviceServices || this.config.device !== this.deviceSelection) {
@@ -76,7 +76,6 @@ class HaDialEditor extends HTMLElement {
       this.settingsSchema = [
         { name: "device", selector: { select: { mode: "dropdown", options } } },
         { name: "theme", selector: THEME_SELECTOR },
-        { name: "zoom", selector: { number: { min: 100, max: 300, step: 25, mode: "slider" } } },
       ];
       this.deviceServices = services;
       this.deviceSelection = this.config.device;
