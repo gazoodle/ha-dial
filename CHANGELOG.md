@@ -1,5 +1,9 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b18
+
+- Reset Dial is always available once a Dial is chosen. A finished save used to leave it greyed out until the next edit, and a save in progress blocked it.
+
 ## 2026.10.1-b17
 
 - Every camera and image now offers colour, mono, tint and dither, in either drawing mode. This replaces the Colour switch, and Crisp no longer forces a dither.

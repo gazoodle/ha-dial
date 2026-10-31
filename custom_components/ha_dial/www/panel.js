@@ -96,7 +96,7 @@ class HaDialPanel extends HTMLElement {
   }
 
   selectDevice(device, force = false) {
-    if (!force && (this.saving || device === this.device)) return;
+    if (!force && (this.saving || this.resetting || device === this.device)) return;
     if (!force && this.dirty) {
       this.querySelector('select').value = this.device;
       confirmDialog(this, {title:'Unsaved changes', message:'Switching Dials will discard changes you have not saved.', confirm:'Discard changes', action:()=>this.selectDevice(device,true)}); return;
@@ -119,18 +119,24 @@ class HaDialPanel extends HTMLElement {
     const card = this.querySelector('ha-dial-card');
     card.setConfig({...this.draft, device:'preview'}); card.hass = this._hass;
   }
+  updateButtons() {
+    const busy = this.saving || this.resetting;
+    this.querySelector('.save').disabled = !this.device || !this.dirty || busy;
+    // Reset stays available during a save, which may be stuck: HA queues it behind the save under its definition lock.
+    this.querySelector('.reset').disabled = !this.device || this.resetting;
+    this.querySelector('select').disabled = busy;
+  }
   updateState() {
-    this.querySelector('.save').disabled = !this.device || !this.dirty || this.saving;
-    this.querySelector('.reset').disabled = !this.device || this.saving;
+    this.updateButtons();
     this.querySelector('.state').textContent = this.saving ? 'Saving…' : this.dirty ? 'Unsaved changes' : 'Saved';
   }
   confirmReset() {
-    if (!this.device || this.saving) return;
+    if (!this.device || this.resetting) return;
     const device = this.device;
     confirmDialog(this, {title:'Reset Dial configuration', message:`Remove all saved pages, controls and unsaved changes for ${device.replaceAll('_',' ')}? The Dial will return to an unconfigured display. Wi-Fi, ESPHome pairing and firmware stay as they are.`, confirm:'Reset Dial', action:()=>this.reset(device)});
   }
   async reset(device) {
-    this.saving = true; this.querySelector('select').disabled = true; this.updateState();
+    this.resetting = true; this.updateState();
     let status;
     try {
       const result = await this._hass.callWS({type:'ha_dial/reset',device});
@@ -138,11 +144,11 @@ class HaDialPanel extends HTMLElement {
       this.selectDevice(device,true);
       status = result.cleared ? 'Reset sent to Dial' : 'Reset saved; display not cleared';
     } catch (error) { this.showError(error); }
-    finally { this.saving = false; this.querySelector('select').disabled = false; this.updateState(); if (status) this.querySelector('.state').textContent = status; }
+    finally { this.resetting = false; this.updateState(); if (status) this.querySelector('.state').textContent = status; }
   }
   async save() {
     const device = this.device, definition = this.definition(), snapshot = JSON.stringify(definition);
-    this.saving = true; this.querySelector('select').disabled = true; this.updateState();
+    this.saving = true; this.updateState();
     try {
       const result = await this._hass.callWS({type:'ha_dial/configure', device, definition});
       this.definitions[device] = definition;
@@ -152,7 +158,7 @@ class HaDialPanel extends HTMLElement {
         this.querySelector('.state').textContent = ({applied:'Applied to Dial', sent:'Sent to Dial', waiting:'Saved; waiting for Dial', failed:'Saved; deployment failed'})[result.deployment] || 'Saved';
       }
     } catch (error) { this.showError(error); }
-    finally { this.saving = false; this.querySelector('select').disabled = false; this.querySelector('.save').disabled = !this.dirty; }
+    finally { this.saving = false; this.updateButtons(); }
   }
   showError(error) { const node = this.querySelector('.error'); node.textContent = error.message || String(error); node.hidden = false; }
 }

@@ -22,6 +22,9 @@ Appearance dialogs keep a stable position between tabs and show a live HA-render
 the controls on wide screens. Why: on 2026-10-30 the owner found the moving dialog distracting and
 wants to see the effect of the growing set of options while editing.
 
+Reset Dial stays available whenever a Dial is chosen; only a reset already running disables it. Why:
+on 2026-10-31 the owner found it greyed out after a save and ruled it must be available all the time.
+
 ## Crisp is a line-step design (2026-10-31)
 
 Crisp is drawn from simple lines and circles using the line-step algorithms (Bresenham/midpoint),

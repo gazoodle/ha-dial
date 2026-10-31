@@ -1,10 +1,13 @@
 import subprocess
 from pathlib import Path
 
+import pytest
 
-def test_editor_and_card_lifecycle():
+
+@pytest.mark.parametrize("script", ["card_check.mjs", "panel_check.mjs"])
+def test_browser_code_lifecycle(script):
     result = subprocess.run(
-        ["node", "tests/card_check.mjs"],
+        ["node", f"tests/{script}"],
         check=False,
         cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
