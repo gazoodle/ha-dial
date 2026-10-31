@@ -1,5 +1,9 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b16
+
+- Fix setting groups running off the edge of the Options dialog on a phone, and list a style's own settings first.
+
 ## 2026.10.1-b15
 
 - Add a Colour switch to the Portal and Radar camera styles.

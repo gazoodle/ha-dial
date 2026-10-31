@@ -101,7 +101,7 @@ _HUB = ("hub-visible", "hub-radius", "hub-border")
 _GAUGE = ("gauge-radius", "gauge-width", "track-width", "gauge-sweep", "gauge-caps", "gauge-tick-count", "gauge-tick-length", "gauge-tick-gap")
 _VALUE = ("value-size", "value-offset", "unit-size", "detail-size", "detail-offset")
 _ACTIONS = ("action-size", "action-gap", "action-offset")
-_COMMON = ("raster", *_FRAME, *_CHROME)
+_COMMON = (*_FRAME, *_CHROME)
 
 STYLE_SETTINGS = {
     "NAV-ORBIT": (*_TICKS, *_TITLE, *_ITEMS, *_HUB, "orbit-radius"),
@@ -157,7 +157,8 @@ def style_family(style: str) -> str:
 
 def style_settings(style: str, raster: str = "smooth") -> tuple:
     """Settings with a visible effect for this style in this mode."""
-    settings = (*_COMMON, *STYLE_SETTINGS[style_family(style)])
+    # What makes this style itself comes first; the shared frame and chrome settings can wait.
+    settings = ("raster", *STYLE_SETTINGS[style_family(style)], *_COMMON)
     return tuple(name for name in settings if not (raster == "crisp" and name in CRISP_HIDDEN))
 
 

@@ -25,7 +25,8 @@ class Element {
   prepend(node) { node.parentNode = this; this.children.unshift(node); }
   contains(node) { return this === node || this.children.some((child) => child.contains(node)); }
   remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((node) => node !== this); this.parentNode = undefined; }
-  replaceChildren() { this.children = []; }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  click() { this.events.click?.(); }
   querySelectorAll(selector) {
     if (selector === ".tree ha-form") return this.querySelector(".tree").querySelectorAll("ha-form");
     const result = [];
@@ -231,6 +232,27 @@ clockForm.events['value-changed']({stopPropagation(){},detail:{value:{title:'Tim
 clockDialog.children[2].children.find(node=>node.textContent==='Apply').events.click();
 assert.equal(large.config.pages[0].style,'CHR-WORLDTIMER');
 assert.deepEqual(large.config.pages[0].clock,{timezone:'UTC',world_zones:['UTC','Asia/Tokyo'],moon_entity:'sensor.moon',reserve_entity:'sensor.reserve'});
+// The panel's Options dialog: every setting a style reads must be reachable, and its own come first.
+const settingGroups = (entity, appearance = {}) => {
+  const panel = new Element();
+  panel.panelMode = true;
+  panel._hass = { callWS: async () => ({ styles: {}, themes: {}, frames: {} }) };
+  panel.config = { pages: [{ id: "home", title: "Home", appearance, entities: [entity] }] };
+  panel.entities = () => [entity];
+  panel.querySelector = () => null;
+  openOptions(panel, "home", entity.entity_id);
+  const dialog = panel.children.at(-1);
+  const find = (node, name) => node.className?.includes?.(name) ? node : node.children.map((child) => find(child, name)).find(Boolean);
+  const chips = find(dialog, "setting-groups").children;
+  return { names: chips.map((chip) => chip.textContent), chips, body: find(dialog, "setting-group ") ?? find(dialog, "setting-group") };
+};
+assert.deepEqual(settingGroups({ entity_id: "camera.demo" }).names.slice(0, 2), ["Rendering", "Picture"]);
+assert.equal(settingGroups({ entity_id: "camera.demo", style: "CAM-RADAR" }).names[1], "Picture");
+assert(!settingGroups({ entity_id: "camera.demo", style: "CAM-CINEMA" }).names.includes("Picture"));
+assert(!settingGroups({ entity_id: "camera.demo" }, { raster: "crisp" }).names.includes("Picture"), "Crisp pictures are always a dither");
+const pictureGroup = settingGroups({ entity_id: "camera.demo" });
+pictureGroup.chips.find((chip) => chip.textContent === "Picture").click();
+assert(fs.readFileSync("custom_components/ha_dial/www/panel.js", "utf8").includes(".setting-groups{flex-wrap:wrap"), "a phone must be able to reach every group");
 const storage = new Map();
 globalThis.localStorage = { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) };
 const zoomCard = new Card();
