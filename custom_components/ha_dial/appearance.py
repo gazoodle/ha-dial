@@ -71,12 +71,17 @@ TOGGLES = {
     "tick-ring": ("Frame", "Tick ring", False),
     "hub-visible": ("Hub", "Show centre", True),
     "gauge-caps": ("Gauge", "Round ends", True),
+    "picture-colour": ("Picture", "Colour", False),
 }
 CHOICES = {
     "raster": ("Rendering", "Rendering", ("smooth", "crisp"), "smooth"),
     "icon-style": ("Items", "Icons", ("outline", "filled"), "outline"),
     "chrome-style": ("Back and home", "Style", ("pill", "circle", "hidden"), "pill"),
 }
+# These change the treated picture, not the drawn scene, so they are proven against the frame.
+FRAME_SETTINGS = {"picture-colour"}
+# Crisp has no filled icons, and its pictures are always a two-colour dither.
+CRISP_HIDDEN = {"icon-style", "picture-colour"}
 # Crisp is its own design, not Smooth with the edges hardened.
 CRISP_DEFAULTS = {"tick-ring": True, "chrome-style": "circle", "selected-border": 2, "icon-size": 16, "tracking": 2, "label-gap": 17}
 
@@ -124,9 +129,9 @@ STYLE_SETTINGS = {
     "WAT-SOLAR": ("value-size", "title-offset", "label-size"),
     "WAT-REFLECTIONS": ("value-size", "label-size"),
     "WAT-PHOTOS": ("value-size", "title-offset", "label-size"),
-    "CAM-PORTAL": (),
+    "CAM-PORTAL": ("picture-colour",),
     "CAM-CINEMA": ("label-size", "tracking"),
-    "CAM-RADAR": ("label-size", "tracking"),
+    "CAM-RADAR": ("picture-colour", "label-size", "tracking"),
     "DAT-AREA": ("value-size", "label-size"),
     "DAT-RADAR": ("label-size",),
     "DAT-BANDS": ("gauge-radius", "gauge-width", "value-size", "label-size"),
@@ -151,9 +156,9 @@ def style_family(style: str) -> str:
 
 
 def style_settings(style: str, raster: str = "smooth") -> tuple:
-    """Settings with a visible effect for this style; Crisp's stroke icons have no filled form."""
+    """Settings with a visible effect for this style in this mode."""
     settings = (*_COMMON, *STYLE_SETTINGS[style_family(style)])
-    return tuple(name for name in settings if not (raster == "crisp" and name == "icon-style"))
+    return tuple(name for name in settings if not (raster == "crisp" and name in CRISP_HIDDEN))
 
 
 def _validated(key, item):

@@ -1,5 +1,9 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b15
+
+- Add a Colour switch to the Portal and Radar camera styles.
+
 ## 2026.10.1-b14
 
 - Fix camera gallery thumbnails all showing the selected style's picture.

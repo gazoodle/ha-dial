@@ -620,7 +620,8 @@ async def _ws_gallery(hass, connection, msg) -> None:
             nav.input("press")
             _sync_control(hass, nav)
         await ensure_history(hass, nav.current())
-        for style in IMAGE_STYLES:
+        # A live preview only needs the style on show; the gallery needs them all.
+        for style in {nav.current().get("style")} if msg.get("preview_only") else IMAGE_STYLES:
             candidate = {**nav.current(), "style": style}
             if (key := frame_key(candidate)) and key not in hass.data[DOMAIN].get("frames", {}):
                 await capture(hass, candidate, key)

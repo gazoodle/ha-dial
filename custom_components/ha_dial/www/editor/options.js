@@ -1,4 +1,4 @@
-import { CONTROL_STYLES, CRISP_DEFAULTS, DEFAULTS, DEFAULT_STYLES, DOMAINS, FACE_SOURCES, NAV_STYLES, SETTINGS, STYLE_SETTINGS } from './catalogue.js';
+import { CONTROL_STYLES, CRISP_DEFAULTS, CRISP_HIDDEN, DEFAULTS, DEFAULT_STYLES, DOMAINS, FACE_SOURCES, NAV_STYLES, SETTINGS, STYLE_SETTINGS } from './catalogue.js';
 import { renderScene } from '../scene.js';
 
 const number = (min, max, step = 1) => ({ number: { min, max, step, mode: 'box' } });
@@ -10,7 +10,7 @@ const ranges = Object.entries(SETTINGS).filter(([,setting]) => setting.kind === 
 const appearanceKeys = [...Object.keys(SETTINGS), 'accent','background','text','surface','secondary','quiet','grid'];
 const toggle = (raw) => ['true','on'].includes(raw) ? true : ['false','off'].includes(raw) ? false : raw;
 // What a dialog shows: only settings this style reads, so every control has a visible effect.
-const settingsFor = (style, raster) => (STYLE_SETTINGS[style] || STYLE_SETTINGS['NAV-ORBIT']).filter((key) => !(raster === 'crisp' && key === 'icon-style'));
+const settingsFor = (style, raster) => (STYLE_SETTINGS[style] || STYLE_SETTINGS['NAV-ORBIT']).filter((key) => !(raster === 'crisp' && CRISP_HIDDEN.includes(key)));
 
 function declarations(source) {
   const result = {};

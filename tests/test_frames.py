@@ -300,3 +300,33 @@ def test_gallery_thumbnails_do_not_follow_the_selected_style(integration, dial, 
     asyncio.run(run())
     assert [result["style"] for result in results] == ["CAM-PORTAL", "CAM-CINEMA"]
     assert results[0]["styles"] == results[1]["styles"]
+
+
+def test_portal_and_radar_can_be_in_colour_but_crisp_and_other_styles_ignore_it(integration, dial):
+    frames, appearance = dial.load("frames"), dial.load("appearance")
+    theme = dial.load("scene").THEMES["ember"]
+
+    def channels(data):
+        """Red and blue of the frame's middle pixel, scaled to compare as 5-bit values."""
+        middle = len(data) // 2 // 2 * 2
+        value = data[middle] << 8 | data[middle + 1]
+        return value >> 11, value & 31
+
+    portal = frames.SPECS["CAM-PORTAL"]
+    red, blue = channels(frames.render_frame(png(), portal, theme, False))
+    assert abs(red - blue) <= 1, "Portal is monochrome by default"
+    red, blue = channels(frames.render_frame(png(), portal, theme, False, True))
+    assert red > blue + 10, "the switch keeps the picture's colour"
+    radar = frames.SPECS["CAM-RADAR"]
+    assert frames.render_frame(png(), radar, theme, False) != frames.render_frame(png(), radar, theme, False, True)
+
+    plain = page()
+    coloured = {**plain, "appearance": {"picture-colour": True}}
+    assert frames.frame_key(plain) != frames.frame_key(coloured), "a change must trigger a new capture"
+    cinema = page("CAM-CINEMA")
+    assert frames.frame_key(cinema) == frames.frame_key({**cinema, "appearance": {"picture-colour": True}})
+
+    for style in ("CAM-PORTAL", "CAM-RADAR"):
+        assert "picture-colour" in appearance.style_settings(style)
+        assert "picture-colour" not in appearance.style_settings(style, "crisp")
+    assert "picture-colour" not in appearance.style_settings("CAM-CINEMA")

@@ -63,7 +63,7 @@ def rgb565(image) -> bytes:
     return bytes(out)
 
 
-def render_frame(raw: bytes, spec: dict, theme: dict, crisp: bool) -> bytes:
+def render_frame(raw: bytes, spec: dict, theme: dict, crisp: bool, colour: bool = False) -> bytes:
     """Crop and treat a picture. Blocking: run it in an executor."""
     from PIL import Image, ImageDraw, ImageEnhance, ImageOps
 
@@ -71,7 +71,8 @@ def render_frame(raw: bytes, spec: dict, theme: dict, crisp: bool) -> bytes:
     image = ImageOps.fit(image, (spec["width"], spec["height"]), Image.Resampling.LANCZOS)
     treatment = spec["treatment"]
     if treatment in {"portal", "radar"}:
-        image = ImageEnhance.Contrast(ImageOps.grayscale(image).convert("RGB")).enhance(1.12 if treatment == "portal" else 1.18)
+        source = image if colour else ImageOps.grayscale(image).convert("RGB")
+        image = ImageEnhance.Contrast(source).enhance(1.12 if treatment == "portal" else 1.18)
     elif treatment == "cinema":
         image = ImageEnhance.Contrast(ImageEnhance.Color(image).enhance(1.08)).enhance(1.04)
     if treatment == "photo":
@@ -93,7 +94,8 @@ def render_frame(raw: bytes, spec: dict, theme: dict, crisp: bool) -> bytes:
                 if pixels[x, y] * 17 // 256 > BAYER[y % 4][x % 4]:
                     target[x, y] = ink
     elif treatment == "radar":
-        image = Image.blend(image, Image.new("RGB", image.size, _rgb(theme["primary"])), 0.22)
+        # A colour picture keeps only a trace of the tint, or its colours would turn muddy.
+        image = Image.blend(image, Image.new("RGB", image.size, _rgb(theme["primary"])), 0.08 if colour else 0.22)
 
     if spec["radius"]:
         # Rounded corners are baked in: the Dial only ever blits a rectangle.
@@ -104,6 +106,11 @@ def render_frame(raw: bytes, spec: dict, theme: dict, crisp: bool) -> bytes:
     if len(data) > MAX_FRAME_BYTES:
         raise ValueError(f"Frame of {len(data)} bytes exceeds {MAX_FRAME_BYTES}")
     return data
+
+
+def _wants_colour(style: str, options: dict) -> bool:
+    """Only Portal and Radar choose: this keeps other styles' frames from being captured twice."""
+    return style in {"CAM-PORTAL", "CAM-RADAR"} and options["picture-colour"]
 
 
 def frame_key(view: dict) -> tuple | None:
@@ -118,7 +125,7 @@ def frame_key(view: dict) -> tuple | None:
     if style not in IMAGE_STYLES or not entity:
         return None
     theme, options = view_theme(view)
-    return (entity, style, theme["primary"], theme["secondary"], theme["bg"], options["raster"])
+    return (entity, style, theme["primary"], theme["secondary"], theme["bg"], options["raster"], _wants_colour(style, options))
 
 
 async def _source_image(hass, entity: str) -> bytes:
@@ -141,7 +148,7 @@ async def capture(hass, view: dict, key: tuple) -> None:
     theme, options = view_theme(view)
     try:
         raw = await _source_image(hass, key[0])
-        data = await hass.async_add_executor_job(render_frame, raw, spec, theme, options["raster"] == "crisp")
+        data = await hass.async_add_executor_job(render_frame, raw, spec, theme, options["raster"] == "crisp", _wants_colour(view["style"], options))
     except (HomeAssistantError, OSError, TimeoutError, ValueError) as error:
         _LOGGER.warning("Could not capture %s for the Dial: %s", key[0], error)
         errors[key] = "NO IMAGE"

@@ -45,7 +45,7 @@ def test_every_declared_setting_changes_the_scene(dial, raster):
     dead = []
     for view in views(dial.load("catalogue")):
         for setting in appearance.style_settings(view["style"], raster):
-            if setting == "raster":
+            if setting == "raster" or setting in appearance.FRAME_SETTINGS:
                 continue
             if setting in appearance.NUMBERS:
                 low, high = appearance.NUMBERS[setting][2:4]
