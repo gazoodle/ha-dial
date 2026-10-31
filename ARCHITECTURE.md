@@ -277,6 +277,33 @@ browser and native API delivery use the same reading; previous clock scenes reso
 No clock, astronomical phase or sensor semantics are added to either consumer. Unknown readings
 remain unavailable. A static gallery/appearance preview resolves the instant of its request.
 
+Scene v5 (2026-10-31) is the drawing kit. `polygon` carries 3–128 points in quarter pixels, where a
+whole coordinate is a pixel centre, and fills even-odd. `segments` carries up to 256 unconnected
+lines as a flat list, so line fans and hatching cost one element. `circle`, `arc` and `gauge` accept
+`solid`, a filled band rather than concentric strokes, and arcs accept `cap`. Any primitive with a
+`background` blends its coverage against that colour; without one it has hard edges. HA declares the
+colour because the Dial has no framebuffer to read back from, and it flattens translucency into
+opaque colours. All coverage is integer arithmetic so card and device agree exactly. Pills, thick
+lines and hands are polygons built in HA; firmware learns no shape semantics. Masks may reach
+240 × 120 and digit cells 64 × 64. HA now emits only version 5, so this needs paired firmware.
+
+`canvas.py` resolves one design vocabulary to scene elements, and layouts draw only through it.
+**Crisp** is line-step strokes and hard fills: its text and icons are `segments` from `strokes.py`,
+never thresholded glyphs. **Smooth** is coverage on everything, with masks for text and icons. Crisp
+is its own design: it has its own default settings and draws tinted surfaces as hatching, so a
+layout may branch on `c.crisp`.
+
+Faces (`CHR-`, `AMB-`, `WAT-`, `DAT-`) resolve time, sun, weather and bound metrics in HA at
+publication, using the same path as chronographs below. Only chronographs tick each second; other
+faces redraw on the minute and on source changes. A source that is missing reads as `--`, and a
+metric with no known maximum claims no progress. Data faces read the recorder once per entity and
+then append from state events, so a chart adds no polling; history is dropped when a definition is
+replaced. Without a recorder a chart says NO HISTORY.
+
+Measured 2026-10-31 across 1,368 scenes (every style, theme and mode, with eight items and long
+titles): at most 21,880 bytes for a paired envelope against the 24,576 limit, 38 elements against 64,
+and 490 line segments in one scene. Peak heap and draw time on the Dial are not yet measured.
+
 Scene v4 adds `polyline`: an ordered list of 2–128 integer pixel-coordinate pairs and a
 stroke colour. HA samples curves; both consumers join the resolved points using their shared
 Bresenham raster. Coordinates must be within 0–239. Older scene versions cannot carry this
@@ -288,8 +315,7 @@ The editor stores page/entity overrides and a bounded CSS-like declaration vocab
 validates the options, resolves visibility from state/template events and compiles all layout,
 icons and glyphs. Editor dialogs are mounted on demand. Hidden nodes remain in saved source;
 removing a current page returns to its nearest surviving ancestor. Conditions are not security
-rules. Unsupported condition types fail explicitly. Primitives retain the shared pixel raster;
-Crisp/Smooth selects binary or antialiased coverage for HA-generated masks.
+rules. Unsupported condition types fail explicitly.
 
 Scene v3 extends numeric masks with an explicit twelve-character glyph catalogue, decimal
 precision and bounded scaled integer values. HA provides glyph dimensions and gauge ranges;

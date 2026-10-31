@@ -114,14 +114,14 @@ def test_gallery_uses_domain_styles_and_real_scene(integration):
             "entity": "light.example", "theme": "ember",
         })
         result = integration.connection.send_result.call_args.args[1]
-        assert set(result["styles"]) == {"CTL-LIGHT-INSTRUMENT", "CTL-LIGHT-EDITORIAL"}
+        assert set(result["styles"]) == {f"CTL-LIGHT-{shape}" for shape in ("INSTRUMENT", "EDITORIAL", "COLUMN", "SEGMENT", "TUMBLER")}
         assert len(result["themes"]) == 6
         assert all(scene["elements"] for scene in result["styles"].values())
         await integration.code._ws_gallery(integration.hass, integration.connection, {
             "id": 2, "page": {"title": "Home"}, "theme": "ember",
         })
         navigation = integration.connection.send_result.call_args.args[1]
-        assert len(navigation["styles"]) == 12
+        assert len(navigation["styles"]) == 30
         assert len(navigation["styles"]["NAV-ORBIT"]["regions"]) >= 4
         await integration.code._ws_gallery(integration.hass, integration.connection, {
             "id": 3, "page": {"title": "Home", "appearance": {"background": "#123456"}},

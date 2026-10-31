@@ -1,87 +1,45 @@
 """Four Atlas chronographs compiled to display-pixel primitives in HA."""
 
-from math import cos, pi, sin
+from math import cos, pi
+
+from .canvas import Canvas, polar
+
+MOON_PHASES = {
+    "new_moon": 0, "waxing_crescent": 1, "first_quarter": 2, "waxing_gibbous": 3,
+    "full_moon": 4, "waning_gibbous": 5, "last_quarter": 6, "waning_crescent": 7,
+}
 
 
-def chronograph_layout(view, theme):
-    elements, regions = [], []
+def chronograph_layout(c: Canvas, view: dict, o: dict) -> list[dict]:
+    theme = c.theme
     clock = view.get("_clock")
     primary, quiet = theme["primary"], theme["quiet"]
-
-    def point(cx, cy, radius, angle):
-        radians = (angle - 90) * pi / 180
-        return [round(cx + radius * cos(radians)), round(cy + radius * sin(radians))]
-
-    def path(points, colour):
-        elements.append({"op": "polyline", "points": points, "stroke": colour})
-
-    def circle(x, y, radius, stroke, fill=None):
-        element = {"op": "circle", "x": x, "y": y, "r": radius, "stroke": stroke}
-        if fill:
-            element["fill"] = fill
-        elements.append(element)
-
-    def text(value, x, y, size=7, colour=None):
-        elements.append(
-            {
-                "op": "mask",
-                "x": x,
-                "y": y,
-                "text": str(value),
-                "size": size,
-                "colour": colour or theme["text"],
-            }
-        )
-
-    def hand(x, y, radius, angle, colour, width=1):
-        tip = point(x, y, radius, angle)
-        if width == 1:
-            path([[x, y], tip], colour)
-            return
-        from PIL import Image, ImageDraw
-
-        image = Image.new("1", (240, 240))
-        ImageDraw.Draw(image).line([(x, y), tuple(tip)], fill=1, width=width)
-        points = []
-        box = image.getbbox()
-        if box:
-            for row in range(box[1], box[3]):
-                span = image.crop((box[0], row, box[2], row + 1)).getbbox()
-                if span:
-                    ends = [[box[0] + span[0], row], [box[0] + span[2] - 1, row]]
-                    points.extend(ends if len(points) % 4 == 0 else reversed(ends))
-        for start in range(0, len(points), 128):
-            path(points[start : start + 128], colour)
-
-    # Tick paths return to the perimeter before joining the next minute mark.
-    for offset in range(0, 60, 20):
-        points = []
-        for index in range(offset, offset + 20):
-            inner = point(120, 120, 98 if index % 5 else 94, index * 6)
-            outer = point(120, 120, 103, index * 6)
-            points.extend([outer, inner, outer])
-        points.append(point(120, 120, 103, (offset + 20) * 6))
-        path(points, quiet)
-    circle(120, 120, 90, quiet, theme["surface"])
-    circle(120, 120, 82, theme["grid"])
-    if view["style"] != "CHR-WORLDTIMER":
-        text(view.get("title", "HA DIAL").upper(), 120, 57, 7, theme["secondary"])
-    if not clock:
-        text("TIME UNAVAILABLE", 120, 118, 9)
-        return elements, regions
-    hour, minute, second = clock["hour"], clock["minute"], clock["second"]
+    regions: list[dict] = []
     style = view["style"]
+    surface = c.tint(0.55, theme["surface"])
+    under = None if c.crisp else surface
+
+    if o["tick-ring"]:
+        c.ticks(120, 120, 119 - o["ring-inset"] - o["tick-inset"], o["tick-count"], o["tick-length"], quiet, 5, theme["secondary"], o["tick-length"] + 4)
+    c.disc(120, 120, 90, theme["bg"] if c.crisp else surface, quiet)
+    c.ring(120, 120, 82, theme["grid"], under=surface)
+    if style != "CHR-WORLDTIMER":
+        c.text(view.get("title", "HA DIAL").upper(), 120, 58, 7, theme["secondary"], under, tracking=2, weight=1, max_width=90)
+    if not clock:
+        c.text("TIME UNAVAILABLE", 120, 118, 9, theme["text"], under, tracking=1, max_width=140)
+        return regions
+    hour, minute, second = clock["hour"], clock["minute"], clock["second"]
+
+    def hand(x, y, radius, angle, colour, width=1, ground=None):
+        tip = polar(x, y, radius, angle)
+        c.line(x, y, *tip, colour, width, ground if ground else under)
 
     def register(x, y, radius, value, total, caption):
-        circle(x, y, radius, quiet, theme["bg"])
-        ticks = []
-        for angle in range(0, 361, 30):
-            outer = point(x, y, radius - 2, angle)
-            ticks.extend([outer, point(x, y, radius - 5, angle), outer])
-        path(ticks, quiet)
-        text(caption, x, y + radius // 2, 5, quiet)
-        hand(x, y, radius - 6, value * 360 / total, theme["secondary"])
-        circle(x, y, 2, primary, primary)
+        c.disc(x, y, radius, theme["bg"], quiet, under=surface)
+        c.ticks(x, y, radius - 2, 12, 3, quiet, under=theme["bg"])
+        c.text(caption, x, y + radius // 2, 6, quiet, None if c.crisp else theme["bg"], tracking=0)
+        hand(x, y, radius - 6, value * 360 / total, theme["secondary"], ground=theme["bg"])
+        c.disc(x, y, 2, primary, None, 1, None if c.crisp else theme["bg"])
 
     if style in {"CHR-TRICOMPAX", "CHR-MOONPHASE"}:
         register(76, 119, 23, hour + minute / 60, 24, "24H")
@@ -89,95 +47,53 @@ def chronograph_layout(view, theme):
         if style == "CHR-TRICOMPAX":
             register(120, 157, 23, clock["day"], 31, str(clock["day"]))
         else:
-            circle(120, 157, 23, quiet, theme["bg"])
-            phases = {
-                "new_moon": 0,
-                "waxing_crescent": 1,
-                "first_quarter": 2,
-                "waxing_gibbous": 3,
-                "full_moon": 4,
-                "waning_gibbous": 5,
-                "last_quarter": 6,
-                "waning_crescent": 7,
-            }
-            phase = phases.get(clock["moon"])
+            c.disc(120, 157, 23, theme["bg"], quiet, under=surface)
+            phase = MOON_PHASES.get(clock["moon"])
             if phase is None:
-                text("NO MOON", 120, 153, 5, quiet)
-                text("DATA", 120, 163, 5, quiet)
-            else:
+                c.text("NO MOON", 120, 153, 6, quiet, None if c.crisp else theme["bg"], tracking=0)
+                c.text("DATA", 120, 163, 6, quiet, None if c.crisp else theme["bg"], tracking=0)
+            elif phase:
                 # Orthographic illumination of a spherical moon; the HA phase selects the angle.
-                phase_angle = phase * pi / 4
-                points = []
-                for y in range(-14, 15):
-                    edge = (14**2 - y**2) ** 0.5
-                    terminator = edge * cos(phase_angle)
-                    left, right = (
-                        (terminator, edge) if phase <= 4 else (-edge, -terminator)
-                    )
-                    if right - left >= 1:
-                        ends = [
-                            [round(120 + left), 157 + y],
-                            [round(120 + right), 157 + y],
-                        ]
-                        points.extend(ends if len(points) % 4 == 0 else reversed(ends))
-                if points:
-                    path(points, theme["secondary"])
+                terminator = cos(phase * pi / 4)
+                left, right = [], []
+                for row in range(-14, 15, 2):
+                    edge = (14**2 - row**2) ** 0.5
+                    span = (edge * terminator, edge) if phase <= 4 else (-edge, -edge * terminator)
+                    left.append((120 + span[0], 157 + row))
+                    right.append((120 + span[1], 157 + row))
+                c.poly([*left, *reversed(right)], theme["secondary"], None if c.crisp else theme["bg"])
     elif style == "CHR-WORLDTIMER":
         zones = clock["zones"]
         for index, (name, value) in enumerate(zones):
-            x, y = point(120, 120, 70, (index + 0.5) * 360 / len(zones))
-            text(name[:8], x, y - 5, 7, primary if index == 0 else quiet)
-            text(value, x, y + 5, 8)
-        circle(120, 120, 43, quiet, theme["bg"])
+            x, y = polar(120, 120, 66, (index + 0.5) * 360 / len(zones))
+            c.text(name, x, y - 5, 6, primary if index == 0 else quiet, under, tracking=0, max_width=40)
+            c.text(value, x, y + 5, 7, theme["text"], under, tracking=0)
+        c.disc(120, 120, 38, theme["bg"], quiet, under=surface)
         reserve = clock.get("reserve")
         if reserve is not None:
-            elements.append(
-                {
-                    "op": "arc",
-                    "x": 120,
-                    "y": 120,
-                    "r": 43,
-                    "start": -110,
-                    "end": round(-110 + 165 * reserve / 100),
-                    "stroke": primary,
-                    "width": 3,
-                }
-            )
-        text(
-            "RESERVE --" if reserve is None else f"RESERVE {reserve:g}%",
-            120,
-            91,
-            5,
-            quiet,
-        )
-        text(clock["zones"][0][1], 120, 148, 7, primary)
+            c.arc(120, 120, 38, -110, -110 + 165 * reserve / 100, primary, 3, under=surface)
+        ground = None if c.crisp else theme["bg"]
+        c.text("RESERVE --" if reserve is None else f"RESERVE {reserve:g}%", 120, 96, 6, quiet, ground, tracking=0, max_width=60)
+        c.text(zones[0][1], 120, 146, 7, primary, ground, tracking=0)
     else:
-        path(
-            [
-                [58, 137],
-                [88, 70],
-                [113, 101],
-                [137, 51],
-                [182, 137],
-                [144, 175],
-                [83, 168],
-                [58, 137],
-            ],
-            quiet,
-        )
+        outline = [(58, 137), (88, 70), (113, 101), (137, 51), (182, 137), (144, 175), (83, 168)]
+        c.path([*outline, outline[0]], quiet, under)
         register(82, 132, 26, hour % 12 + minute / 60, 12, "HOUR")
         register(158, 103, 31, minute + second / 60, 60, "MIN")
         register(139, 161, 17, second, 60, "SEC")
+
     if style != "CHR-SKELETON":
-        hand(120, 120, 45, (hour % 12 + minute / 60) * 30, theme["text"], 3)
-        hand(120, 120, 63, (minute + second / 60) * 6, theme["secondary"], 3)
-        hand(120, 120, 74, second * 6, primary)
-        circle(120, 120, 4, primary, primary)
+        width, length = o["hand-width"], o["hand-length"]
+        ground = theme["bg"] if style == "CHR-WORLDTIMER" else surface
+        hand(120, 120, length * 0.71, (hour % 12 + minute / 60) * 30, theme["text"], width, ground)
+        hand(120, 120, length, (minute + second / 60) * 6, theme["secondary"], max(1, width - 1), ground)
+        hand(120, 120, length + 11, second * 6, primary, 1, ground)
+        c.disc(120, 120, 4, primary, None, 1, None if c.crisp else ground)
     items = view.get("items", [])
     if items:
         selected = items[view.get("selected", 0) % len(items)]
-        text(selected["label"], 120, 190, 8, primary)
+        c.text(selected["label"], 120, 190, 8, primary, tracking=1, max_width=110)
         regions.append({"id": selected["id"], "x": 120, "y": 190, "r": 8})
     else:
-        text(clock["date"], 120, 190, 7, quiet)
-    return elements, regions
+        c.text(clock["date"], 120, 190, 7, quiet, tracking=1, max_width=110)
+    return regions

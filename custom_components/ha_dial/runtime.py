@@ -24,11 +24,12 @@ from homeassistant.helpers.event import (
     async_track_time_change,
 )
 
-from .catalogue import CHRONOGRAPH_STYLES
-from .chronograph import resolve_clock
+from .catalogue import CHRONOGRAPH_STYLES, FACE_STYLES
+from .chronograph import resolve_clock, source_entities
 from .const import DOMAIN
 from .controls import control_command, control_state, preview_feedback
 from .definition import THEMES, build_definition, leaf_items, validate_definition
+from .history import ensure_history, forget_history, record_change
 from .navigator import Navigator
 from .protocol import device_payload
 from .scene import compile_scene
@@ -140,8 +141,9 @@ async def _push(hass: HomeAssistant, device: str, view: dict) -> None:
     state = hass.data[DOMAIN]
     if state.get("unloading") or device in state.get("resetting", set()) or (device in state.get("stored_definitions", {}) and state["stored_definitions"][device] is None):
         return
+    await ensure_history(hass, view)
     view = resolve_clock(hass, view)
-    _navigator(hass, device).clock_snapshot = view if view.get("style") in CHRONOGRAPH_STYLES else None
+    _navigator(hass, device).clock_snapshot = view if view.get("style") in FACE_STYLES else None
     revision = _next_revision(hass, device)
     service = f"{device}_ha_dial_show_view"
     connected = (
@@ -264,31 +266,40 @@ def _watch_definition_entities(
     unsubs = state.setdefault("definition_unsubs", {})
     if unsubscribe := unsubs.pop(device, None):
         unsubscribe()
+    forget_history(hass)
     entities = {item["entity_id"] for item in leaf_items(definition["tree"])}
-    clocks = [view for view in state["navigators"][device].views.values() if view.get("style") in CHRONOGRAPH_STYLES]
-    entities.update(view.get("clock", {}).get(field) for view in clocks for field in ("moon_entity", "reserve_entity") if view.get("clock", {}).get(field))
+    faces = [view for view in state["navigators"][device].views.values() if view.get("style") in FACE_STYLES]
+    for view in faces:
+        entities |= source_entities(view)
+    # Seconds are only pushed for faces that show them; every other face redraws on the minute.
+    seconds = any(view["style"] in CHRONOGRAPH_STYLES for view in faces)
 
     async def entity_changed(_event: Event[EventStateChangedData]) -> None:
         navigator = state["navigators"].get(device)
         if navigator is None:
             return
         current = navigator.current()
-        if _event.data.get("entity_id") not in {current.get("entity_id"), current.get("clock", {}).get("moon_entity"), current.get("clock", {}).get("reserve_entity")}:
+        entity = _event.data.get("entity_id")
+        record_change(hass, entity, _event.data.get("new_state"), current.get("clock", {}).get("history_hours", 24))
+        if entity != current.get("entity_id") and entity not in source_entities(current):
             return
         _sync_control(hass, navigator)
         await _push(hass, device, navigator.current())
 
-    async def clock_changed(_now):
+    async def clock_changed(now):
         navigator = state["navigators"].get(device)
-        if navigator is not None and not state.get("unloading") and navigator.current().get("style") in CHRONOGRAPH_STYLES:
+        if navigator is None or state.get("unloading"):
+            return
+        style = navigator.current().get("style")
+        if style in CHRONOGRAPH_STYLES or (style in FACE_STYLES and now.second == 0):
             await _push(hass, device, navigator.current())
 
     cleanup = []
     try:
         if entities:
             cleanup.append(async_track_state_change_event(hass, entities, entity_changed))
-        if clocks:
-            cleanup.append(async_track_time_change(hass, clock_changed, second="*"))
+        if faces:
+            cleanup.append(async_track_time_change(hass, clock_changed, second="*" if seconds else 0))
     except Exception:
         for cancel in cleanup:
             cancel()

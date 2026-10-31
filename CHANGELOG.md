@@ -1,5 +1,15 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b10
+
+- **Breaking: requires firmware 2026.10.1-b4.** HA now emits scene version 5, which older firmware rejects while keeping its last screen. Upload the firmware, then restart HA and refresh the browser.
+- Rebuild Crisp as true line-step drawing, with single-stroke type and line icons, and Smooth as real anti-aliasing on every shape. Crisp no longer cuts labels off.
+- Redraw all navigation styles and add List, Grid, Pager and Needle.
+- Give each domain its own graphic, replace Editorial with big type, and add Column, Segment and Tumbler. Action buttons use icons, so their labels can't overflow.
+- Add Ambient, Watch and Data faces with real sun, weather, metric and recorder sources. Toybox is dropped; Camera and Photo time wait for an image transport.
+- Add about 50 style settings covering padding, sizes, gaps, widths, borders and positions. The dialog shows only what the current style reads and saves only what you change.
+- Faces other than chronographs now update once a minute, not every second.
+
 ## 2026.10.1-b9
 
 - Add all four Atlas chronographs: Tricompax, Worldtimer, Skeleton and Moonphase, with real time, IANA zones, optional HA moon and reserve sensors, and scheduled updates with subscription cleanup.

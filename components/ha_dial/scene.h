@@ -19,9 +19,9 @@ struct SceneElement {
   float minimum{0}, maximum{100};
   int x{0}, y{0}, x2{0}, y2{0}, radius{0}, start{0}, end{0}, width{1}, mask_width{0}, mask_height{0};
   Color stroke{Color::BLACK}, fill{Color::BLACK}, colour{Color::BLACK}, background{Color::BLACK};
-  bool has_stroke{false}, has_fill{false};
+  bool has_stroke{false}, has_fill{false}, solid{false}, cap{false}, smooth{false};
   std::string pixels;
-  std::vector<std::pair<uint8_t, uint8_t>> points;
+  std::vector<std::pair<uint16_t, uint16_t>> points;
 };
 
 struct SceneRegion {

@@ -60,6 +60,9 @@ not complete until the whole factory-reset-to-first-control flow works without c
 
 ## Camera thumbnail screen
 
+Owner decision, 2026-10-31: the Atlas's Camera faces (Portal, Cinema, Radar) and Photo time build on
+this transport, after everything else. Toybox was dropped.
+
 Add a camera view that keeps image processing in Home Assistant. HA should decode, crop and
 resize a camera JPEG, convert it to RGB565, and expose the raw frame through a short-lived,
 device-scoped local URL. The Dial should stream the bytes into a fixed buffer and keep the

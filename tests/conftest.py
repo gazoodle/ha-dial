@@ -85,7 +85,7 @@ def integration(dial):
     )
     dial.module("homeassistant.helpers")
     dial.module("homeassistant.util")
-    dial.module("homeassistant.util.dt", now=lambda: datetime.now(UTC))
+    dial.module("homeassistant.util.dt", now=lambda: datetime.now(UTC), utcnow=lambda: datetime.now(UTC))
 
     class TemplateError(Exception):
         pass

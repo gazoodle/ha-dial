@@ -22,6 +22,33 @@ Appearance dialogs keep a stable position between tabs and show a live HA-render
 the controls on wide screens. Why: on 2026-10-30 the owner found the moving dialog distracting and
 wants to see the effect of the growing set of options while editing.
 
+## Crisp is a line-step design (2026-10-31)
+
+Crisp is drawn from simple lines and circles using the line-step algorithms (Bresenham/midpoint),
+including its type and icons, and is designed as its own treatment rather than the Smooth layout
+redrawn. Never make Crisp by thresholding vector text or icons. Why: on 2026-10-30 the owner ruled
+out "just turn off anti-aliasing" because of its pseudo-random pixels; a paraphrase in the handover
+lost this and that was built instead. The owner approved the look test on 2026-10-31.
+
+Smooth means real coverage on every primitive, not just text. Why: on 2026-10-31 both modes were
+found sharing one aliased primitive raster, with 14% of a thick gauge unpainted.
+
+## Atlas scope and style settings (2026-10-31)
+
+The Atlas is a starting point, not the target. Editorial is big type, not a thinner Instrument, and
+styles must be visibly distinct. Toybox is dropped. Camera and Photo time wait for the image
+transport in BACKLOG.md. Why: the owner found the screens samey, and the Atlas's own Editorial
+differed only in stroke weight.
+
+Layouts declare the settings they read in `appearance.py`, and the dialog is generated from that
+table. `tests/test_appearance_tokens.py` fails on a declared setting with no effect, on two styles
+for a domain that draw the same scene, and on glyph masks in Crisp. Why: 31 of 72 slider positions
+on page dialogs did nothing, while all 87 tests passed.
+
+Inspect the rendered result before believing a test. Regenerating fixtures from output locks in
+whatever the output is. Why: Crisp cut labels off ("Building" to "Build") and the fixtures locked
+that in, visible in the agent's own comparison image.
+
 ## Independent versions — Casa Mia rules (2026-10-29)
 
 Firmware and HA Dial Server have separate versions. Before changing runtime code, run

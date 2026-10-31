@@ -16,7 +16,7 @@ int main() {
     draw_scene(*display, *scene, source["test_local_value"] | std::numeric_limits<float>::quiet_NaN());
     std::cout.write(reinterpret_cast<const char *>(display->pixels.data()), display->pixels.size());
     const int version = source["version"];
-    source["version"] = 5;
+    source["version"] = 6;
     auto unknown = std::make_unique<SceneBuffer>();
     assert(!parse_scene(source, *unknown));
     source["version"] = version;
@@ -32,6 +32,24 @@ int main() {
       element["points"][0][0] = 1.5;
       assert(!parse_scene(source, *unknown));
       element["points"][0][0] = x;
+    }
+    for (JsonObject element : source["elements"].as<JsonArray>()) {
+      const std::string op = element["op"].as<std::string>();
+      if (op == "polygon") {
+        const int x = element["points"][0][0];
+        element["points"][0][0] = 960;
+        assert(!parse_scene(source, *unknown));
+        element["points"][0][0] = x;
+      } else if (op == "segments") {
+        const int x = element["lines"][0];
+        element["lines"][0] = 240;
+        assert(!parse_scene(source, *unknown));
+        element["lines"][0] = x;
+      } else if (element["solid"].is<bool>()) {
+        source["version"] = 4;
+        assert(!parse_scene(source, *unknown));
+        source["version"] = version;
+      }
     }
     source["width"] = 241;
     auto invalid = std::make_unique<SceneBuffer>();

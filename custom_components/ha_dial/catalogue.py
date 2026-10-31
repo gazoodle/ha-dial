@@ -34,23 +34,54 @@ NAV_STYLES = {
         "COMPASS",
         "RIBBON",
         "BREADCRUMB",
+        # Beyond the Atlas, added on the owner's request for more variety (2026-10-31).
+        "LIST",
+        "GRID",
+        "PAGER",
+        "NEEDLE",
     )
 }
 READOUTS = {"ENERGY", "AIR", "VEHICLE", "WATER", "DATA"}
 CHRONOGRAPH_STYLES = {f"CHR-{name}" for name in ("TRICOMPAX", "WORLDTIMER", "SKELETON", "MOONPHASE")}
-PAGE_STYLES = NAV_STYLES | CHRONOGRAPH_STYLES
+AMBIENT_STYLES = {f"AMB-{name}" for name in ("SOLAR", "TYPOGRAPHIC", "ORBITAL", "STATUS")}
+# Photo time waits for the image transport; Toybox was dropped by the owner on 2026-10-31.
+WATCH_STYLES = {f"WAT-{name}" for name in ("CONTOUR", "MODULAR", "PALETTE", "RINGS", "SOLAR", "REFLECTIONS")}
+DATA_STYLES = {f"DAT-{name}" for name in ("AREA", "RADAR", "BANDS", "SPARK")}
+# Faces resolve time and sources in HA. Only chronographs show seconds, so only they tick each second.
+FACE_STYLES = CHRONOGRAPH_STYLES | AMBIENT_STYLES | WATCH_STYLES | DATA_STYLES
+PAGE_STYLES = NAV_STYLES | FACE_STYLES
+# The sources each face reads, and how many metrics it shows: the editor asks for these and no others.
+CLOCK_SOURCES = ("timezone",)
+FACE_SOURCES = {
+    **{style: {"fields": CLOCK_SOURCES, "metrics": 0} for style in AMBIENT_STYLES | WATCH_STYLES},
+    "CHR-TRICOMPAX": {"fields": CLOCK_SOURCES, "metrics": 0},
+    "CHR-SKELETON": {"fields": CLOCK_SOURCES, "metrics": 0},
+    "CHR-MOONPHASE": {"fields": (*CLOCK_SOURCES, "moon_entity"), "metrics": 0},
+    "CHR-WORLDTIMER": {"fields": (*CLOCK_SOURCES, "world_zones", "reserve_entity"), "metrics": 0},
+    "AMB-STATUS": {"fields": (*CLOCK_SOURCES, "weather_entity"), "metrics": 3},
+    "WAT-MODULAR": {"fields": CLOCK_SOURCES, "metrics": 3},
+    "WAT-RINGS": {"fields": CLOCK_SOURCES, "metrics": 3},
+    "DAT-AREA": {"fields": (*CLOCK_SOURCES, "history_hours"), "metrics": 1},
+    "DAT-BANDS": {"fields": CLOCK_SOURCES, "metrics": 3},
+    "DAT-RADAR": {"fields": CLOCK_SOURCES, "metrics": 6},
+    "DAT-SPARK": {"fields": (*CLOCK_SOURCES, "history_hours"), "metrics": 4},
+}
+
+
+# Shapes that read a level or an option; every domain gets the instrument and big-type readings.
+LEVEL_DOMAINS = {"light", "cover", "climate", "media_player", "fan", "number", "input_number", "select", "input_select"}
 
 
 def control_styles(domain: str) -> set[str]:
     base = CONTROL_TYPES[domain][1].removesuffix("-INSTRUMENT")
-    bases = {base}
+    # Alternative graphics differ only as instruments; the shapes ignore the graphic, so offer them once.
+    graphics = set()
     if domain in {"sensor", "binary_sensor"}:
-        bases |= {f"CTL-{name}" for name in READOUTS}
+        graphics |= {f"CTL-{name}" for name in READOUTS}
     if domain == "media_player":
-        bases.add("CTL-VOLUME")
-    return {
-        f"{name}-{variant}" for name in bases for variant in ("INSTRUMENT", "EDITORIAL")
-    }
+        graphics.add("CTL-VOLUME")
+    shapes = ("INSTRUMENT", "EDITORIAL", *(("COLUMN", "SEGMENT", "TUMBLER") if domain in LEVEL_DOMAINS else ()))
+    return {f"{base}-{shape}" for shape in shapes} | {f"{name}-INSTRUMENT" for name in graphics}
 
 
 STYLES = PAGE_STYLES | {

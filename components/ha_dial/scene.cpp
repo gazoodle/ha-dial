@@ -48,7 +48,8 @@ bool parse_clear_request(JsonObject source, uint64_t applied_revision, uint64_t 
 bool parse_scene(JsonObject source, SceneBuffer &target) {
     target.element_count = target.region_count = 0;
     target.valid = false;
-    if (((source["version"] | 0) < 1 || (source["version"] | 0) > 4) || (source["width"] | 0) != 240 ||
+    const int version = source["version"] | 0;
+    if (version < 1 || version > 5 || (source["width"] | 0) != 240 ||
         (source["height"] | 0) != 240 || !valid_colour(source["background"]))
       return false;
     const char *screen = source["screen"];
@@ -72,8 +73,44 @@ bool parse_scene(JsonObject source, SceneBuffer &target) {
       element.stroke = scene_colour(stroke, Color::BLACK);
       element.fill = scene_colour(fill, Color::BLACK);
       element.width = input["width"] | 1;
-      if (strcmp(operation, "polyline") == 0) {
-        if ((source["version"] | 0) < 4 || !element.has_stroke) return false;
+      const bool glyphs = strcmp(operation, "mask") == 0 || strcmp(operation, "number") == 0;
+      if (!glyphs) {
+        // Version 5: "background" asks for coverage blending against that declared colour.
+        const char *under = input["background"] | "";
+        if (*under && (version < 5 || !valid_colour(under))) return false;
+        element.smooth = *under;
+        element.background = scene_colour(under, Color::BLACK);
+        element.solid = input["solid"] | false;
+        element.cap = input["cap"] | false;
+        if ((element.solid || element.cap) && version < 5) return false;
+      }
+      if (strcmp(operation, "polygon") == 0) {
+        if (version < 5 || !element.has_fill) return false;
+        element.op = 'y';
+        JsonArray points = input["points"].as<JsonArray>();
+        if (points.isNull() || points.size() < 3 || points.size() > 128) return false;
+        element.points.reserve(points.size());
+        for (JsonVariant value : points) {
+          JsonArray point = value.as<JsonArray>();
+          if (point.isNull() || point.size() != 2 || !point[0].is<int>() || !point[1].is<int>()) return false;
+          const int x = point[0].as<int>(), y = point[1].as<int>();
+          if (x < 0 || x >= 960 || y < 0 || y >= 960) return false;
+          element.points.emplace_back(x, y);
+        }
+      } else if (strcmp(operation, "segments") == 0) {
+        if (version < 5 || !element.has_stroke) return false;
+        element.op = 's';
+        JsonArray lines = input["lines"].as<JsonArray>();
+        if (lines.isNull() || lines.size() < 4 || lines.size() > 1024 || lines.size() % 4) return false;
+        element.points.reserve(lines.size() / 2);
+        for (size_t index = 0; index < lines.size(); index += 2) {
+          if (!lines[index].is<int>() || !lines[index + 1].is<int>()) return false;
+          const int x = lines[index].as<int>(), y = lines[index + 1].as<int>();
+          if (x < 0 || x >= 240 || y < 0 || y >= 240) return false;
+          element.points.emplace_back(x, y);
+        }
+      } else if (strcmp(operation, "polyline") == 0) {
+        if (version < 4 || !element.has_stroke) return false;
         element.op = 'p';
         JsonArray points = input["points"].as<JsonArray>();
         if (points.isNull() || points.size() < 2 || points.size() > 128) return false;
@@ -133,8 +170,8 @@ bool parse_scene(JsonObject source, SceneBuffer &target) {
         const char *pixels = input["pixels"];
         const size_t expected = static_cast<size_t>(element.mask_width) * element.mask_height * (element.op == 'n' ? element.glyphs : 1);
         const size_t packed_length = ((expected + 3) / 4) * 2;
-        if (element.mask_width <= 0 || element.mask_width > (element.op == 'n' ? 32 : 120) || element.mask_height <= 0 ||
-            element.mask_height > 32 || pixels == nullptr || strlen(pixels) != packed_length ||
+        if (element.mask_width <= 0 || element.mask_width > (element.op == 'n' ? (version >= 5 ? 64 : 32) : (version >= 5 ? 240 : 120)) || element.mask_height <= 0 ||
+            element.mask_height > (version >= 5 ? 120 : 32) || pixels == nullptr || strlen(pixels) != packed_length ||
             !valid_colour(colour) ||
             !valid_colour(background) ||
             !std::all_of(pixels, pixels + packed_length,
@@ -143,7 +180,8 @@ bool parse_scene(JsonObject source, SceneBuffer &target) {
         element.pixels = pixels;
         element.colour = scene_colour(colour, Color::BLACK);
         element.background = scene_colour(background, Color::BLACK);
-      } else if (strcmp(operation, "line") != 0 && strcmp(operation, "polyline") != 0) {
+      } else if (strcmp(operation, "line") != 0 && strcmp(operation, "polyline") != 0 &&
+                 strcmp(operation, "polygon") != 0 && strcmp(operation, "segments") != 0) {
         return false;
       }
       if ((element.op == 'l' || element.op == 'a' || element.op == 'g') && !element.has_stroke) return false;
@@ -173,9 +211,34 @@ void draw_scene(display::Display &it, const SceneBuffer &scene, float local_valu
   const bool local = std::isfinite(local_value);
   const Color background = scene_colour(scene.background, Color::BLACK);
   it.fill(background);
+  const auto shade = [&it](const Color &front, const Color &back) {
+    return [&it, front, back](int x, int y, int level) {
+      if (x >= 0 && x < 240 && y >= 0 && y < 240) it.draw_pixel_at(x, y, blend_scene_colour(front, back, level));
+    };
+  };
     for (size_t index = 0; index < scene.element_count; index++) {
       const auto &element = scene.elements[index];
-      if (element.op == 'c') {
+      if (element.op == 'y') {
+        coverage_polygon(element.points, element.smooth, shade(element.fill, element.smooth ? element.background : element.fill));
+      } else if (element.op == 's') {
+        for (size_t point = 0; point + 1 < element.points.size(); point += 2) {
+          const auto &a = element.points[point], &b = element.points[point + 1];
+          if (element.smooth) coverage_line(a.first, a.second, b.first, b.second, shade(element.stroke, element.background));
+          else raster.line(a.first, a.second, b.first, b.second, element.stroke);
+        }
+      } else if (element.op == 'c' && element.solid) {
+        const int outer = element.radius * 16 + 8, inner = (element.radius - element.width) * 16 + 8;
+        const Color under = element.smooth ? element.background : element.stroke;
+        if (element.has_stroke && element.has_fill) {
+          // Nested discs: the fill's edge blends onto the stroke, never onto the background.
+          coverage_band(element.x, element.y, outer, -1000, 0, 360, false, element.smooth, shade(element.stroke, under));
+          coverage_band(element.x, element.y, inner, -1000, 0, 360, false, element.smooth, shade(element.fill, element.stroke));
+        } else if (element.has_fill) {
+          coverage_band(element.x, element.y, outer, -1000, 0, 360, false, element.smooth, shade(element.fill, element.smooth ? element.background : element.fill));
+        } else if (element.has_stroke) {
+          coverage_band(element.x, element.y, outer, inner, 0, 360, false, element.smooth, shade(element.stroke, under));
+        }
+      } else if (element.op == 'c') {
         if (element.has_fill)
           raster.circle(element.x, element.y, element.radius,
                            element.fill, true);
@@ -188,6 +251,13 @@ void draw_scene(display::Display &it, const SceneBuffer &scene, float local_valu
         const int value = local ? static_cast<int>(std::floor((local_value - element.minimum) * 100 / (element.maximum - element.minimum) + 0.5f)) : element.value;
         const int end = element.op == 'g' ? element.start + static_cast<int>(std::floor((element.end - element.start) * std::clamp(value, 0, 100) / 100.0 + 0.5)) : element.end;
         const Color stroke = element.op == 'g' && local && element.has_fill ? element.fill : element.stroke;
+        if (element.solid) {
+          const int inner = element.radius - element.width / 2;
+          if (end > element.start)
+            coverage_band(element.x, element.y, (inner + element.width - 1) * 16 + 8, inner * 16 - 8, element.start, end, element.cap,
+                          element.smooth, shade(stroke, element.smooth ? element.background : stroke));
+          continue;
+        }
         for (int thickness = 0; thickness < element.width; thickness++) {
           const int radius = std::max(1, element.radius + thickness - element.width / 2);
           int previous_x = 0, previous_y = 0;
@@ -206,11 +276,12 @@ void draw_scene(display::Display &it, const SceneBuffer &scene, float local_valu
       } else if (element.op == 'p') {
         for (size_t point = 1; point < element.points.size(); point++) {
           const auto &a = element.points[point - 1], &b = element.points[point];
-          raster.line(a.first, a.second, b.first, b.second, element.stroke);
+          if (element.smooth) coverage_line(a.first, a.second, b.first, b.second, shade(element.stroke, element.background));
+          else raster.line(a.first, a.second, b.first, b.second, element.stroke);
         }
       } else if (element.op == 'l') {
-        raster.line(element.x, element.y, element.x2, element.y2,
-                element.stroke);
+        if (element.smooth) coverage_line(element.x, element.y, element.x2, element.y2, shade(element.stroke, element.background));
+        else raster.line(element.x, element.y, element.x2, element.y2, element.stroke);
       } else if (element.op == 'm' || element.op == 'n') {
         std::string digits;
         if (element.op == 'n') {

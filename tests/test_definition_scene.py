@@ -126,7 +126,7 @@ def test_light_identity_power_availability_and_complete_text(dial):
     original = scene.compile_scene(view)
     for change in ({"title": "Other lamp"}, {"active": False}, {"available": False}):
         assert scene.compile_scene({**view, **change}) != original
-    mask = scene._text_mask("100", 30, "#ffffff")
+    mask = dial.load("assets")._text_mask("100", 30, "#ffffff")
     assert 40 < mask["width"] < 60
     assert 18 < mask["height"] < 30
     assert any(

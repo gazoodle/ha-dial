@@ -99,41 +99,25 @@ def test_raster_border_css_and_icons(dial):
     )
     petals = scene.compile_scene({**view, "style": "NAV-PETALS"})
     assert not any(e.get("r") == 18 for e in petals["elements"])
-    assert petals["version"] == 4
+    assert petals["version"] == 5
     paths = [e for e in petals["elements"] if e["op"] == "polyline"]
     assert len(paths) == 1
     assert paths[0]["points"][0] == paths[0]["points"][-1]
     hub_index = next(i for i, e in enumerate(petals["elements"]) if e.get("r") == 32)
     assert all(e["op"] != "polyline" for e in petals["elements"][hub_index:])
-    crisp = assets.icon_mask("mdi:star", 24, "#ffffff", "crisp")
-    smooth = assets.icon_mask("mdi:star", 24, "#ffffff", "smooth")
-    assert crisp["pixels"] != smooth["pixels"]
-    from PIL import Image, ImageDraw, ImageFont
-
-    font = ImageFont.truetype(
-        str(assets.Path(assets.__file__).with_name("resources") / "mdi.ttf"), 24
-    )
-    glyph = chr(assets.icon_names()["mdi:star"])
-    box = font.getbbox(glyph)
-    native = Image.new("1", (24, 24))
-    ImageDraw.Draw(native).text(
-        ((24 - box[2] + box[0]) // 2 - box[0], (24 - box[3] + box[1]) // 2 - box[1]),
-        glyph,
-        font=font,
-        fill=1,
-    )
-    assert crisp["pixels"] == assets._pack(native.convert("L").tobytes())
-    assert all(
-        ((int(crisp["pixels"][i : i + 2], 16) >> shift) & 3) in {0, 3}
-        for i in range(0, len(crisp["pixels"]), 2)
-        for shift in (0, 2, 4, 6)
-    )
+    # Crisp is line-step strokes: thresholded glyph masks are what the owner ruled out.
+    crisp = scene.compile_scene({**view, "appearance": {"raster": "crisp"}})
+    assert not any(e["op"] == "mask" for e in crisp["elements"])
+    assert any(e["op"] == "segments" for e in crisp["elements"])
+    smooth = scene.compile_scene({**view, "appearance": {"raster": "smooth"}})
+    assert any(e["op"] == "mask" for e in smooth["elements"])
+    assert all("background" in e for e in smooth["elements"] if e["op"] not in {"number"})
     for css in [
         "position: fixed;",
         "accent: red;",
         "orbit-radius: 1000;",
-        "highlight-radius: 26;",
-        "gauge-width: 13;",
+        "highlight-radius: 33;",
+        "gauge-width: 17;",
         "outer-border: maybe;",
     ]:
         with pytest.raises(ValueError):
@@ -239,7 +223,7 @@ def test_settings_is_ninth_rotary_item_not_ninth_orbit(dial):
     assert view["selected"] == 8 and len(view["items"]) == 9
     compiled = scene.compile_scene(view)
     cog = next(r for r in compiled["regions"] if r["id"] == "__settings")
-    assert (cog["x"], cog["y"]) == (120, 77)
+    assert (cog["x"], cog["y"]) == (120, 70)
     assert len(compiled["elements"]) <= 64
     assert nav.input("press")["kind"] == "settings"
     assert nav.input("press")["kind"] == "menu"

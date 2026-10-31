@@ -1,5 +1,9 @@
 # HA Dial firmware changelog
 
+## 2026.10.1-b4
+
+- Add scene version 5: filled polygons, multi-line segments, solid bands, round caps and integer coverage blending against a declared colour. Larger masks and digit cells are accepted. Requires HA Dial Server 2026.10.1-b10.
+
 ## 2026.10.1-b3
 
 - Accept scene v4 bounded polylines, reject invalid points and join HA-supplied geometry with the shared Bresenham raster. Retain v1–v3 support.

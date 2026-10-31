@@ -533,12 +533,21 @@ Each page has **Appearance & conditions**; each entity has **Edit**. The modal i
 only when opened, keeping large navigation trees light. Existing entity strings remain
 valid; an edited entity becomes an object with `entity_id` and its overrides.
 
-This build implements two Atlas families: Navigation (**Orbit**, **Pointer**, **Rolodex**, **Petals**, **Constellation**, **Compass**, **Ribbon**, **Breadcrumb**)
-and Domain controls (**Instrument**, **Editorial**). The entity selector offers light,
-switch, cover, climate, media player, fan, alarm, lock, vacuum, sensor, binary sensor,
-weather, timer, calendar, scene, select/input select, number/input number and button/input
-button. Sensor presentation variants include energy, air quality, water, vehicle and data.
-The watch faces, cameras, ambient screens and historic chart families are not implemented.
+Page styles cover navigation (**Orbit**, **Pointer**, **Rolodex**, **Petals**, **Constellation**,
+**Compass**, **Ribbon**, **Breadcrumb**, **List**, **Grid**, **Pager**, **Needle**) and faces: four chronographs, ambient
+(**Solar**, **Typographic**, **Orbital**, **Status**), watch (**Contour**, **Modular**, **Palette**, **Rings**, **Solar**,
+**Reflections**) and data (**Area**, **Radar**, **Bands**, **Spark**). Each domain has its own **Instrument**
+graphic and big-type **Editorial**; anything with a level also offers **Column**, **Segment** and **Tumbler**.
+The entity selector offers light, switch, cover, climate, media player, fan, alarm, lock, vacuum,
+sensor, binary sensor, weather, timer, calendar, scene, select/input select, number/input number and
+button/input button. Sensor instruments include energy, air quality, water, vehicle and data.
+Camera and Photo time faces are not implemented; they need an image transport.
+
+Faces show real sources only. The page's Options tab asks for the sources its style reads: time zone,
+weather, a history window, and metric sensors with an optional maximum, which Rings and Bands fill
+towards. A source that isn't set or available shows `--`, a chart with no recorded history says NO
+HISTORY, and a reading with no maximum shows no progress. Ambient and watch faces redraw once a minute;
+only chronographs update each second.
 
 Rotary controls use the entity's current limits and step. Media/fan/cover/vacuum actions
 respect reported capabilities. Sensors, binary sensors, weather and calendars are read-only;
@@ -547,9 +556,17 @@ actions require explicit confirmation. PIN-protected actions are unavailable; no
 Draft previews never call entity services. Changing visibility does not provide access control.
 
 The icon picker uses the bundled Material Design Icons font, rendered in HA as a small
-mask shared with the card and Dial. It needs no icon download on the device. **Crisp** uses
-binary text/digit/icon coverage; **Smooth** uses antialiased coverage. Drawing primitives
-keep the shared pixel raster contract. Appearance options are compiled by HA, not browser CSS.
+mask shared with the card and Dial. It needs no icon download on the device.
+
+**Crisp** and **Smooth** are two drawing styles, not one setting for text. Crisp draws everything with
+line-step lines and midpoint circles, including its single-stroke capitals and line icons, and its
+fine line work shows the algorithm's moiré on purpose. Text is folded to capitals without accents, and
+characters outside its set appear as a box. Smooth anti-aliases every shape and uses the regular font.
+
+The Options tab shows only the settings the current style reads, grouped: frame, type, items, hub,
+gauge, value, actions, back and home, and others that depend on the style. They cover padding, sizes,
+gaps, widths, borders and positions. Only values you change are saved, so a page keeps following the
+defaults for its mode. Appearance options are compiled by HA, not browser CSS.
 
 The structured controls and **Advanced style** edit the same settings. Supported declarations:
 

@@ -11,6 +11,7 @@ def extended_state(domain, state, available):
     status = state.state if available else "unavailable"
     value, minimum, maximum, step, unit = 0, 0, 100, 5, "%"
     continuous, actions, options = False, [], []
+    battery = None
     if domain == "climate":
         value, minimum, maximum = (
             a.get("temperature", 20),
@@ -107,6 +108,7 @@ def extended_state(domain, state, available):
                 if features & bit
             ]
             detail = f"{status} / {a.get('battery_level', '--')}%"
+            battery = a.get("battery_level")
         elif domain == "timer":
             actions = ["start", "pause", "cancel"]
             detail = a.get("remaining", a.get("duration", status))
@@ -151,6 +153,7 @@ def extended_state(domain, state, available):
         "detail": str(detail or status),
         "state": status,
         "confirm": domain in CONFIRM,
+        "battery": finite(battery, None) if battery is not None else None,
         "active": status not in {"off", "idle", "unlocked", "disarmed", "unavailable"},
     }
 

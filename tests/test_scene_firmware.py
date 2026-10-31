@@ -10,7 +10,28 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+FACE_CLOCK = {
+    "hour": 10, "minute": 9, "second": 37, "day": 27, "weekday": 1, "days_in_month": 31, "date": "MON 27 OCT",
+    "weekday_name": "MONDAY", "moon": "full_moon", "reserve": 40, "zones": [("UTC", "10:09"), ("TOKYO", "19:09")],
+    "sun": {"above": True, "rising": "07:18", "setting": "17:42", "progress": 0.34},
+    "weather": {"state": "rainy", "temperature": "9°C"},
+    "metrics": [
+        {"label": f"Example {n}", "value": 40 + n, "text": str(40 + n), "unit": "%", "percent": 40 + n, "series": [10, 30, 20, 50, 40]}
+        for n in range(4)
+    ],
+}
+
+
 def examples(scene):
+    for style in (
+        "AMB-SOLAR", "AMB-TYPOGRAPHIC", "AMB-ORBITAL", "AMB-STATUS", "WAT-CONTOUR", "WAT-MODULAR", "WAT-PALETTE",
+        "WAT-RINGS", "WAT-SOLAR", "WAT-REFLECTIONS", "DAT-AREA", "DAT-RADAR", "DAT-BANDS", "DAT-SPARK",
+    ):
+        for raster in ("crisp", "smooth"):
+            yield scene.compile_scene({
+                "id": "face", "kind": "menu", "title": "HA DIAL", "style": style, "items": [], "back": True,
+                "appearance": {"raster": raster}, "_clock": FACE_CLOCK,
+            })
     for theme in scene.THEMES:
         for style in ("TRICOMPAX", "WORLDTIMER", "SKELETON", "MOONPHASE"):
             for raster in ("crisp", "smooth"):
@@ -83,6 +104,10 @@ def examples(scene):
         "NAV-COMPASS",
         "NAV-RIBBON",
         "NAV-BREADCRUMB",
+        "NAV-LIST",
+        "NAV-GRID",
+        "NAV-PAGER",
+        "NAV-NEEDLE",
     ):
         for raster in ("crisp", "smooth"):
             yield scene.compile_scene(
@@ -105,6 +130,36 @@ def examples(scene):
                             "settings": True,
                         },
                     ],
+                }
+            )
+    for raster in ("crisp", "smooth"):
+        for domain, base in (("light", "LIGHT"), ("climate", "THERMOSTAT"), ("select", "SELECTOR")):
+            for shape in ("INSTRUMENT", "EDITORIAL", "COLUMN", "SEGMENT", "TUMBLER"):
+                resolved = scene.compile_scene(
+                    {
+                        "kind": "control", "id": domain, "domain": domain, "title": "Example " + domain,
+                        "style": f"CTL-{base}-{shape}", "icon": "mdi:lightbulb", "value": 2, "minimum": 0, "maximum": 3,
+                        "step": 0.5 if domain == "climate" else 1, "available": True, "active": True, "continuous": True,
+                        "state": "on", "detail": "Example status", "unit": "%", "actions": ["toggle"], "back": True,
+                        "options": ["Quiet", "Normal", "Boost", "Away"] if domain == "select" else [],
+                        "appearance": {"raster": raster},
+                    }
+                )
+                yield resolved
+                yield {**resolved, "test_local_value": 1}
+        for name, domain, extra in (
+            ("MEDIA", "media_player", {"continuous": True, "actions": ["previous", "play_pause", "next"], "detail": "Example track"}),
+            ("VOLUME", "media_player", {"continuous": True}), ("COVER", "cover", {"actions": ["open", "stop", "close"]}),
+            ("FAN", "fan", {"continuous": True}), ("SECURITY", "alarm_control_panel", {"state": "armed_away"}), ("LOCK", "lock", {"state": "locked"}),
+            ("VACUUM", "vacuum", {"state": "cleaning", "battery": 68}), ("ENERGY", "sensor", {"numeric_value": True}), ("AIR", "sensor", {"numeric_value": True}),
+            ("WEATHER", "weather", {"state": "rainy", "detail": "9° / rainy"}), ("TIMER", "timer", {"state": "active", "detail": "0:18:42"}),
+            ("CALENDAR", "calendar", {"detail": "Example meeting"}), ("SCENE", "scene", {}), ("SWITCH", "switch", {"active": True}),
+        ):
+            yield scene.compile_scene(
+                {
+                    "kind": "control", "id": domain, "domain": domain, "title": "Example", "style": f"CTL-{name}-INSTRUMENT",
+                    "icon": "mdi:star", "value": 42, "available": True, "active": True, "unit": "%", "back": True,
+                    "state": "on", "detail": "Example", "appearance": {"raster": raster}, **extra,
                 }
             )
     for domain, style, value in [

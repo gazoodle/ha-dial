@@ -46,8 +46,120 @@ export function rasterize(scene, localValue = NaN) {
     else { x--; error += 2 * (y - x) + 1; }
     }
   };
+  const parts = (value) => value.match(/[\da-f]{2}/gi).map((part) => parseInt(part, 16));
+  const shade = (front, back) => {
+    const f = parts(front), b = parts(back);
+    const table = Array.from({ length: 16 }, (_, level) => "#" + f.map((value, index) =>
+      Math.floor((value * level + b[index] * (15 - level)) / 15).toString(16).padStart(2, "0")).join(""));
+    return (x, y, level) => pixel(x, y, table[level]);
+  };
+  const isqrt = (value) => {
+    let result = 0, bit = 1 << 28;
+    while (bit > value) bit >>= 2;
+    while (bit) {
+      if (value >= result + bit) { value -= result + bit; result = (result >> 1) + bit; }
+      else result >>= 1;
+      bit >>= 2;
+    }
+    return result;
+  };
+  const level16 = (coverage, smooth) => smooth ? Math.trunc(coverage * 15 / 16) : coverage >= 8 ? 15 : 0;
+  const clamp16 = (value) => Math.max(0, Math.min(16, value));
+  const unit = (degrees) => [Math.round(Math.sin(degrees * Math.PI / 180) * 1024), Math.round(-Math.cos(degrees * Math.PI / 180) * 1024)];
+  const band = (cx, cy, outer, inner, start, end, cap, smooth, plot) => {
+    const whole = end - start >= 360;
+    const [sx, sy] = unit(start), [ex, ey] = unit(end);
+    const middle = Math.trunc((outer + inner) / 2), half = Math.trunc((outer - inner) / 2);
+    const solid = inner < 0 ? Math.max(0, Math.trunc((outer - 8) / 16) - 1) : 0;
+    const capped = (dx, dy, ux, uy) => {
+      const px = dx * 16 - Math.trunc(ux * middle / 1024), py = dy * 16 - Math.trunc(uy * middle / 1024);
+      if (Math.abs(px) >= half + 8 || Math.abs(py) >= half + 8) return 0;
+      return clamp16(half + 8 - isqrt(px * px + py * py));
+    };
+    const visit = (dx, dy) => {
+      const squared = dx * dx + dy * dy;
+      let coverage = 16;
+      if (squared > solid * solid) {
+        const distance = isqrt(squared << 8);
+        coverage = Math.min(clamp16(outer - distance + 8), clamp16(distance - inner + 8));
+      }
+      if (!whole) {
+        const from = clamp16(Math.trunc((sx * dy - sy * dx) / 64) + 8), to = clamp16(8 - Math.trunc((ex * dy - ey * dx) / 64));
+        coverage = Math.min(coverage, end - start < 180 ? Math.min(from, to) : Math.max(from, to));
+        if (cap) coverage = Math.max(coverage, capped(dx, dy, sx, sy), capped(dx, dy, ex, ey));
+      }
+      const level = level16(coverage, smooth);
+      if (level) plot(cx + dx, cy + dy, level);
+    };
+    const reach = Math.trunc((outer + 8) / 16) + 1, hole = Math.trunc((inner - 8) / 16) - 1;
+    for (let dy = -reach; dy <= reach; dy++) {
+      const last = isqrt(reach * reach - dy * dy);
+      const first = hole > 0 && Math.abs(dy) < hole ? isqrt(hole * hole - dy * dy) + 1 : 0;
+      for (let dx = first; dx <= last; dx++) {
+        visit(dx, dy);
+        if (dx) visit(-dx, dy);
+      }
+    }
+  };
+  const polygon = (points, smooth, plot) => {
+    const ys = points.map((point) => point[1]);
+    const low = Math.trunc(Math.min(...ys) / 4), high = Math.trunc((Math.max(...ys) + 3) / 4);
+    for (let y = Math.max(0, low - 1); y <= Math.min(239, high + 1); y++) {
+      const row = new Int32Array(240);
+      for (let sub = 1; sub < 8; sub += 2) {
+        const sample = y * 8 + sub, crossings = [];
+        for (let index = 0; index < points.length; index++) {
+          const a = points[index], b = points[(index + 1) % points.length];
+          const ax = a[0] * 2 + 4, ay = a[1] * 2 + 4, bx = b[0] * 2 + 4, by = b[1] * 2 + 4;
+          if ((ay <= sample) !== (by <= sample)) crossings.push(ax + Math.trunc((sample - ay) * (bx - ax) / (by - ay)));
+        }
+        crossings.sort((p, q) => p - q);
+        for (let index = 0; index + 1 < crossings.length; index += 2) {
+          const left = crossings[index], right = crossings[index + 1];
+          for (let x = Math.max(0, left >> 3); x <= Math.min(239, (right - 1) >> 3); x++)
+            row[x] += Math.max(0, Math.min(right, x * 8 + 8) - Math.max(left, x * 8));
+        }
+      }
+      for (let x = 0; x < 240; x++) {
+        const level = smooth ? Math.trunc(row[x] * 15 / 32) : row[x] >= 16 ? 15 : 0;
+        if (level) plot(x, y, level);
+      }
+    }
+  };
+  const wu = (x1, y1, x2, y2, plot) => {
+    const steep = Math.abs(y2 - y1) > Math.abs(x2 - x1);
+    if (steep) [x1, y1, x2, y2] = [y1, x1, y2, x2];
+    if (x1 > x2) [x1, y1, x2, y2] = [x2, y2, x1, y1];
+    const span = x2 - x1, gradient = span ? Math.trunc((y2 - y1) * 65536 / span) : 0;
+    let minor = y1 * 65536;
+    for (let major = x1; major <= x2; major++, minor += gradient) {
+      const whole = minor >> 16, part = (minor >> 12) & 15;
+      if (15 - part > 0) { if (steep) plot(whole, major, 15 - part); else plot(major, whole, 15 - part); }
+      if (part > 0) { if (steep) plot(whole + 1, major, part); else plot(major, whole + 1, part); }
+    }
+  };
+  const stroked = (element, x1, y1, x2, y2) => {
+    if (element.background) wu(x1, y1, x2, y2, shade(element.stroke, element.background));
+    else line(x1, y1, x2, y2, element.stroke);
+  };
   for (const element of scene.elements) {
-    if (element.op === "circle") {
+    if (element.op === "polygon") {
+      polygon(element.points, Boolean(element.background), shade(element.fill, element.background || element.fill));
+    } else if (element.op === "segments") {
+      for (let index = 0; index + 3 < element.lines.length; index += 4)
+        stroked(element, element.lines[index], element.lines[index + 1], element.lines[index + 2], element.lines[index + 3]);
+    } else if (element.op === "circle" && element.solid) {
+      const smooth = Boolean(element.background), width = element.width || 1;
+      const outer = element.r * 16 + 8, inner = (element.r - width) * 16 + 8;
+      if (element.stroke && element.fill) {
+        band(element.x, element.y, outer, -1000, 0, 360, false, smooth, shade(element.stroke, element.background || element.stroke));
+        band(element.x, element.y, inner, -1000, 0, 360, false, smooth, shade(element.fill, element.stroke));
+      } else if (element.fill) {
+        band(element.x, element.y, outer, -1000, 0, 360, false, smooth, shade(element.fill, element.background || element.fill));
+      } else if (element.stroke) {
+        band(element.x, element.y, outer, inner, 0, 360, false, smooth, shade(element.stroke, element.background || element.stroke));
+      }
+    } else if (element.op === "circle") {
       if (element.fill) circle(element.x, element.y, element.r, element.fill, true);
       if (element.stroke) for (let width = 0; width < (element.width || 1); width++)
         circle(element.x, element.y, Math.max(0, element.r - width), element.stroke);
@@ -55,6 +167,13 @@ export function rasterize(scene, localValue = NaN) {
       const value = local ? Math.round((localValue - (element.minimum ?? 0)) * 100 / ((element.maximum ?? 100) - (element.minimum ?? 0))) : element.value;
       const end = element.op === "gauge" ? element.start + Math.round((element.end - element.start) * Math.max(0, Math.min(100, value)) / 100) : element.end;
       const stroke = element.op === "gauge" && local ? (element.fill || element.stroke) : element.stroke;
+      if (element.solid) {
+        const inner = element.r - Math.floor(element.width / 2);
+        if (end > element.start)
+          band(element.x, element.y, (inner + element.width - 1) * 16 + 8, inner * 16 - 8, element.start, end, Boolean(element.cap),
+            Boolean(element.background), shade(stroke, element.background || stroke));
+        continue;
+      }
       for (let width = 0; width < element.width; width++) {
         const radius = Math.max(1, element.r + width - Math.floor(element.width / 2));
         let previous;
@@ -67,9 +186,9 @@ export function rasterize(scene, localValue = NaN) {
       }
     } else if (element.op === "polyline") {
       for (let index = 1; index < element.points.length; index++)
-        line(...element.points[index - 1], ...element.points[index], element.stroke);
+        stroked(element, ...element.points[index - 1], ...element.points[index]);
     } else if (element.op === "line") {
-      line(element.x1, element.y1, element.x2, element.y2, element.stroke);
+      stroked(element, element.x1, element.y1, element.x2, element.y2);
     } else if (element.op === "mask" || element.op === "number") {
       const scale = 10 ** (element.precision || 0);
       const digits = element.op !== 'number' ? '' : element.characters ? (local ? Math.max(-999999 / scale, Math.min(999999 / scale, localValue)) : element.value / scale).toFixed(element.precision || 0) : String(Math.max(0, Math.min(999, local ? Math.round(localValue) : element.value)));

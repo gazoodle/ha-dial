@@ -570,6 +570,7 @@ async def _ws_gallery(hass, connection, msg) -> None:
         return
     from .catalogue import PAGE_STYLES, control_styles
     from .chronograph import resolve_clock
+    from .history import ensure_history
     from .definition import build_definition
     from .scene import THEMES, compile_scene
 
@@ -595,6 +596,7 @@ async def _ws_gallery(hass, connection, msg) -> None:
         if entity:
             nav.input("press")
             _sync_control(hass, nav)
+        await ensure_history(hass, nav.current())
         view = resolve_clock(hass, nav.current())
         if msg.get("preview_only"):
             connection.send_result(msg["id"], {"scene": compile_scene(view)})
