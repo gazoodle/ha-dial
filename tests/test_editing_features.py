@@ -395,12 +395,89 @@ def test_confirmed_power_and_cover_press_execute_the_named_action(
         attributes={"supported_features": 15, "current_position": 50},
     )
     nav.sync(**controls.control_state(domain + ".demo", state))
+    if domain == "cover":
+        # Stop is exempt from confirmation: stopping a moving door must never wait on a prompt.
+        assert controls.control_command(nav.input("press"), "press", None) == (
+            domain,
+            expected,
+            {"entity_id": domain + ".demo"},
+        )
+        return
     assert controls.control_command(nav.input("press"), "press", None) is None
     assert controls.control_command(nav.input("press"), "press", None) == (
         domain,
         expected,
         {"entity_id": domain + ".demo"},
     )
+
+
+def _confirmed_cover(dial):
+    definition, controls = dial.load("definition"), dial.load("controls")
+    tree = definition.build_definition(
+        SimpleNamespace(states={}),
+        [{"id": "root", "title": "Home", "entities": [{"entity_id": "cover.door", "confirm": True}]}],
+        "ember",
+    )
+    nav = dial.load("navigator").Navigator(definition=tree)
+    nav.input("press")
+    state = SimpleNamespace(state="closed", attributes={"supported_features": 15, "current_position": 0})
+    nav.sync(**controls.control_state("cover.door", state))
+    return nav, controls
+
+
+@pytest.mark.parametrize("action,value", [("rotate_right", None), ("rotate_left", None), ("set_value", 80)])
+def test_turning_the_dial_never_moves_a_cover_that_needs_confirming(integration, dial, action, value):
+    nav, controls = _confirmed_cover(dial)
+    before = nav.current()["value"]
+    view = nav.input(action, None, value)
+    assert view["value"] == before and not view["pending"]
+    assert controls.control_command(view, action, None) is None
+
+
+def test_opening_a_cover_that_needs_confirming_still_asks(integration, dial):
+    nav, controls = _confirmed_cover(dial)
+    view = nav.input("touch", "open")
+    assert view["confirmation"] == "open"
+    assert controls.control_command(view, "touch", "open") is None
+    confirmed = nav.input("press")
+    assert controls.control_command(confirmed, "press", None) == ("cover", "open_cover", {"entity_id": "cover.door"})
+
+
+def test_a_cover_that_needs_no_confirming_still_turns(integration, dial):
+    definition, controls = dial.load("definition"), dial.load("controls")
+    tree = definition.build_definition(SimpleNamespace(states={}), [{"id": "root", "title": "Home", "entities": ["cover.blind"]}], "ember")
+    nav = dial.load("navigator").Navigator(definition=tree)
+    nav.input("press")
+    state = SimpleNamespace(state="open", attributes={"supported_features": 15, "current_position": 50})
+    nav.sync(**controls.control_state("cover.blind", state))
+    view = nav.input("rotate_right")
+    assert controls.control_command(view, "rotate_right", None)[1] == "set_cover_position"
+
+
+def test_an_icon_the_dial_cannot_draw_falls_back_instead_of_rejecting_the_tree(dial):
+    definition = dial.load("definition")
+    state = SimpleNamespace(attributes={"icon": "hue:bulb-group", "friendly_name": "Lamp"})
+    tree = definition.build_definition(SimpleNamespace(states={"light.lamp": state}), [{"id": "root", "title": "Home", "entities": ["light.lamp"]}], "ember")
+    assert tree["tree"]["items"][0]["icon"] == "mdi:lightbulb"
+
+
+def test_a_rebuilt_tree_keeps_the_selected_item_and_survives_open_settings(dial):
+    navigator = dial.load("navigator").Navigator
+
+    def tree(*ids):
+        return {"tree": {"id": "root", "title": "Home", "items": [{"id": name, "label": name, "icon": "mdi:folder", "children": []} for name in ids]}}
+
+    old = navigator(definition=tree("a", "b", "c"))
+    old.selected = 2
+    fresh = navigator(definition=tree("new", "a", "b", "c"))
+    fresh.restore(old)
+    assert fresh.current()["items"][fresh.selected]["id"] == "c"
+
+    old.settings_enabled = True
+    old.selected = 3
+    old.input("press")
+    assert old.control["kind"] == "settings"
+    navigator(definition=tree("a")).restore(old)
 
 
 def test_numeric_visibility_accepts_signed_literal_bounds_and_rejects_ignored_options(

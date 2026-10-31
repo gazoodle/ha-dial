@@ -228,6 +228,8 @@ class Navigator:
             if (
                 command is not None
                 and self.control.get("confirm")
+                # Stopping a moving door must never wait on a prompt.
+                and not (self.control.get("domain") == "cover" and command == "stop")
                 and (
                     action == "press"
                     or action == "touch"
@@ -417,8 +419,14 @@ class Navigator:
                 return
         self.view_id = target
         items = self.views[self.view_id]["items"]
-        self.selected = previous.selected % max(1, len(items))
-        if previous.control is not None:
+        # Follow the selected item by id: a rebuilt page may have gained or lost items around it.
+        chosen = previous.views.get(target, {}).get("items", [])
+        chosen_id = chosen[previous.selected % len(chosen)].get("id") if chosen else None
+        self.selected = next(
+            (index for index, item in enumerate(items) if item.get("id") == chosen_id),
+            previous.selected % max(1, len(items)),
+        )
+        if previous.control is not None and "entity_id" in previous.control:
             for index, item in enumerate(items):
                 if item.get("entity_id") == previous.control["entity_id"]:
                     self.selected = index
@@ -434,6 +442,10 @@ class Navigator:
         **properties,
     ) -> None:
         if self.control is not None:
+            # Turning the dial is too easy to do by accident for a cover that needs confirming, such
+            # as a garage door. Without this one line it would move with no prompt at all.
+            if self.control.get("confirm") and self.control.get("domain") == "cover":
+                properties["continuous"] = False
             target = self.control.get("target_value")
             pending = (
                 target is not None

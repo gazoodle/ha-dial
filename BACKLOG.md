@@ -237,6 +237,30 @@ surviving ancestor if the current item disappears. Compare the current Apple Wat
 companion apps and HA's Home dashboard, and test navigation on the physical Dial at realistic
 installation sizes. Expansion of control profiles is a dependency for useful coverage.
 
+Owner's decisions, 2026-10-31 (design agreed, not started):
+
+- Explorer is an item, not a Dial mode. It takes one slot on any page, alongside the owner's own items
+  and pages. Why: "it doesn't take over the dial".
+- A generated page of 8 or fewer items can use any navigation style. Only a page over 8 is limited to
+  styles that scroll or page. Why: the owner ruled that styles must not be ignored out of hand.
+- Tree: floors, areas, then function groups for an area over 8; skip empty levels and a lone floor; an
+  "Other devices" page for unassigned entities; an entity without an area uses its device's.
+- Entities follow HA's automatic dashboard rules, with an optional Assist-only switch and an exclude
+  list. The panel explains omissions with counts.
+- Locks, alarms and garage, gate and door covers are included and always confirmed; a switch leaves
+  them out. Long pages start in List.
+
+Found while planning, and needed before building:
+
+- `async_should_expose` saves a default when an entity has none, so it changes exposure settings. Read
+  the saved options directly and never call it.
+- Rotating moves a cover even when it requires confirmation, and Stop sits behind the confirm step.
+  Close the first and exempt Stop before a garage door can appear. This also affects hand-built pages.
+- An entity's unbundled icon looks likely to fail validation of the whole tree (read, not tested).
+  Generated items need a fallback icon.
+- Many entities have no state when the integration loads at HA start. Build from the registries and
+  rebuild once HA has started.
+
 ### Needs attention: optional Casa Mia Sensor Watch
 
 Explore a home-screen entry showing non-nominal watched sensors, using the existing Casa Mia

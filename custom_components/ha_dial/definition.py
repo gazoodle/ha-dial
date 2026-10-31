@@ -4,6 +4,7 @@ from __future__ import annotations
 
 THEMES = {"ember", "verdant", "cobalt", "rose", "acid", "alloy"}
 from .appearance import validate_options
+from .assets import usable_icon
 from .catalogue import CONTROL_TYPES, PAGE_STYLES, STYLES, control_styles
 
 
@@ -86,7 +87,7 @@ def build_definition(hass, pages: list, default_theme: str) -> dict:
                     or label
                     or entity_id.split(".", 1)[1].replace("_", " ").title(),
                     "icon": options.get("icon")
-                    or (state.attributes.get("icon", icon) if state else icon),
+                    or (usable_icon(state.attributes.get("icon"), icon) if state else icon),
                     "entity_id": entity_id,
                     "label_override": bool(options.get("label")),
                     "profile": profile,
@@ -129,7 +130,7 @@ def _action_item(hass, entity_id: str) -> dict:
     return {
         "id": entity_id,
         "label": (state.attributes.get("friendly_name") if state else None) or entity_id.split(".", 1)[1].replace("_", " ").title(),
-        "icon": (state.attributes.get("icon", icon) if state else icon),
+        "icon": usable_icon(state.attributes.get("icon"), icon) if state else icon,
         "entity_id": entity_id,
         "profile": profile,
         "style": style,

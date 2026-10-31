@@ -86,6 +86,11 @@ def icon_names() -> dict:
     return json.loads((Path(__file__).with_name("resources") / "mdi.json").read_text())
 
 
+def usable_icon(name, fallback: str) -> str:
+    """An icon from outside this project, which may be custom or from a newer MDI than the bundled one."""
+    return name if name in icon_names() else fallback
+
+
 @lru_cache(maxsize=256)
 def icon_mask(name: str, size: int, colour: str) -> dict:
     from PIL import Image, ImageDraw, ImageFont

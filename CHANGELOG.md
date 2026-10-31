@@ -1,5 +1,11 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b20
+
+- Turning the dial no longer moves a cover that needs confirming; opening and closing still ask. Stop on a cover now acts at once, so stopping a moving door never waits on a prompt.
+- An entity whose icon isn't in the bundled set now falls back to its domain's icon. Before, one such icon made the whole page tree fail to save.
+- When the page tree is rebuilt, the selection stays on the same item, and having Device settings open no longer causes an error.
+
 ## 2026.10.1-b19
 
 - New Snake navigation: icons in rows joined by U-turns, read in snake order. Choose icons per row or along the path, including on the returns, with controls for turn extension, whole-snake twist, row length, turn radius, position, single or double edges, width, gap, clearance and colours. Past what fits, it scrolls a row at a time.

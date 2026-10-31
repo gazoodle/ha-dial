@@ -71,10 +71,12 @@ def control_command(
     }:
         return None
     domain = view["entity_id"].partition(".")[0]
+    stopping = domain == "cover" and (action == "press" or item == "stop")
     if (
         action in {"press", "touch"}
         and (view.get("confirm") or domain in {"lock", "alarm_control_panel"})
         and not view.get("_confirmed")
+        and not stopping
     ):
         return None
     if view.get("confirmation") and not view.get("_confirmed"):
