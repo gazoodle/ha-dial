@@ -71,24 +71,26 @@ TOGGLES = {
     "tick-ring": ("Frame", "Tick ring", False),
     "hub-visible": ("Hub", "Show centre", True),
     "gauge-caps": ("Gauge", "Round ends", True),
-    "picture-colour": ("Picture", "Colour", False),
 }
 CHOICES = {
     "raster": ("Rendering", "Rendering", ("smooth", "crisp"), "smooth"),
     "icon-style": ("Items", "Icons", ("outline", "filled"), "outline"),
     "chrome-style": ("Back and home", "Style", ("pill", "circle", "hidden"), "pill"),
+    # No single default: each picture style has its own, in PICTURE_DEFAULTS.
+    "picture-mode": ("Picture", "Treatment", ("colour", "mono", "tint", "dither"), None),
 }
 # These change the treated picture, not the drawn scene, so they are proven against the frame.
-FRAME_SETTINGS = {"picture-colour"}
-# Crisp has no filled icons, and its pictures are always a two-colour dither.
-CRISP_HIDDEN = {"icon-style", "picture-colour"}
+FRAME_SETTINGS = {"picture-mode"}
+PICTURE_DEFAULTS = {"CAM-PORTAL": "mono", "CAM-CINEMA": "colour", "CAM-RADAR": "tint", "WAT-PHOTOS": "colour"}
+# Crisp has no filled icons. Pictures aren't hidden: Crisp is about lines and curves, not pictures.
+CRISP_HIDDEN = {"icon-style"}
 # Crisp is its own design, not Smooth with the edges hardened.
 CRISP_DEFAULTS = {"tick-ring": True, "chrome-style": "circle", "selected-border": 2, "icon-size": 16, "tracking": 2, "label-gap": 17}
 
 DEFAULTS = {
     **{name: spec[4] for name, spec in NUMBERS.items()},
     **{name: spec[2] for name, spec in TOGGLES.items()},
-    **{name: spec[3] for name, spec in CHOICES.items()},
+    **{name: spec[3] for name, spec in CHOICES.items() if spec[3] is not None},
 }
 
 _FRAME = ("outer-border", "border-width", "ring-inset", "ring-double", "ring-gap")
@@ -128,10 +130,10 @@ STYLE_SETTINGS = {
     "WAT-RINGS": ("gauge-width",),
     "WAT-SOLAR": ("value-size", "title-offset", "label-size"),
     "WAT-REFLECTIONS": ("value-size", "label-size"),
-    "WAT-PHOTOS": ("value-size", "title-offset", "label-size"),
-    "CAM-PORTAL": ("picture-colour",),
-    "CAM-CINEMA": ("label-size", "tracking"),
-    "CAM-RADAR": ("picture-colour", "label-size", "tracking"),
+    "WAT-PHOTOS": ("picture-mode", "value-size", "title-offset", "label-size"),
+    "CAM-PORTAL": ("picture-mode",),
+    "CAM-CINEMA": ("picture-mode", "label-size", "tracking"),
+    "CAM-RADAR": ("picture-mode", "label-size", "tracking"),
     "DAT-AREA": ("value-size", "label-size"),
     "DAT-RADAR": ("label-size",),
     "DAT-BANDS": ("gauge-radius", "gauge-width", "value-size", "label-size"),
@@ -198,6 +200,8 @@ def appearance(value: dict) -> dict:
     if not isinstance(declarations, str) or len(declarations) > 4096:
         raise ValueError("Style declarations must be text of at most 4096 characters")
     supplied = dict(value.get("appearance", {}))
+    # Lived for one build on 2026-10-31; a saved value shouldn't stop a page loading.
+    supplied.pop("picture-colour", None)
     for declaration in declarations.split(";"):
         if not declaration.strip():
             continue

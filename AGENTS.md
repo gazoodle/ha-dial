@@ -44,6 +44,10 @@ A camera is an entity in the tree, with Portal, Cinema and Radar as its styles, 
 a source option. Why: on 2026-10-31 the owner asked why cameras weren't added like every other entity;
 there was no good reason. Photos stays a page style, because it is a clock face with a picture behind it.
 
+Every camera and image offers colour, mono, tint and dither, whichever drawing mode is on. Why: on
+2026-10-31 the owner pointed out that Crisp and Smooth are about lines and curves, so tying dither to
+Crisp, as first built, was wrong.
+
 Layouts declare the settings they read in `appearance.py`, and the dialog is generated from that
 table. `tests/test_appearance_tokens.py` fails on a declared setting with no effect, on two styles
 for a domain that draw the same scene, and on glyph masks in Crisp. Why: 31 of 72 slider positions

@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from io import BytesIO
 
+from .appearance import PICTURE_DEFAULTS
 from .catalogue import CAMERA_STYLES, IMAGE_STYLES
 from .const import DOMAIN
 from .scene import view_theme
@@ -63,28 +64,29 @@ def rgb565(image) -> bytes:
     return bytes(out)
 
 
-def render_frame(raw: bytes, spec: dict, theme: dict, crisp: bool, colour: bool = False) -> bytes:
-    """Crop and treat a picture. Blocking: run it in an executor."""
+def render_frame(raw: bytes, spec: dict, theme: dict, crisp: bool, mode: str) -> bytes:
+    """Crop and treat a picture. Blocking: run it in an executor.
+
+    The mode is the picture's own choice. Crisp and Smooth are about lines and curves, so the only
+    thing Crisp changes here is the hard edge on rounded corners.
+    """
     from PIL import Image, ImageDraw, ImageEnhance, ImageOps
 
     image = ImageOps.exif_transpose(Image.open(BytesIO(raw))).convert("RGB")
     image = ImageOps.fit(image, (spec["width"], spec["height"]), Image.Resampling.LANCZOS)
-    treatment = spec["treatment"]
-    if treatment in {"portal", "radar"}:
-        source = image if colour else ImageOps.grayscale(image).convert("RGB")
-        image = ImageEnhance.Contrast(source).enhance(1.12 if treatment == "portal" else 1.18)
-    elif treatment == "cinema":
+    if mode == "colour":
         image = ImageEnhance.Contrast(ImageEnhance.Color(image).enhance(1.08)).enhance(1.04)
-    if treatment == "photo":
+    elif mode in {"mono", "tint"}:
+        image = ImageEnhance.Contrast(ImageOps.grayscale(image).convert("RGB")).enhance(1.15)
+    if spec["treatment"] == "photo":
         # Darken towards the bottom, where the time sits on the photograph.
         shade = Image.linear_gradient("L").resize(image.size)
         shade = shade.point(lambda value: max(0, (value - 90) * 220 // 165))
         image = Image.composite(Image.new("RGB", image.size, (0, 0, 0)), image, shade)
 
-    if crisp:
-        # Ordered dither to two colours: at this resolution it reads as line-step texture.
-        ink = _rgb(theme["primary"] if treatment == "radar" else theme["secondary"])
-        ground = _rgb(theme["bg"])
+    if mode == "dither":
+        # Ordered dither to two theme colours.
+        ink, ground = _rgb(theme["secondary"]), _rgb(theme["bg"])
         gray = ImageOps.autocontrast(ImageOps.grayscale(image), cutoff=2)
         pixels = gray.load()
         image = Image.new("RGB", gray.size, ground)
@@ -93,9 +95,8 @@ def render_frame(raw: bytes, spec: dict, theme: dict, crisp: bool, colour: bool 
             for x in range(gray.width):
                 if pixels[x, y] * 17 // 256 > BAYER[y % 4][x % 4]:
                     target[x, y] = ink
-    elif treatment == "radar":
-        # A colour picture keeps only a trace of the tint, or its colours would turn muddy.
-        image = Image.blend(image, Image.new("RGB", image.size, _rgb(theme["primary"])), 0.08 if colour else 0.22)
+    elif mode == "tint":
+        image = Image.blend(image, Image.new("RGB", image.size, _rgb(theme["primary"])), 0.22)
 
     if spec["radius"]:
         # Rounded corners are baked in: the Dial only ever blits a rectangle.
@@ -108,9 +109,8 @@ def render_frame(raw: bytes, spec: dict, theme: dict, crisp: bool, colour: bool 
     return data
 
 
-def _wants_colour(style: str, options: dict) -> bool:
-    """Only Portal and Radar choose: this keeps other styles' frames from being captured twice."""
-    return style in {"CAM-PORTAL", "CAM-RADAR"} and options["picture-colour"]
+def picture_mode(style: str, options: dict) -> str:
+    return options.get("picture-mode") or PICTURE_DEFAULTS[style]
 
 
 def frame_key(view: dict) -> tuple | None:
@@ -125,7 +125,7 @@ def frame_key(view: dict) -> tuple | None:
     if style not in IMAGE_STYLES or not entity:
         return None
     theme, options = view_theme(view)
-    return (entity, style, theme["primary"], theme["secondary"], theme["bg"], options["raster"], _wants_colour(style, options))
+    return (entity, style, theme["primary"], theme["secondary"], theme["bg"], options["raster"], picture_mode(style, options))
 
 
 async def _source_image(hass, entity: str) -> bytes:
@@ -148,7 +148,7 @@ async def capture(hass, view: dict, key: tuple) -> None:
     theme, options = view_theme(view)
     try:
         raw = await _source_image(hass, key[0])
-        data = await hass.async_add_executor_job(render_frame, raw, spec, theme, options["raster"] == "crisp", _wants_colour(view["style"], options))
+        data = await hass.async_add_executor_job(render_frame, raw, spec, theme, options["raster"] == "crisp", picture_mode(view["style"], options))
     except (HomeAssistantError, OSError, TimeoutError, ValueError) as error:
         _LOGGER.warning("Could not capture %s for the Dial: %s", key[0], error)
         errors[key] = "NO IMAGE"
@@ -248,7 +248,7 @@ def resolve_frame(hass, view: dict) -> dict | None:
     url = _device_url(hass, frame.token)
     return {
         "url": url, "crc": frame.crc, "width": frame.width, "height": frame.height, "scale": frame.scale,
-        "age": _age(frame.captured, now), "error": state.get("frame_errors", {}).get(key) or (None if url else "NO LINK"),
+        "mode": key[-1], "age": _age(frame.captured, now), "error": state.get("frame_errors", {}).get(key) or (None if url else "NO LINK"),
     }
 
 

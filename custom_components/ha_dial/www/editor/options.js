@@ -1,4 +1,4 @@
-import { CONTROL_STYLES, CRISP_DEFAULTS, CRISP_HIDDEN, DEFAULTS, DEFAULT_STYLES, DOMAINS, FACE_SOURCES, NAV_STYLES, SETTINGS, STYLE_SETTINGS } from './catalogue.js';
+import { CONTROL_STYLES, CRISP_DEFAULTS, CRISP_HIDDEN, DEFAULTS, DEFAULT_STYLES, DOMAINS, FACE_SOURCES, NAV_STYLES, PICTURE_DEFAULTS, SETTINGS, STYLE_SETTINGS } from './catalogue.js';
 import { renderScene } from '../scene.js';
 
 const number = (min, max, step = 1) => ({ number: { min, max, step, mode: 'box' } });
@@ -161,7 +161,7 @@ export function openOptions(editor, pageId, entityId) {
     controls.append(groupTabs,groupBody);
     let group;
     const settingRow=(key)=>{
-      const setting=SETTINGS[key], fallback=()=>defaultsFor(draft.raster)[key];
+      const setting=SETTINGS[key], fallback=()=>key==='picture-mode' ? PICTURE_DEFAULTS[currentStyle()] : defaultsFor(draft.raster)[key];
       const changed=()=>draft[key]!==undefined && draft[key]!==fallback();
       const reset=document.createElement('button'); reset.type='button'; reset.className='chip'; reset.textContent='Reset';
       const syncReset=()=>{reset.hidden=!changed();};

@@ -312,8 +312,8 @@ after five minutes, so the Dial holds no HA credential. The Dial streams into a 
 its own task, so a slow network can't stall rotary input, and swaps only after length and CRC pass; a
 failure leaves the old picture up and is reported with free heap on `esphome.ha_dial_frame_status`.
 Both 32 KiB buffers are released when no current scene needs them. Browsers get the same bytes as
-base64 alongside the scene over the WebSocket. Rounded corners and Crisp's two-colour dither are baked
-in by HA, so the renderers only blit. The URL must be plain HTTP, because the Dial has no trust store.
+base64 alongside the scene over the WebSocket. Rounded corners and the picture's treatment (colour, mono, tint
+or dither, chosen per picture and independent of Crisp/Smooth) are baked in by HA, so the renderers only blit. The URL must be plain HTTP, because the Dial has no trust store.
 
 Cameras and image entities are tree entities whose styles are `CAM-*`; the watch face `WAT-PHOTOS` is a
 page style with a bound image source. Portal's two action entities behave as a small menu inside the

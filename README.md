@@ -555,8 +555,9 @@ entity as **New picture when this changes**, or use an image entity, which updat
 stays as captured and shows its age. Portal can show two bound entities as action
 buttons: turn to choose, press to open that entity's control, Back to return. Radar shows a bound detection sensor's state, and its confidence if the sensor reports one; it
 draws no detection boxes. The Dial must be able to reach HA's internal URL over plain HTTP. If it can't,
-the card reports why and the page shows NO LINK. Cinema is in colour, while Portal and Radar start monochrome and have a **Colour** switch under
-Options. Crisp renders pictures as a two-colour dither.
+the card reports why and the page shows NO LINK. Every picture can be colour, mono, tint or dither: the **Picture** group under Options. This is separate
+from Crisp and Smooth, which only change how lines and curves are drawn. Each style has its own starting
+point: Portal mono, Radar tint, Cinema and Photos colour.
 
 Rotary controls use the entity's current limits and step. Media/fan/cover/vacuum actions
 respect reported capabilities. Sensors, binary sensors, weather and calendars are read-only;

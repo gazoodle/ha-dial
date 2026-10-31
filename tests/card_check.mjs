@@ -248,8 +248,8 @@ const settingGroups = (entity, appearance = {}) => {
 };
 assert.deepEqual(settingGroups({ entity_id: "camera.demo" }).names.slice(0, 2), ["Rendering", "Picture"]);
 assert.equal(settingGroups({ entity_id: "camera.demo", style: "CAM-RADAR" }).names[1], "Picture");
-assert(!settingGroups({ entity_id: "camera.demo", style: "CAM-CINEMA" }).names.includes("Picture"));
-assert(!settingGroups({ entity_id: "camera.demo" }, { raster: "crisp" }).names.includes("Picture"), "Crisp pictures are always a dither");
+assert.equal(settingGroups({ entity_id: "camera.demo", style: "CAM-CINEMA" }).names[1], "Picture");
+assert.equal(settingGroups({ entity_id: "camera.demo" }, { raster: "crisp" }).names[1], "Picture", "Crisp is about lines and curves, not pictures");
 const pictureGroup = settingGroups({ entity_id: "camera.demo" });
 pictureGroup.chips.find((chip) => chip.textContent === "Picture").click();
 assert(fs.readFileSync("custom_components/ha_dial/www/panel.js", "utf8").includes(".setting-groups{flex-wrap:wrap"), "a phone must be able to reach every group");

@@ -26,6 +26,7 @@ exports = {
     "DEFAULTS": appearance["DEFAULTS"],
     "CRISP_DEFAULTS": appearance["CRISP_DEFAULTS"],
     "CRISP_HIDDEN": sorted(appearance["CRISP_HIDDEN"]),
+    "PICTURE_DEFAULTS": appearance["PICTURE_DEFAULTS"],
     "STYLE_SETTINGS": {style: list(appearance["style_settings"](style)) for style in styles},
 }
 (root / "custom_components/ha_dial/www/editor/catalogue.js").write_text(

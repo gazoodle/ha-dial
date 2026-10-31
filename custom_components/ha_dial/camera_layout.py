@@ -76,8 +76,9 @@ def wat_photos(c, clock, o):
         c.text(image["error"], 120, 90, 8, c.theme["quiet"], tracking=1, weight=1, max_width=150)
     under = "#060606"
     y = 158 + o["title-offset"]
-    if c.crisp:
-        # Strokes can't be read over a dither, so the time gets a clear patch of its own.
+    if c.crisp or image.get("mode") == "dither":
+        # Thin strokes can't be read over a photograph, nor any text over a dither, so the time
+        # gets a clear patch of its own.
         c.pill(112, y + 9, 128, o["value-size"] + 24, c.theme["bg"], None, radius=6)
     c.text(_time(clock), 57, y, o["value-size"] - 3, "#ffffff", under if not c.crisp else None, align="start", tracking=0, weight=1)
     weather = clock.get("weather")

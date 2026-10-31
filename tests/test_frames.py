@@ -62,21 +62,21 @@ def test_every_style_fits_the_dial_buffer_and_treatments_differ(dial):
     made = []
     for spec in frames.SPECS.values():
         assert spec["width"] * spec["height"] * 2 <= firmware
-        for crisp in (False, True):
-            data = frames.render_frame(png((90, 140, 200)), spec, theme, crisp)
+        for mode in ("colour", "mono", "tint", "dither"):
+            data = frames.render_frame(png((90, 140, 200)), spec, theme, False, mode)
             assert len(data) == spec["width"] * spec["height"] * 2
             made.append(data)
     assert len(set(made)) == len(made)
 
 
-def test_rgb565_is_big_endian_and_crisp_is_two_colours(dial):
+def test_rgb565_is_big_endian_and_dither_is_two_colours(dial):
     frames = dial.load("frames")
     theme = dial.load("scene").THEMES["ember"]
     assert frames.rgb565(Image.new("RGB", (1, 1), (255, 0, 0))) == b"\xf8\x00"
     gradient = Image.linear_gradient("L").resize((200, 200)).convert("RGB")
     out = BytesIO()
     gradient.save(out, "PNG")
-    data = frames.render_frame(out.getvalue(), frames.SPECS["CAM-CINEMA"], theme, True)
+    data = frames.render_frame(out.getvalue(), frames.SPECS["CAM-CINEMA"], theme, True, "dither")
     assert len({data[i : i + 2] for i in range(0, len(data), 2)}) == 2
     # Rounded corners are baked in as the page background, because the Dial only blits rectangles.
     assert data[:2] == frames.rgb565(Image.new("RGB", (1, 1), frames._rgb(theme["bg"])))
@@ -302,31 +302,35 @@ def test_gallery_thumbnails_do_not_follow_the_selected_style(integration, dial, 
     assert results[0]["styles"] == results[1]["styles"]
 
 
-def test_portal_and_radar_can_be_in_colour_but_crisp_and_other_styles_ignore_it(integration, dial):
+def test_every_picture_offers_every_treatment_in_either_drawing_mode(integration, dial):
     frames, appearance = dial.load("frames"), dial.load("appearance")
     theme = dial.load("scene").THEMES["ember"]
 
     def channels(data):
-        """Red and blue of the frame's middle pixel, scaled to compare as 5-bit values."""
+        """Red and blue of the frame's middle pixel, on the same 5-bit scale."""
         middle = len(data) // 2 // 2 * 2
         value = data[middle] << 8 | data[middle + 1]
         return value >> 11, value & 31
 
-    portal = frames.SPECS["CAM-PORTAL"]
-    red, blue = channels(frames.render_frame(png(), portal, theme, False))
-    assert abs(red - blue) <= 1, "Portal is monochrome by default"
-    red, blue = channels(frames.render_frame(png(), portal, theme, False, True))
-    assert red > blue + 10, "the switch keeps the picture's colour"
-    radar = frames.SPECS["CAM-RADAR"]
-    assert frames.render_frame(png(), radar, theme, False) != frames.render_frame(png(), radar, theme, False, True)
+    spec = frames.SPECS["CAM-CINEMA"]
+    for crisp in (False, True):
+        red, blue = channels(frames.render_frame(png(), spec, theme, crisp, "colour"))
+        assert red > blue + 10, "colour keeps the picture's colour, in Crisp too"
+        red, blue = channels(frames.render_frame(png(), spec, theme, crisp, "mono"))
+        assert abs(red - blue) <= 1
+    tinted = channels(frames.render_frame(png((128, 128, 128)), spec, theme, False, "tint"))
+    assert tinted[0] > tinted[1] + 2, "the tint comes from the theme"
+
+    for style, default in appearance.PICTURE_DEFAULTS.items():
+        for raster in ("smooth", "crisp"):
+            assert "picture-mode" in appearance.style_settings(style, raster), (style, raster)
+        assert frames.picture_mode(style, appearance.appearance({})) == default
+    assert len({appearance.PICTURE_DEFAULTS[style] for style in ("CAM-PORTAL", "CAM-CINEMA", "CAM-RADAR")}) == 3
 
     plain = page()
-    coloured = {**plain, "appearance": {"picture-colour": True}}
-    assert frames.frame_key(plain) != frames.frame_key(coloured), "a change must trigger a new capture"
-    cinema = page("CAM-CINEMA")
-    assert frames.frame_key(cinema) == frames.frame_key({**cinema, "appearance": {"picture-colour": True}})
-
-    for style in ("CAM-PORTAL", "CAM-RADAR"):
-        assert "picture-colour" in appearance.style_settings(style)
-        assert "picture-colour" not in appearance.style_settings(style, "crisp")
-    assert "picture-colour" not in appearance.style_settings("CAM-CINEMA")
+    for mode in ("colour", "tint", "dither"):
+        assert frames.frame_key(plain) != frames.frame_key({**plain, "appearance": {"picture-mode": mode}}), "a change must capture again"
+    assert frames.frame_key(plain)[-1] == "mono"
+    with pytest.raises(ValueError):
+        appearance.appearance({"appearance": {"picture-mode": "sepia"}})
+    assert "picture-colour" not in appearance.appearance({"appearance": {"picture-colour": True}})

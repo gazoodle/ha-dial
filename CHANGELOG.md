@@ -1,5 +1,9 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b17
+
+- Every camera and image now offers colour, mono, tint and dither, in either drawing mode. This replaces the Colour switch, and Crisp no longer forces a dither.
+
 ## 2026.10.1-b16
 
 - Fix setting groups running off the edge of the Options dialog on a phone, and list a style's own settings first.
