@@ -1,13 +1,14 @@
-import { CONTROL_STYLES, CRISP_DEFAULTS, CRISP_HIDDEN, DEFAULTS, DEFAULT_STYLES, DOMAINS, FACE_SOURCES, NAV_STYLES, PICTURE_DEFAULTS, SETTINGS, STYLE_SETTINGS } from './catalogue.js';
+import { CONTROL_STYLES, CRISP_DEFAULTS, CRISP_HIDDEN, DEFAULTS, DEFAULT_STYLES, DOMAINS, FACE_SOURCES, NAV_STYLES, PICTURE_DEFAULTS, REQUIRES, SETTINGS, STYLE_SETTINGS } from './catalogue.js';
 import { renderScene } from '../scene.js';
 
 const number = (min, max, step = 1) => ({ number: { min, max, step, mode: 'box' } });
 const select = (options) => ({ select: { options, mode: 'dropdown' } });
-const labels = { title:'Page title', label:'Control label', icon:'Icon', style:'Atlas style', theme:'Theme', conditions:'Show when all conditions pass', confirm:'Confirm actions', css:'Advanced style', 'outer-border':'Outer border', 'border-width':'Border width', 'font-size':'Title size', 'icon-size':'Icon size', 'orbit-radius':'Orbit radius', 'highlight-radius':'Highlight radius', raster:'Crisp / Smooth', accent:'Accent colour', background:'Background colour', text:'Text colour' };
+const labels = { title:'Page title', label:'Control label', icon:'Icon', style:'Atlas style', theme:'Theme', conditions:'Show when all conditions pass', confirm:'Confirm actions', css:'Advanced style', 'outer-border':'Outer border', 'border-width':'Border width', 'font-size':'Title size', 'icon-size':'Icon size', 'orbit-radius':'Orbit radius', 'highlight-radius':'Highlight radius', raster:'Crisp / Smooth', accent:'Accent colour', background:'Background colour', text:'Text colour', 'snake-line':'Snake line colour', 'snake-travelled':'Snake travelled colour' };
 for (const [key, setting] of Object.entries(SETTINGS)) labels[key] = setting.label;
 const defaultsFor = (raster) => ({...DEFAULTS, ...(raster === 'crisp' ? CRISP_DEFAULTS : {})});
 const ranges = Object.entries(SETTINGS).filter(([,setting]) => setting.kind === 'number').map(([key,setting]) => [key,setting.low,setting.high]);
-const appearanceKeys = [...Object.keys(SETTINGS), 'accent','background','text','surface','secondary','quiet','grid'];
+const appearanceKeys = [...Object.keys(SETTINGS), 'accent','background','text','surface','secondary','quiet','grid','snake-line','snake-travelled'];
+const rebuildsSettings = (key) => key === 'raster' || Object.values(REQUIRES).some(([driver]) => driver === key);
 const toggle = (raw) => ['true','on'].includes(raw) ? true : ['false','off'].includes(raw) ? false : raw;
 // What a dialog shows: only settings this style reads, so every control has a visible effect.
 const settingsFor = (style, raster) => (STYLE_SETTINGS[style] || STYLE_SETTINGS['NAV-ORBIT']).filter((key) => !(raster === 'crisp' && CRISP_HIDDEN.includes(key)));
@@ -185,30 +186,32 @@ export function openOptions(editor, pageId, entityId) {
         row=document.createElement('div'); row.className='raster-row';
         const name=document.createElement('span'); name.textContent=setting.label;
         const segments=document.createElement('div'); segments.className='dialog-tabs'; segments.setAttribute('role','group'); segments.setAttribute('aria-label',setting.label);
-        const buttons=setting.choices.map(choice=>{const button=document.createElement('button');button.type='button';button.textContent=choice;button.addEventListener('click',()=>{draft[key]=choice;syncReset();sync();writeCss();if(key==='raster')buildSettings();});segments.append(button);return button;});
+        const buttons=setting.choices.map(choice=>{const button=document.createElement('button');button.type='button';button.textContent=choice;button.addEventListener('click',()=>{draft[key]=choice;syncReset();sync();writeCss();if(rebuildsSettings(key))buildSettings();});segments.append(button);return button;});
         sync=()=>buttons.forEach((button,index)=>button.setAttribute('aria-pressed',String((draft[key] ?? fallback())===setting.choices[index])));
         row.append(name,segments);
       }
-      reset.addEventListener('click',()=>{delete draft[key];sync();syncReset();writeCss();if(key==='raster')buildSettings();});
+      reset.addEventListener('click',()=>{delete draft[key];sync();syncReset();writeCss();if(rebuildsSettings(key))buildSettings();});
       updates.push(sync,syncReset); sync(); syncReset(); row.append(reset);
       return row;
     };
     const buildSettings=()=>{
       updates.length=0;
-      const keys=settingsFor(currentStyle(),draft.raster);
+      const applies=(key)=>!REQUIRES[key] || (draft[REQUIRES[key][0]] ?? defaultsFor(draft.raster)[REQUIRES[key][0]])===REQUIRES[key][1];
+      const keys=settingsFor(currentStyle(),draft.raster).filter(applies);
       const groups=[...new Set(keys.map(key=>SETTINGS[key].group))];
       if (!groups.includes(group)) group=groups[0];
       groupTabs.replaceChildren(...groups.map(name=>{const button=document.createElement('button');button.type='button';button.textContent=name;button.setAttribute('aria-pressed',String(name===group));button.addEventListener('click',()=>{group=name;buildSettings();});return button;}));
       groupBody.replaceChildren(...keys.filter(key=>SETTINGS[key].group===group).map(settingRow));
       updates.push(...colourUpdates);
+      colourUpdates.forEach(update=>update());
     };
     const coloursTitle=document.createElement('h4'); coloursTitle.textContent='Colour overrides'; controls.append(coloursTitle);
     const colours=document.createElement('div'); colours.className='colour-grid';
-    for (const [key,fallback] of [['accent','#ff8b2d'],['background','#060707'],['text','#fff7eb'],['surface','#252525'],['secondary','#cccccc'],['quiet','#777777'],['grid','#444444']]) {
+    for (const [key,fallback] of [['accent','#ff8b2d'],['background','#060707'],['text','#fff7eb'],['surface','#252525'],['secondary','#cccccc'],['quiet','#777777'],['grid','#444444'],['snake-line','#777777'],['snake-travelled','#ff8b2d']]) {
       const row=document.createElement('div');row.className='colour-choice';const label=document.createElement('label');label.textContent=labels[key] || `${key[0].toUpperCase()}${key.slice(1)} colour`;
       const input=document.createElement('input');input.type='color';input.setAttribute('aria-label',label.textContent);
       const reset=document.createElement('button');reset.type='button';reset.className='chip';reset.textContent='Use theme';
-      const sync=()=>{input.value=draft[key] || fallback;reset.disabled=!draft[key];};colourUpdates.push(sync);sync();
+      const sync=()=>{input.value=draft[key] || fallback;reset.disabled=!draft[key];row.style.display=key.startsWith('snake-') && currentStyle()!=='NAV-SNAKE' ? 'none' : '';};colourUpdates.push(sync);sync();
       input.addEventListener('input',()=>{draft[key]=input.value;sync();writeCss();});reset.addEventListener('click',()=>{delete draft[key];sync();writeCss();});
       label.append(input);row.append(label,reset);colours.append(row);
     }

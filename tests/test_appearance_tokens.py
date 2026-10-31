@@ -32,7 +32,7 @@ SHAPES = ("INSTRUMENT", "EDITORIAL", "COLUMN", "SEGMENT", "TUMBLER")
 
 def views(catalogue):
     for style in sorted(catalogue.NAV_STYLES):
-        yield {"kind": "menu", "id": "home", "title": "Example page", "style": style, "back": True, "breadcrumbs": ["Campus", "First floor"], "items": ITEMS, "selected": 0}
+        yield {"kind": "menu", "id": "home", "title": "Example page", "style": style, "back": True, "breadcrumbs": ["Campus", "First floor"], "items": ITEMS, "selected": 2 if style == "NAV-SNAKE" else 0}
     for style in sorted(catalogue.FACE_STYLES):
         yield {"kind": "menu", "id": "clock", "title": "HA DIAL", "style": style, "items": [], "back": True, "_clock": CLOCK}
     for shape in SHAPES:
@@ -54,8 +54,9 @@ def test_every_declared_setting_changes_the_scene(dial, raster):
                 values = (True, False)
             else:
                 values = appearance.CHOICES[setting][2][:2]
+            needs = dict([appearance.REQUIRES[setting]]) if setting in appearance.REQUIRES else {}
             first, second = (
-                scene.compile_scene({**view, "appearance": {"raster": raster, "tick-ring": True, "ring-double": True, setting: value}}) for value in values
+                scene.compile_scene({**view, "appearance": {"raster": raster, "tick-ring": True, "ring-double": True, **needs, setting: value}}) for value in values
             )
             if first == second:
                 dead.append((view["style"], setting))

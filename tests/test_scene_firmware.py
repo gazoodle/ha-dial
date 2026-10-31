@@ -131,6 +131,7 @@ def examples(scene):
         "NAV-GRID",
         "NAV-PAGER",
         "NAV-NEEDLE",
+        "NAV-SNAKE",
     ):
         for raster in ("crisp", "smooth"):
             yield scene.compile_scene(
@@ -153,6 +154,20 @@ def examples(scene):
                             "settings": True,
                         },
                     ],
+                }
+            )
+    # A twisted snake reaches angles and diagonals no other design does.
+    for raster in ("crisp", "smooth"):
+        for twist, extra in ((-140, {}), (30, {"snake-width": 3}), (200 - 360, {"snake-placement": "along path", "snake-edge": "single"})):
+            yield scene.compile_scene(
+                {
+                    "kind": "menu",
+                    "id": "root",
+                    "title": "Example home",
+                    "style": "NAV-SNAKE",
+                    "selected": 4,
+                    "appearance": {"raster": raster, "snake-twist": twist, **extra},
+                    "items": [{"id": f"p{n}", "label": f"Page {n}", "icon": "mdi:folder"} for n in range(9)],
                 }
             )
     for raster in ("crisp", "smooth"):

@@ -51,6 +51,10 @@ Every camera and image offers colour, mono, tint and dither, whichever drawing m
 2026-10-31 the owner pointed out that Crisp and Smooth are about lines and curves, so tying dither to
 Crisp, as first built, was wrong.
 
+Snake is the owner's own navigation design: rows read top to bottom in alternating directions, joined
+by one line. Twist rotates the whole snake as one, not each row or turn, and icons stay upright. Icons
+go per row or along the path, including on the returns. Why: the owner's direction, 2026-10-31.
+
 Layouts declare the settings they read in `appearance.py`, and the dialog is generated from that
 table. `tests/test_appearance_tokens.py` fails on a declared setting with no effect, on two styles
 for a domain that draw the same scene, and on glyph masks in Crisp. Why: 31 of 72 slider positions

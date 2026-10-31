@@ -1,4 +1,4 @@
-"""The eight Atlas navigation designs; renderers receive resolved coordinates only.
+"""The navigation designs; renderers receive resolved coordinates only.
 
 Each layout draws its own structure and returns its touch regions and where the settings cog fits.
 """
@@ -6,6 +6,7 @@ Each layout draws its own structure and returns its touch regions and where the 
 from .assets import icon_names
 from .canvas import Canvas, polar
 from .catalogue import CONTROL_TYPES
+from .snake_path import arrange
 
 
 def icon_for(item: dict, options: dict) -> str:
@@ -383,7 +384,29 @@ def _needle(c, view, items, selected, o):
     return regions, 209, 24
 
 
+def _snake(c, view, items, selected, o):
+    """Rows joined by U-turns, so turning the dial follows one unbroken line."""
+    theme = c.theme
+    snake = arrange(len(items), selected, o, o["icon-size"] // 2 + o["item-padding"])
+    line = o.get("snake-line", theme["quiet"])
+    inks = {False: line, True: o.get("snake-travelled", theme["primary"]) if o["snake-lit"] else line}
+    width = o["snake-width"]
+    for travelled, ink in inks.items():
+        strokes = [stroke[:4] for stroke in snake.lines if stroke[4] is travelled]
+        if width == 1 and strokes:
+            c.lines([value for stroke in strokes for value in stroke], ink)
+        elif width > 1:
+            for stroke in strokes:
+                c.line(*stroke, ink, width)
+    for x, y, r, start, end, travelled in snake.arcs:
+        c.arc(x, y, r, start, end, inks[travelled], width)
+    regions = [_item(c, x, y, items[n], n == selected, o) for n, x, y in snake.icons]
+    c.text(_selected_label(items, selected, view).upper(), 120, 182 + o["title-offset"], o["font-size"], theme["text"], tracking=o["tracking"], weight=1, max_width=140)
+    return regions, 209, 24
+
+
 LAYOUTS = {
+    "NAV-SNAKE": _snake,
     "NAV-LIST": _list,
     "NAV-GRID": _grid,
     "NAV-PAGER": _pager,
@@ -403,5 +426,5 @@ def navigation_layout(c: Canvas, view: dict, o: dict):
     """Draw a menu; returns regions and the settings cog's position."""
     items = [item for item in view.get("items", []) if not item.get("settings")]
     selected = view.get("selected", 0)
-    regions, footer, cog = LAYOUTS.get(view.get("style"), _orbit)(c, view, items, selected, o)
+    regions, footer, cog = LAYOUTS.get(view.get("style", ""), _orbit)(c, view, items, selected, o)
     return regions + chrome(c, view, o, footer), cog

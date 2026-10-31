@@ -252,6 +252,34 @@ assert.equal(settingGroups({ entity_id: "camera.demo", style: "CAM-CINEMA" }).na
 assert.equal(settingGroups({ entity_id: "camera.demo" }, { raster: "crisp" }).names[1], "Picture", "Crisp is about lines and curves, not pictures");
 const pictureGroup = settingGroups({ entity_id: "camera.demo" });
 pictureGroup.chips.find((chip) => chip.textContent === "Picture").click();
+// Snake: its own settings lead, a slider shows only while it has an effect, and its colours stay out of other styles.
+const panelDialog = (page) => {
+  const panel = new Element();
+  panel.panelMode = true;
+  panel._hass = { callWS: async () => ({ styles: {}, themes: {}, frames: {} }) };
+  panel.config = { pages: [page] };
+  panel.entities = () => [];
+  panel.querySelector = () => null;
+  openOptions(panel, page.id);
+  return panel.children.at(-1);
+};
+const everyNode = (node) => [node, ...(node.children || []).flatMap(everyNode)];
+const labelled = (dialog, label) => everyNode(dialog).find((node) => node["aria-label"] === label);
+const snakeDialog = panelDialog({ id: "home", title: "Home", style: "NAV-SNAKE", entities: [] });
+const groupChips = everyNode(snakeDialog).find((node) => node.className === "dialog-tabs setting-groups");
+assert.deepEqual(groupChips.children.map((chip) => chip.textContent).slice(0, 3), ["Rendering", "Snake path", "Snake line"]);
+groupChips.children.find((chip) => chip.textContent === "Snake path").click();
+assert(labelled(snakeDialog, "Icons per row"), "per row is the default placement");
+assert(!labelled(snakeDialog, "Icon spacing"), "spacing does nothing per row");
+labelled(snakeDialog, "Placement").children.find((button) => button.textContent === "along path").click();
+assert(labelled(snakeDialog, "Icon spacing"), "choosing along path offers spacing");
+assert(!labelled(snakeDialog, "Icons per row"));
+assert(labelled(snakeDialog, "Turn extension") && labelled(snakeDialog, "Twist"));
+const colourRow = (dialog, label) => labelled(dialog, label).parentNode.parentNode;
+assert.equal(colourRow(snakeDialog, "Snake line colour").style.display, "");
+const orbitDialog = panelDialog({ id: "home", title: "Home", style: "NAV-ORBIT", entities: [] });
+assert.equal(colourRow(orbitDialog, "Snake line colour").style.display, "none");
+assert.equal(colourRow(orbitDialog, "Snake travelled colour").style.display, "none");
 assert(fs.readFileSync("custom_components/ha_dial/www/panel.js", "utf8").includes(".setting-groups{flex-wrap:wrap"), "a phone must be able to reach every group");
 const storage = new Map();
 globalThis.localStorage = { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) };

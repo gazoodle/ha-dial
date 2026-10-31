@@ -6,7 +6,7 @@ effect. tests/test_appearance_tokens.py proves each declared setting changes the
 
 import re
 
-COLOURS = {"background", "surface", "accent", "secondary", "text", "quiet", "grid"}
+COLOURS = {"background", "surface", "accent", "secondary", "text", "quiet", "grid", "snake-line", "snake-travelled"}
 
 # name: (group, label, low, high, default)
 NUMBERS = {
@@ -41,6 +41,19 @@ NUMBERS = {
     "ribbon-bend": ("Ribbon", "Band bend", -40, 40, 16),
     "layer-height": ("Layers", "Layer height", 12, 34, 24),
     "layer-gap": ("Layers", "Layer gap", 2, 20, 8),
+    "snake-per-row": ("Snake path", "Icons per row", 2, 4, 3),
+    "snake-spacing": ("Snake path", "Icon spacing", 24, 80, 44),
+    "snake-row-length": ("Snake path", "Row length", 50, 170, 96),
+    # Half the distance between rows: a turn's outer and inner edges then stay on whole pixels.
+    "snake-turn": ("Snake path", "Turn radius", 14, 40, 21),
+    "snake-extension": ("Snake path", "Turn extension", 0, 50, 20),
+    # -180 would draw the same as 180, and the settings check insists its two extremes differ.
+    "snake-twist": ("Snake path", "Twist", -179, 180, 0),
+    "snake-position": ("Snake path", "Position", -40, 40, 0),
+    "snake-width": ("Snake line", "Width", 1, 4, 1),
+    # Each edge sits this far from the path, so every step of the slider moves both by a whole pixel.
+    "snake-gap": ("Snake line", "Edge gap", 1, 10, 3),
+    "snake-clearance": ("Snake line", "Clearance from icons", 0, 10, 2),
     "gauge-radius": ("Gauge", "Gauge radius", 50, 100, 74),
     "gauge-width": ("Gauge", "Value width", 1, 16, 6),
     "track-width": ("Gauge", "Track width", 1, 20, 10),
@@ -71,6 +84,7 @@ TOGGLES = {
     "tick-ring": ("Frame", "Tick ring", False),
     "hub-visible": ("Hub", "Show centre", True),
     "gauge-caps": ("Gauge", "Round ends", True),
+    "snake-lit": ("Snake line", "Light the travelled part", True),
 }
 CHOICES = {
     "raster": ("Rendering", "Rendering", ("smooth", "crisp"), "smooth"),
@@ -78,6 +92,14 @@ CHOICES = {
     "chrome-style": ("Back and home", "Style", ("pill", "circle", "hidden"), "pill"),
     # No single default: each picture style has its own, in PICTURE_DEFAULTS.
     "picture-mode": ("Picture", "Treatment", ("colour", "mono", "tint", "dither"), None),
+    "snake-placement": ("Snake path", "Placement", ("per row", "along path"), "per row"),
+    "snake-edge": ("Snake line", "Edges", ("double", "single"), "double"),
+}
+# A setting that only has an effect while another holds a given value; the dialog hides it otherwise.
+REQUIRES = {
+    "snake-per-row": ("snake-placement", "per row"),
+    "snake-spacing": ("snake-placement", "along path"),
+    "snake-gap": ("snake-edge", "double"),
 }
 # These change the treated picture, not the drawn scene, so they are proven against the frame.
 FRAME_SETTINGS = {"picture-mode"}
@@ -118,6 +140,11 @@ STYLE_SETTINGS = {
     "NAV-GRID": (*_ICONS, "font-size", "tracking", "item-padding", "item-border", "selected-border", "row-gap"),
     "NAV-PAGER": ("icon-style", "selected-icon-size", "highlight-radius", "selected-border", "font-size", "title-offset", "tracking"),
     "NAV-NEEDLE": (*_ICONS, "font-size", "tracking", "orbit-radius", "selected-border"),
+    "NAV-SNAKE": (
+        "snake-placement", "snake-per-row", "snake-spacing", "snake-row-length", "snake-turn", "snake-extension", "snake-twist", "snake-position",
+        "snake-edge", "snake-width", "snake-gap", "snake-clearance", "snake-lit",
+        *_ITEMS, "font-size", "title-offset", "tracking",
+    ),
     "CHR": (*_TICKS, "hand-width", "hand-length"),
     "CHR-SKELETON": _TICKS,  # Its time is in separate registers, so it has no central hands.
     "AMB-TYPOGRAPHIC": (*_TICKS, "value-size", "title-offset", "tracking", "label-size"),

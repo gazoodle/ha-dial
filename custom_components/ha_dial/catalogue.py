@@ -41,6 +41,7 @@ NAV_STYLES = {
         "GRID",
         "PAGER",
         "NEEDLE",
+        "SNAKE",  # The owner's own design (2026-10-31).
     )
 }
 READOUTS = {"ENERGY", "AIR", "VEHICLE", "WATER", "DATA"}

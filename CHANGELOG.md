@@ -1,5 +1,9 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b19
+
+- New Snake navigation: icons in rows joined by U-turns, read in snake order. Choose icons per row or along the path, including on the returns, with controls for turn extension, whole-snake twist, row length, turn radius, position, single or double edges, width, gap, clearance and colours. Past what fits, it scrolls a row at a time.
+
 ## 2026.10.1-b18
 
 - Reset Dial is always available once a Dial is chosen. A finished save used to leave it greyed out until the next edit, and a save in progress blocked it.
