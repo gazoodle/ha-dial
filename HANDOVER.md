@@ -23,7 +23,8 @@ inspected contact sheets. The owner reviews sheets by phone; an approved sheet c
   against a live recorder. Check a Data face on real sensors.
 - On the Dial: peak heap with v5 scenes, draw time for the 490-segment worst case (NAV-LIST in Crisp),
   rotary feel on faces, and how Crisp's moiré looks on the panel. Only the owner can judge the last two.
-- Cameras became tree entities in integration b12 (committed; firmware unchanged at b5).
+- Cameras became tree entities in integration b12 (copied to HA 2026-10-31 and files verified, HA
+  restart pending; firmware unchanged at b5).
 - Camera and Photo faces and the frame transport are implemented in integration b11 and firmware b5,
   deployed 2026-10-31 with approval (b5 reported by the Dial, b11 files verified) but not activated:
   HA needs a restart. Tested against fakes only. First real checks: a live camera entity,
