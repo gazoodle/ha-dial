@@ -1,5 +1,9 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b14
+
+- Fix camera gallery thumbnails all showing the selected style's picture.
+
 ## 2026.10.1-b13
 
 - Add a Zoom slider to the preview, enlarging the whole rectangle up to 400% with panning where it no longer fits. Each browser remembers its own zoom. This replaces the card editor's Preview zoom setting, and a saved `zoom` value is ignored.

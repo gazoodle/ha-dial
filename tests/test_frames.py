@@ -277,6 +277,26 @@ def test_the_gallery_offers_a_cameras_styles_with_its_picture(integration, dial,
     result = connection.send_result.call_args.args[1]
     catalogue = dial.load("catalogue")
     assert set(result["styles"]) == catalogue.CAMERA_STYLES
-    for scene in result["styles"].values():
-        crc = next(element["crc"] for element in scene["elements"] if element["op"] == "image")
-        assert str(crc) in result["frames"]
+    images = {style: next(element for element in scene["elements"] if element["op"] == "image") for style, scene in result["styles"].items()}
+    for style, image in images.items():
+        assert str(image["crc"]) in result["frames"]
+        spec = dial.load("frames").SPECS[style]
+        assert (image["width"], image["height"]) == (spec["width"], spec["height"]), style
+    # Each thumbnail shows its own treatment, whichever style happens to be selected.
+    assert len({image["crc"] for image in images.values()}) == len(images)
+
+
+def test_gallery_thumbnails_do_not_follow_the_selected_style(integration, dial, camera):
+    hass, connection = integration.hass, integration.connection
+    results = []
+
+    async def run():
+        for selected in ("CAM-PORTAL", "CAM-CINEMA"):
+            await integration.code._ws_gallery(hass, connection, {
+                "id": 1, "page": {"title": "Home", "entities": [{"entity_id": "camera.gate", "style": selected}]}, "entity": "camera.gate", "theme": "ember",
+            })
+            results.append(connection.send_result.call_args.args[1])
+
+    asyncio.run(run())
+    assert [result["style"] for result in results] == ["CAM-PORTAL", "CAM-CINEMA"]
+    assert results[0]["styles"] == results[1]["styles"]

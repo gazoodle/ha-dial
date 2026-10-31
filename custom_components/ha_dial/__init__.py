@@ -630,7 +630,10 @@ async def _ws_gallery(hass, connection, msg) -> None:
             connection.send_result(msg["id"], {"scene": scene, "frames": scene_frames(hass, scene)})
             return
         styles = sorted(control_styles(entity.split(".", 1)[0]) if entity else PAGE_STYLES)
-        style_scenes = {style: compile_scene(resolve_clock(hass, {**view, "style": style})) for style in styles}
+        # From the unresolved view: a resolved one carries the selected style's picture, and every
+        # thumbnail would then show that one treatment.
+        unresolved = nav.current()
+        style_scenes = {style: compile_scene(resolve_clock(hass, {**unresolved, "style": style})) for style in styles}
         connection.send_result(msg["id"], {
             "style": view.get("style"), "theme": view.get("theme"),
             "frames": {key: value for scene in style_scenes.values() for key, value in scene_frames(hass, scene).items()},
