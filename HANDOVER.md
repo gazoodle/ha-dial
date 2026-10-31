@@ -24,7 +24,8 @@ inspected contact sheets. The owner reviews sheets by phone; an approved sheet c
 - On the Dial: peak heap with v5 scenes, draw time for the 490-segment worst case (NAV-LIST in Crisp),
   rotary feel on faces, and how Crisp's moiré looks on the panel. Only the owner can judge the last two.
 - Camera and Photo faces and the frame transport are implemented in integration b11 and firmware b5,
-  committed but not deployed, and tested against fakes only. First real checks: a live camera entity,
+  deployed 2026-10-31 with approval (b5 reported by the Dial, b11 files verified) but not activated:
+  HA needs a restart. Tested against fakes only. First real checks: a live camera entity,
   whether the Dial can reach HA across subnets, and the heap figures HA logs from each fetch. Open
   items are in BACKLOG.md. Toybox is dropped.
 - Crisp's stroke font folds to unaccented capitals and shows a box for anything else, so a non-Latin
