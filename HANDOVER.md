@@ -13,8 +13,10 @@ inspected contact sheets. The owner reviews sheets by phone; an approved sheet c
 
 ## Still open
 
-- Deploy: firmware b4 by OTA needs the owner's explicit approval each time, then b10 to HA, an HA
-  restart and a browser refresh. Without b4 the Dial rejects every b10 scene and keeps its last one.
+- Activate: on 2026-10-31, with the owner's approval, firmware b4 went on by OTA (identity checked,
+  native API reports b4) and b10 was copied to the HA config share (all 47 files match). HA still
+  needs a restart and the browser a refresh. No v5 scene has reached the real Dial yet, so the first
+  one after the restart is the first hardware test of the new renderer.
 - The options dialog and page source fields have only been run against the test harness with stub
   HA forms. Check them in the live panel: group chips, Reset chips, row layout at phone width.
 - `history.py` was tested against a fake recorder and its call checked against HA's source, not
