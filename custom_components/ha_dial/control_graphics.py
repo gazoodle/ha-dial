@@ -8,6 +8,7 @@ from math import cos, pi, sin
 
 from .assets import icon_names
 from .canvas import Canvas, polar
+from .light_modes import COLOUR, colour_at, current_colour
 
 WEATHER_ICONS = {
     "clear-night": "mdi:weather-night", "cloudy": "mdi:weather-cloudy", "fog": "mdi:weather-fog", "hail": "mdi:weather-hail",
@@ -49,10 +50,20 @@ def gauge_ring(c: Canvas, view: dict, o: dict, icon=True, continuous=None) -> No
     radius, half = o["gauge-radius"], o["gauge-sweep"] / 2
     track = o["track-width"]
     centre = 118
-    c.arc(120, centre, radius, -half, half, theme["grid"], track, o["gauge-caps"])
+    tinted = current_colour(view)
+    if tinted:
+        _colour_track(c, view, radius, half, track, centre)
+    else:
+        c.arc(120, centre, radius, -half, half, theme["grid"], track, o["gauge-caps"])
     live = view.get("continuous") or view.get("domain") in {"light", "cover"}
     active = view.get("domain") != "light" or view.get("active", True)
-    if live:
+    if tinted:
+        # A slim arc inside the colours, so firmware can still move it at once while turning.
+        c.gauge(
+            120, centre, radius - track // 2 - 3, -half, half, _percent(view), theme["secondary"], 2,
+            minimum=view.get("minimum", 0), maximum=view.get("maximum", 100),
+        )
+    elif live:
         accent = theme["primary"] if active or view.get("pending") else theme["quiet"]
         c.gauge(
             120, centre, radius, -half, half, _percent(view), accent, o["gauge-width"], fill=theme["primary"],
@@ -70,9 +81,21 @@ def gauge_ring(c: Canvas, view: dict, o: dict, icon=True, continuous=None) -> No
     if dim:
         c.lines(dim, theme["grid"])
     if icon:
-        c.icon(icon_name(view, o), 120, 74, o["selected-icon-size"], theme["secondary"])
+        c.icon(icon_name(view, o), 120, 74, o["selected-icon-size"], tinted or theme["secondary"])
     _value(c, view, o)
     _detail(c, view, o)
+
+
+def _colour_track(c: Canvas, view: dict, radius, half, track, centre) -> None:
+    """The range itself in colour, with a marker where the light is now."""
+    segments = 24 if view.get("light_mode") == COLOUR else 12
+    each = 2 * half / segments
+    for index in range(segments):
+        start = -half + index * each
+        # A degree of overlap, so the seams between colours don't show the background.
+        c.arc(120, centre, radius, start, min(half, start + each + 1), colour_at(view, (index + 0.5) / segments), track)
+    x, y = polar(120, centre, radius, -half + 2 * half * _percent(view) / 100)
+    c.disc(x, y, track // 2 + 3, current_colour(view), c.theme["text"], 2)
 
 
 def _thermostat(c, view, o):

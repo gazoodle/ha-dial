@@ -371,3 +371,8 @@ draft through `setDraft`. `ha_dial/configure` refuses a real Dial without `save:
 sends. Where this file's earlier sections say a card stores or sends a definition, this section replaces them.
 
 Websocket commands live in `commands/`: `dial.py` for what cards and Dials use, `editor.py` for what only the panel uses.
+
+## Light modes
+
+A light's turn adjusts brightness, white or colour, from `light_modes.py`. Each mode is only a value, range and
+step on the control, so firmware's local turn handling works unchanged, and the mode itself lives in HA.

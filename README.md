@@ -64,7 +64,7 @@ The visual and physical interaction is selected by a control profile, not merely
 
 | Profile | Turn | Press | Additional control |
 | --- | --- | --- | --- |
-| `dimmer` | Set brightness | Toggle | Colour or colour temperature |
+| `dimmer` | Set brightness, white or colour | Toggle | Button to choose what turning sets |
 | `thermostat` | Set target temperature | Toggle HVAC | Select mode |
 | `volume` | Set volume | Mute | Play/pause |
 | `seek` | Nudge position | Play/pause | Previous/next |

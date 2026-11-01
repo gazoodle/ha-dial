@@ -1,5 +1,9 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b28
+
+- Lights that support them now offer tunable white and colour. A button on the control moves turning between brightness, white and colour, offering only what the light can do. The ring shows the real range in colour, in every light style. No firmware change is needed.
+
 ## 2026.10.1-b27
 
 - Fix the Operate live house warning never appearing: each redraw of the preview blanked and hid it.

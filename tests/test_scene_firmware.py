@@ -156,6 +156,20 @@ def examples(scene):
                     ],
                 }
             )
+    # A light's white and colour modes: coloured rings, and four-digit values that firmware turns locally.
+    for raster in ("crisp", "smooth"):
+        for mode, values in (("white", {"value": 3200, "minimum": 2000, "maximum": 6500, "step": 100, "unit": "K", "detail": "WHITE"}), ("colour", {"value": 210, "minimum": 0, "maximum": 359, "step": 10, "unit": "°", "detail": "COLOUR"})):
+            # The other styles draw these with the operations the colour-tinted ones here already cover.
+            for shape in ("INSTRUMENT", "SEGMENT"):
+                resolved = scene.compile_scene(
+                    {
+                        "kind": "control", "id": "light", "domain": "light", "title": "Example lamp", "style": f"CTL-LIGHT-{shape}", "icon": "mdi:lightbulb",
+                        "available": True, "active": True, "continuous": True, "state": "on", "actions": ["light_mode"], "back": True, "light_mode": mode,
+                        "appearance": {"raster": raster}, **values,
+                    }
+                )
+                yield resolved
+                yield {**resolved, "test_local_value": values["value"] + values["step"]}
     # An Explorer's long pages, which only the styles that move through their items may show.
     for raster in ("crisp", "smooth"):
         for style in ("NAV-LIST", "NAV-GRID", "NAV-SNAKE", "NAV-COMPASS", "NAV-RIBBON", "NAV-ROLODEX", "NAV-PAGER"):

@@ -2,7 +2,7 @@
 
 import json
 import sys
-from itertools import combinations
+from itertools import combinations, product
 from math import hypot
 
 import pytest
@@ -157,18 +157,16 @@ ACTIONS = (
 )
 
 
-@pytest.mark.parametrize("raster", ["smooth", "crisp"])
-@pytest.mark.parametrize("shape", SHAPES)
-@pytest.mark.parametrize("domain,base,actions", ACTIONS)
-def test_action_buttons_never_share_a_touch_area_with_back_or_home(dial, raster, shape, domain, base, actions):
+def test_action_buttons_never_share_a_touch_area_with_back_or_home(dial):
     scene = dial.load("scene")
-    resolved = scene.compile_scene({"kind": "control", "id": "c", "domain": domain, "title": "Example", "style": f"CTL-{base}-{shape}", "back": True, "actions": actions, "appearance": {"raster": raster}, **LEVEL})
-    chrome = [region for region in resolved["regions"] if region["id"] in {"back", "home"}]
-    buttons = [region for region in resolved["regions"] if region["id"] in actions]
-    assert len(buttons) == len(actions) and len(chrome) == 2
-    for button in buttons:
-        for other in chrome:
-            assert hypot(button["x"] - other["x"], button["y"] - other["y"]) >= button["r"] + other["r"], (button, other)
+    for raster, shape, (domain, base, actions) in product(("smooth", "crisp"), SHAPES, ACTIONS):
+        resolved = scene.compile_scene({"kind": "control", "id": "c", "domain": domain, "title": "Example", "style": f"CTL-{base}-{shape}", "back": True, "actions": actions, "appearance": {"raster": raster}, **LEVEL})
+        chrome = [region for region in resolved["regions"] if region["id"] in {"back", "home"}]
+        buttons = [region for region in resolved["regions"] if region["id"] in actions]
+        assert len(buttons) == len(actions) and len(chrome) == 2, (raster, shape, domain)
+        for button in buttons:
+            for other in chrome:
+                assert hypot(button["x"] - other["x"], button["y"] - other["y"]) >= button["r"] + other["r"], (raster, shape, button, other)
 
 
 def test_the_confirm_question_replaces_the_state_line(dial):

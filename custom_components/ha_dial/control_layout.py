@@ -6,6 +6,8 @@ Domain graphics live in control_graphics.py.
 
 from .canvas import Canvas
 from .control_graphics import GRAPHICS, NO_UNIT, asks_itself, gauge_ring, icon_name
+from .canvas import mix
+from .light_modes import colour_at, current_colour
 
 ACTION_ICONS = {
     "open": "mdi:arrow-up", "close": "mdi:arrow-down", "stop": "mdi:stop", "play_pause": "mdi:play-pause",
@@ -13,7 +15,7 @@ ACTION_ICONS = {
     "toggle": "mdi:power", "preset": "mdi:tune", "lock": "mdi:lock", "unlock": "mdi:lock-open", "disarm": "mdi:shield-off",
     "arm_home": "mdi:shield-home", "arm_away": "mdi:shield-lock", "arm_night": "mdi:shield-moon", "arm_vacation": "mdi:shield-airplane",
     "start": "mdi:play", "pause": "mdi:pause", "cancel": "mdi:close", "dock": "mdi:home-import-outline", "activate": "mdi:play",
-    "press": "mdi:gesture-tap", "confirm": "mdi:check", "control": "mdi:power",
+    "press": "mdi:gesture-tap", "confirm": "mdi:check", "control": "mdi:power", "light_mode": "mdi:tune-variant",
 }
 
 
@@ -115,7 +117,7 @@ def _editorial(c, view, o, name):
     theme = c.theme
     # Buttons take the lower edge, so the type moves up to keep its detail line clear of them.
     left, y = 44, (96 if view.get("actions") or view.get("confirmation") else 104) + o["value-offset"]
-    c.icon(icon_name(view, o), left + o["selected-icon-size"] / 2, 60, o["selected-icon-size"], theme["primary"])
+    c.icon(icon_name(view, o), left + o["selected-icon-size"] / 2, 60, o["selected-icon-size"], current_colour(view) or theme["primary"])
     c.text(str(view.get("title", "")).upper(), left, 60 + o["selected-icon-size"], max(7, o["font-size"] - 4), theme["secondary"], align="start", tracking=o["tracking"], weight=1, max_width=150)
     size = o["value-size"] + 12
     text = readout(view)
@@ -142,13 +144,14 @@ def _column(c, view, o, name):
     for index in range(count):
         y = bottom - height / 2 - index * (height + gap)
         active = index < lit
-        fill = theme["primary"] if active else theme["surface"]
-        if c.crisp and not active:
+        tint = colour_at(view, index / max(1, count - 1))
+        fill = (tint or theme["primary"]) if active else mix(tint, theme["bg"], 0.25) if tint else theme["surface"]
+        if c.crisp and not active and not tint:
             c.pill(left + width / 2, y, width, height, None, theme["grid"], 1, radius=0)
         else:
             c.pill(left + width / 2, y, width, height, fill, None, radius=0)
     x = left + width + (240 - left - width - 28) / 2
-    c.icon(icon_name(view, o), x, 74, o["selected-icon-size"], theme["primary"])
+    c.icon(icon_name(view, o), x, 74, o["selected-icon-size"], current_colour(view) or theme["primary"])
     value_element(c, view, o, x, 112 + o["value-offset"], o["value-size"], max_width=round(2 * (214 - x)))
     c.text(view.get("unit", ""), x, 112 + o["value-offset"] + o["value-size"] // 2 + 7, o["unit-size"], theme["primary"], tracking=1, weight=1)
     c.text(detail_text(view), 120, (152 if view.get("actions") else 176) + o["detail-offset"], o["detail-size"], theme["quiet"], tracking=o["tracking"], weight=1, max_width=150)
@@ -165,9 +168,11 @@ def _segment(c, view, o, name):
     lit = _lit(view, count)
     for index in range(count):
         start = -132 + index * (each + gap)
-        c.arc(120, 118, radius, start, start + each, theme["primary"] if index < lit else theme["grid"], max(2, width))
+        tint = colour_at(view, index / max(1, count - 1))
+        ink = (tint or theme["primary"]) if index < lit else mix(tint, theme["bg"], 0.25) if tint else theme["grid"]
+        c.arc(120, 118, radius, start, start + each, ink, max(2, width))
     local_gauge(c, view, 120, 118, radius - width - 3, -132, 132, max(1, o["gauge-width"] // 3))
-    c.icon(icon_name(view, o), 120, 72, o["selected-icon-size"], theme["secondary"])
+    c.icon(icon_name(view, o), 120, 72, o["selected-icon-size"], current_colour(view) or theme["secondary"])
     value_element(c, view, o, 120, 116 + o["value-offset"], o["value-size"])
     c.text(view.get("unit", ""), 120, 116 + o["value-offset"] + o["value-size"] // 2 + 7, o["unit-size"], theme["primary"], tracking=1, weight=1)
     c.text(detail_text(view), 120, 156 + o["detail-offset"], o["detail-size"], theme["quiet"], tracking=o["tracking"], weight=1, max_width=120)
@@ -198,7 +203,7 @@ def _tumbler(c, view, o, name):
     c.text(view.get("unit", ""), 120 + width / 2 - 14, y, o["unit-size"], theme["primary"], None if c.crisp else fill, tracking=1, weight=1)
     # "Turn to cancel" takes this spot while asking.
     if not view.get("confirmation"):
-        c.icon(icon_name(view, o), 120, 47, o["selected-icon-size"] - 5, theme["secondary"])
+        c.icon(icon_name(view, o), 120, 47, o["selected-icon-size"] - 5, current_colour(view) or theme["secondary"])
     c.text(detail_text(view), 120, (154 if view.get("actions") else 166) + o["detail-offset"], o["detail-size"], theme["quiet"], tracking=o["tracking"], weight=1, max_width=130)
     local_gauge(c, view, 120, 120, 106, 60, 120, 2)
 

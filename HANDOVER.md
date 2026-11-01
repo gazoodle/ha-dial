@@ -33,6 +33,8 @@ inspected contact sheets. The owner reviews sheets by phone; an approved sheet c
   Dial. The card editor, Follow Dial and live switch have only run against test stand-ins, so check them in a real browser.
 - b26 splits `__init__.py` and b27 fixes the live banner and reworks door and confirm screens. The
   panel and card have now run in headless Chromium against a stand-in for HA's websocket (scratch only, not in the suite).
+- b28 adds white and colour on lights; committed, not deployed. It has only run against stand-in lights, so check a real
+  one: mireds rounding, and lights that report neither temperature nor colour until they're on.
 - b21 adds Explorer (`explorer.py`) and b20 the cover safety fixes. Explorer has only
   run against stand-in registries shaped from HA's source, with its HA calls type-checked. First real checks: a live home,
   rebuilds as the registries change and after an HA restart, and the panel's Explorer settings. 

@@ -4,6 +4,7 @@ from homeassistant.components.cover import CoverEntityFeature
 from homeassistant.core import State
 
 from .domain_controls import extended_command, extended_state
+from .light_modes import abilities, available_modes, service_data
 
 
 def control_state(entity_id: str, state: State | None) -> dict:
@@ -19,12 +20,15 @@ def control_state(entity_id: str, state: State | None) -> dict:
     actions = []
     continuous = False
     position_known = True
+    light = abilities(attributes) if domain == "light" else None
     if domain == "light":
         brightness = attributes.get("brightness")
         if isinstance(brightness, (int, float)):
             value = round(brightness * 100 / 255)
         modes = attributes.get("supported_color_modes", [])
         continuous = bool(set(modes) - {"onoff", "unknown"}) if modes else True
+        if light and len(available_modes(light)) > 1:
+            actions = ["light_mode"]
     elif domain == "cover":
         features = attributes.get("supported_features", 0)
         actions = [
@@ -56,6 +60,7 @@ def control_state(entity_id: str, state: State | None) -> dict:
         "position_known": position_known,
         "state": state.state if available and state is not None else "unavailable",
         **({"device_class": attributes.get("device_class")} if domain == "cover" else {}),
+        **({"light": light} if light else {}),
         **extra,
     }
 
@@ -93,7 +98,7 @@ def control_command(
         "continuous"
     ):
         if domain == "light":
-            return domain, "turn_on", {**data, "brightness_pct": view["value"]}
+            return domain, "turn_on", {**data, **service_data(view.get("light_mode", "brightness"), view.get("light", {}), view["value"])}
         if domain == "cover":
             return (
                 domain,
