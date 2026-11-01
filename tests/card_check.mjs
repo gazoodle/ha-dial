@@ -93,149 +93,91 @@ removal.setConfig({pages:[{id:'home',title:'Home'},{id:'parent',title:'Parent',p
 removal.removePage(removal.config.pages[1]); removeDialog = removal.children.at(-1); options = removeDialog.children[1].children[1].children;
 options[2].children[0].events.change(); removeDialog.children[2].children[1].events.click();
 assert.deepEqual(removal.config.pages.map(page=>page.id), ['home'], 'remove includes nested descendants');
-const editor = new Editor(); editor.setConfig({}); editor.hass = {};
-assert.equal(editor.config.pages.length, 1);
-const deviceOptions = () => editor.querySelector(".settings").schema[0].selector.select.options;
-assert.deepEqual(deviceOptions(), [{value:"preview",label:"Preview"}]);
+// The card's editor chooses a Dial, and that's all.
+const picker = new Editor(); picker.setConfig({ type: "custom:ha-dial-card" }); picker.hass = {};
+const deviceOptions = () => picker.querySelector(".settings").schema[0].selector.select.options;
+assert.deepEqual(deviceOptions(), [], "no Preview: a card with no Dial chosen simply asks for one");
 const dialServices = { demo_dial_ha_dial_show_view: {}, other_dial_ha_dial_show_view: {}, unrelated_restart: {} };
-editor.hass = { services: { esphome: dialServices } };
-assert.deepEqual(deviceOptions(), [
-  {value:"preview",label:"Preview"}, {value:"demo_dial",label:"demo-dial"}, {value:"other_dial",label:"other-dial"},
-]);
-const deviceSchema = editor.querySelector(".settings").schema;
-editor.hass = { services: { esphome: dialServices }, states: {} };
-assert.equal(editor.querySelector(".settings").schema, deviceSchema, "unrelated state changes do not rebuild the selector");
-editor.setConfig({device:"demo-dial"});
-assert.equal(deviceOptions()[1].value, "demo-dial", "existing hyphenated device names remain selected");
-editor.hass = { services: { esphome: {other_dial_ha_dial_show_view:{}} } };
+picker.hass = { services: { esphome: dialServices } };
+assert.deepEqual(deviceOptions(), [{value:"demo_dial",label:"demo-dial"}, {value:"other_dial",label:"other-dial"}]);
+assert.deepEqual(picker.querySelector(".settings").schema.map((field) => field.name), ["device"], "it's the only setting");
+const pickerSchema = picker.querySelector(".settings").schema;
+picker.hass = { services: { esphome: dialServices }, states: {} };
+assert.equal(picker.querySelector(".settings").schema, pickerSchema, "unrelated state changes do not rebuild the selector");
+picker.setConfig({ type: "custom:ha-dial-card", device: "demo-dial", pages: [{ id: "home", title: "Stale" }], theme: "rose", template: "{{ 1 }}" });
+assert.equal(deviceOptions()[0].value, "demo-dial", "existing hyphenated device names remain selected");
+picker.hass = { services: { esphome: { other_dial_ha_dial_show_view: {} } } };
 assert.deepEqual(deviceOptions().at(-1), {value:"demo-dial",label:"demo-dial (unavailable)"});
-assert.equal(editor.config.device, "demo-dial", "discovery changes must not retarget the card");
-editor.querySelector(".settings").events["value-changed"]({stopPropagation(){},detail:{value:{device:"other_dial"}}});
-assert.equal(editor.lastEvent.detail.config.device, "other_dial");
-editor.setConfig({});
-editor.querySelector(".tree").children[0].children[1].children.find((node) => node.textContent === "Add subpage").events.click();
-const child = editor.config.pages[1];
-assert.equal(child.parent, "home");
-assert(child.id.startsWith("page_"));
-assert.equal(editor.lastEvent.detail.config.pages[1].id, child.id);
-editor.addPage(child.id);
-const treeForms = editor.querySelector(".tree").querySelectorAll("ha-form");
-assert.equal(treeForms.length, 4, "a closed grandchild has no controls");
-assert(treeForms.every((form) => !form.schema.some((field) => field.name === "parent")));
-assert(treeForms[1].schema[0].selector.entity.filter.domain.includes("climate"));
-assert(treeForms[1].schema[0].selector.entity.filter.domain.includes("sensor"));
-const grandchild = editor.config.pages[2];
-assert.equal(editor.move({kind:"page",id:child.id}, {kind:"page",id:grandchild.id}, "inside"), false, "reject cycles");
-assert.equal(editor.move({kind:"page",id:grandchild.id}, {kind:"page",id:child.id}, "after"), true);
-assert.equal(editor.config.pages.find((page) => page.id === grandchild.id).parent, "home");
-assert.equal(editor.move({kind:"page",id:grandchild.id}, {kind:"page",id:child.id}, "inside"), true);
-editor.setEntities(child.id, ["light.demo", "cover.demo", "switch.demo"]);
-assert.equal(editor.move({kind:"entity",page:child.id,id:"switch.demo"}, {kind:"entity",page:child.id,id:"light.demo"}, "before"), true);
-assert.deepEqual(editor.entities(child.id), ["switch.demo", "light.demo", "cover.demo"]);
-assert.equal(editor.move({kind:"entity",page:child.id,id:"switch.demo"}, {kind:"entity",page:"home",id:"cover.demo"}, "after"), false);
+assert.equal(picker.config.device, "demo-dial", "discovery changes must not retarget the card");
+picker.querySelector(".settings").events["value-changed"]({stopPropagation(){},detail:{value:{device:"other_dial"}}});
+assert.deepEqual(picker.lastEvent.detail.config, { type: "custom:ha-dial-card", device: "other_dial" }, "saving clears what an old card still held");
+assert.deepEqual(Card.getStubConfig({ services: { esphome: dialServices } }), { device: "demo_dial" }, "a new card starts on a Dial");
+assert.deepEqual(Card.getStubConfig({}), {});
+assert.equal(typeof Editor.prototype.setEntities, "undefined", "no page editing is left in the card's editor");
+
+// The panel's page tree: moving things, by keyboard or pointer.
+const tree = new Workspace(); tree.setConfig({ pages: [{id:"home",title:"Home",parent:""},{id:"child",title:"Child",parent:"home"},{id:"grandchild",title:"Grandchild",parent:"child"}] }); tree.hass = {states:{}};
+assert.equal(tree.move({kind:"page",id:"child"}, {kind:"page",id:"grandchild"}, "inside"), false, "reject cycles");
+assert.equal(tree.move({kind:"page",id:"grandchild"}, {kind:"page",id:"child"}, "after"), true);
+assert.equal(tree.config.pages.find((page) => page.id === "grandchild").parent, "home");
+assert.equal(tree.move({kind:"page",id:"grandchild"}, {kind:"page",id:"child"}, "inside"), true);
+tree.setEntities("child", ["light.demo", "cover.demo", "switch.demo"]);
+assert.equal(tree.move({kind:"entity",page:"child",id:"switch.demo"}, {kind:"entity",page:"child",id:"light.demo"}, "before"), true);
+assert.deepEqual(tree.entities("child"), ["switch.demo", "light.demo", "cover.demo"]);
+assert.equal(tree.move({kind:"entity",page:"child",id:"switch.demo"}, {kind:"entity",page:"home",id:"cover.demo"}, "after"), false);
 // Exercise pointer handlers in an HA-style shadow root, rather than only the move model.
-const drop = editor.querySelector(".tree").children[0].children[0];
+const drop = new Element(); drop.dataset = {kind:"page",id:"child"};
 drop.closest = () => drop;
 drop.getBoundingClientRect = () => ({top: 0, height: 40});
 const host = {shadowRoot: {elementFromPoint: () => drop}};
-editor.getRootNode = () => ({elementFromPoint: () => host});
-editor.contains = (node) => node === drop;
+tree.getRootNode = () => ({elementFromPoint: () => host});
+tree.contains = (node) => node === drop;
 document.elementFromPoint = () => { throw new Error("document hit-testing cannot reach the editor"); };
-const grip = editor.handle({kind:"page",id:grandchild.id}, "Move child");
+const grip = tree.handle({kind:"page",id:"grandchild"}, "Move child");
 let prevented = false;
 grip.events.pointerdown({button:0,pointerId:7,preventDefault:()=>{prevented=true},stopPropagation(){}});
 assert(prevented, "pointer-down must prevent native text selection");
-assert(editor.querySelector(".tree").classList.contains("dragging"));
+assert(tree.querySelector(".tree").classList.contains("dragging"));
 grip.events.pointermove({clientX:20,clientY:20});
 assert(drop.classList.contains("drop-inside"));
 grip.events.pointerup({type:"pointerup"});
-assert.equal(editor.config.pages.find((page)=>page.id===grandchild.id).parent,"home");
-assert(!editor.querySelector(".tree").classList.contains("dragging"));
+assert.equal(tree.config.pages.find((page)=>page.id==="grandchild").parent,"child");
+assert(!tree.querySelector(".tree").classList.contains("dragging"));
 assert.equal(grip.pointer, undefined);
 assert.equal(grip.events.pointermove, undefined);
-editor.move({kind:"page",id:grandchild.id},{kind:"page",id:child.id},"inside");
-const cancelled = editor.handle({kind:"page",id:grandchild.id}, "Move child");
-const beforeCancel = JSON.stringify(editor.config);
+const cancelled = tree.handle({kind:"page",id:"grandchild"}, "Move child");
+const beforeCancel = JSON.stringify(tree.config);
 cancelled.events.pointerdown({button:0,pointerId:8,preventDefault(){},stopPropagation(){}});
 cancelled.events.pointermove({clientX:20,clientY:20});
 cancelled.events.pointercancel({type:"pointercancel"});
-assert.equal(JSON.stringify(editor.config),beforeCancel);
-assert(!editor.querySelector(".tree").classList.contains("dragging"));
+assert.equal(JSON.stringify(tree.config),beforeCancel);
+assert(!tree.querySelector(".tree").classList.contains("dragging"));
 assert.equal(window.customCards[0].preview, true);
 assert(Card.styles.includes(".frame"));
-// Removing a page preserves its children by moving them up one level.
-const childRow = editor.querySelector(".tree").children[0].children[1].children.at(-1).children[0];
-childRow.children[1].children.find((node) => node.textContent === "Remove page").events.click();
-assert.equal(editor.config.pages.length, 2);
-assert.equal(editor.config.pages[1].parent, "home");
 
-// The complete four-level definition stays data; only expanded pages mount forms.
-const large = new Editor();
-const pages = [{id:"home",title:"Home",parent:""}];
-const branch = (parent, depth) => {
-  if (depth === 4) return;
-  for (let n = 1; n <= [5,6,5,6][depth]; n++) {
-    const id = `${parent}_${n}`;
-    pages.push({id,title:id,parent}); branch(id, depth + 1);
-  }
-};
-branch("home", 0);
-assert.equal(pages.length, 1086);
-large.setConfig({pages}); large.hass = {states:{}};
-const largeTree = large.querySelector(".tree");
-assert.equal(largeTree.querySelectorAll("ha-form").length, 2);
-assert.equal(largeTree.querySelectorAll("details").length, 6);
-const toggle = (row, open) => { row.open = open; row.events.toggle(); };
-const first = largeTree.querySelectorAll("details")[1];
-toggle(first, true);
-assert.equal(largeTree.querySelectorAll("ha-form").length, 4);
-assert.equal(largeTree.querySelectorAll("details").length, 12);
-const nested = first.querySelectorAll("details")[1];
-toggle(nested, true);
-const titleForm = nested.querySelectorAll("ha-form")[0];
-titleForm.events["value-changed"]({stopPropagation(){},detail:{value:{title:"Edited"}}});
-toggle(first, false);
-assert.equal(largeTree.querySelectorAll("ha-form").length, 2);
-const hiddenHass = titleForm.hass;
-large.hass = {states:{"light.example":{}}};
-assert.equal(titleForm.hass, hiddenHass, "unmounted forms receive no HA updates");
-toggle(first, true);
-assert.equal(largeTree.querySelectorAll("ha-form").length, 6, "descendant expansion survives collapse");
-assert.equal(first.querySelectorAll("ha-form")[2].data.title, "Edited");
-large.renderTree();
-assert.equal(largeTree.querySelectorAll("ha-form").length, 6, "rebuild preserves expansion");
-toggle(largeTree.children[0], false);
-large.renderTree();
-assert.equal(largeTree.querySelectorAll("ha-form").length, 0, "a closed root stays closed");
-assert.equal(large.config.pages.length, 1086, "unmounting never removes configuration");
-
-// The dialog round-trips rich entity settings without disturbing tree ordering.
-large.setEntities('home', ['light.demo']);
-openOptions(large, 'home', 'light.demo');
-const dialog = large.children.at(-1);
-const optionsForm = dialog.children[1].children.find((node)=>node.tag==='ha-form');
-optionsForm.events['value-changed']({stopPropagation(){},detail:{value:{label:'Reading light',icon:'mdi:book-open',style:'CTL-LIGHT-EDITORIAL'}}});
-const detailedAppearance = dialog.children[1].children[2].children[1];
-detailedAppearance.events['value-changed']({stopPropagation(){},detail:{value:{...detailedAppearance.data,'outer-border':false,'border-width':2,'font-size':11,'icon-size':18,raster:'smooth'}}});
-dialog.children[1].children[3].children[2].events['value-changed']({stopPropagation(){},detail:{value:{conditions:[{condition:'state',entity_id:'switch.demo',state:'on'}]}}});
-dialog.children[2].children.find((node)=>node.textContent==='Apply').events.click();
-const editedEntity = large.entities('home')[0];
-assert.equal(editedEntity.entity_id,'light.demo');
-assert.equal(editedEntity.label,'Reading light');
-assert.equal(editedEntity.appearance['outer-border'],false);
-assert.equal(editedEntity.conditions[0].entity_id,'switch.demo');
-assert.equal(editedEntity.style,'CTL-LIGHT-EDITORIAL');
-openOptions(large, 'home');
-const clockDialog = large.children.at(-1);
-const clockForm = clockDialog.children[1].children.find(node=>node.tag==='ha-form');
-clockForm.events['value-changed']({stopPropagation(){},detail:{value:{title:'Time',style:'CHR-WORLDTIMER',clock_timezone:'UTC',clock_world_zones:'UTC, Asia/Tokyo',clock_moon_entity:'sensor.moon',clock_reserve_entity:'sensor.reserve'}}});
-clockDialog.children[2].children.find(node=>node.textContent==='Apply').events.click();
-assert.equal(large.config.pages[0].style,'CHR-WORLDTIMER');
-assert.deepEqual(large.config.pages[0].clock,{timezone:'UTC',world_zones:['UTC','Asia/Tokyo'],moon_entity:'sensor.moon',reserve_entity:'sensor.reserve'});
+// The Options dialog round-trips an entity's settings and a page's sources.
+const optionsSpace = new Workspace(); optionsSpace.setConfig({ pages: [{id:"home",title:"Home",parent:""}] });
+optionsSpace.hass = { states: {}, callWS: async () => ({ styles: {}, themes: {}, frames: {} }) };
+optionsSpace.setEntities("home", ["light.demo"]);
+const dialogParts = (node) => [node, ...(node.children || []).flatMap(dialogParts)];
+const dialogForm = (dialog) => dialogParts(dialog).find((node) => node.tag === "ha-form");
+const applyDialog = (dialog) => dialogParts(dialog).find((node) => node.textContent === "Apply").events.click();
+openOptions(optionsSpace, "home", "light.demo");
+const entityDialog = optionsSpace.children.at(-1);
+dialogForm(entityDialog).events["value-changed"]({stopPropagation(){},detail:{value:{label:"Reading light",icon:"mdi:book-open"}}});
+applyDialog(entityDialog);
+assert.equal(optionsSpace.entities("home")[0].entity_id, "light.demo");
+assert.equal(optionsSpace.entities("home")[0].label, "Reading light");
+assert.equal(optionsSpace.entities("home")[0].icon, "mdi:book-open");
+openOptions(optionsSpace, "home");
+const clockDialog = optionsSpace.children.at(-1);
+dialogForm(clockDialog).events["value-changed"]({stopPropagation(){},detail:{value:{title:"Time",style:"CHR-WORLDTIMER",clock_timezone:"UTC",clock_world_zones:"UTC, Asia/Tokyo",clock_moon_entity:"sensor.moon",clock_reserve_entity:"sensor.reserve"}}});
+applyDialog(clockDialog);
+assert.equal(optionsSpace.config.pages[0].style, "CHR-WORLDTIMER");
+assert.deepEqual(optionsSpace.config.pages[0].clock, {timezone:"UTC",world_zones:["UTC","Asia/Tokyo"],moon_entity:"sensor.moon",reserve_entity:"sensor.reserve"});
 // The panel's Options dialog: every setting a style reads must be reachable, and its own come first.
 const settingGroups = (entity, appearance = {}) => {
   const panel = new Element();
-  panel.panelMode = true;
   panel._hass = { callWS: async () => ({ styles: {}, themes: {}, frames: {} }) };
   panel.config = { pages: [{ id: "home", title: "Home", appearance, entities: [entity] }] };
   panel.entities = () => [entity];
@@ -255,7 +197,6 @@ pictureGroup.chips.find((chip) => chip.textContent === "Picture").click();
 // Snake: its own settings lead, a slider shows only while it has an effect, and its colours stay out of other styles.
 const panelDialog = (page) => {
   const panel = new Element();
-  panel.panelMode = true;
   panel._hass = { callWS: async () => ({ styles: {}, themes: {}, frames: {} }) };
   panel.config = { pages: [page] };
   panel.entities = () => [];
@@ -338,23 +279,29 @@ explorerSpace.selectedPage = explorerPage.id; explorerSpace.renderTree();
 await new Promise((resolve) => setTimeout(resolve, 0));
 const storage = new Map();
 globalThis.localStorage = { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) };
-// A card on a dashboard starts at 100% whatever the panel's preview was last set to, and doesn't change it.
+// A card on a dashboard has its own zoom: it starts at 100% whatever the panel's preview was set to.
 storage.set("ha-dial-preview-zoom", "300");
 const dashboardCard = new Card();
-dashboardCard.setConfig({device:"preview"});
+dashboardCard.setConfig({device:"demo_dial"});
 assert.equal(dashboardCard.zoom, 100);
 const dashboardZoom = dashboardCard.shadowRoot.querySelector(".zoom input");
 dashboardZoom.value = "200"; dashboardZoom.events.input({target:dashboardZoom});
-assert.equal(storage.get("ha-dial-preview-zoom"), "300");
+assert.equal(storage.get("ha-dial-preview-zoom"), "300", "and changing it leaves the panel's alone");
+const secondCard = new Card();
+secondCard.setConfig({device:"demo_dial"});
+assert.equal(secondCard.zoom, 200, "it's remembered for that Dial in this browser");
+assert(!("zoom" in secondCard.config), "the browser's, not the card's configuration");
+const otherDialCard = new Card();
+otherDialCard.setConfig({device:"other_dial"});
+assert.equal(otherDialCard.zoom, 100);
+secondCard.setConfig({device:"other_dial"});
+assert.equal(secondCard.zoom, 100, "changing Dial changes to that Dial's size");
 storage.clear();
 const zoomCard = new Card();
-zoomCard.rememberZoom = true;
-zoomCard.setConfig({device:"preview",zoom:200});
+zoomCard.setDraft({pages:[]});
 const zoomRoot = zoomCard.shadowRoot, zoomStyle = zoomRoot.querySelector("ha-card").style;
-assert.equal(zoomCard.zoom, 100, "a saved card's old zoom value is ignored");
+assert.equal(zoomCard.zoom, 100);
 assert.equal(zoomStyle["--dial-stage-width"], "100%", "at 100% the preview still fits a narrow phone");
-assert(!("zoom" in zoomCard._definition()), "zoom is presentation only");
-assert(!("zoom" in zoomCard.config));
 zoomRoot.querySelector(".zoom input").events.input({target:{value:"400"}});
 assert.equal(zoomStyle["--dial-zoom"], "4");
 assert.equal(zoomStyle["--dial-stage-width"], "1440px", "the rectangle is fixed, so the viewport pans around it");
@@ -362,8 +309,7 @@ assert.equal(zoomCard.style["--dial-preview-width"], "1440px");
 assert.equal(zoomRoot.querySelector(".zoom output").textContent, "400%");
 assert.equal(storage.get("ha-dial-preview-zoom"), "400");
 const sharp = new Card();
-sharp.rememberZoom = true;
-sharp.setConfig({device:"preview"});
+sharp.setDraft({pages:[]});
 assert.equal(sharp.zoom, 400, "the size is remembered per browser");
 assert.equal(sharp.shadowRoot.querySelector(".zoom input").value, "400");
 const canvasEl = sharp.shadowRoot.querySelector("canvas");
@@ -373,7 +319,7 @@ assert.equal(canvasEl.style.imageRendering, "pixelated", "enlarged Dial pixels s
 canvasEl.getBoundingClientRect = () => ({width:190});
 sharp.applyZoom(100);
 assert.equal(canvasEl.style.imageRendering, "auto", "scaling down must not drop pixels raggedly");
-for (const bad of ["999","abc","99"]) { storage.set("ha-dial-preview-zoom", bad); const card = new Card(); card.setConfig({device:"preview"}); assert.equal(card.zoom, 100, bad); }
+for (const bad of ["999","abc","99"]) { storage.set("ha-dial-preview-zoom", bad); const card = new Card(); card.setDraft({pages:[]}); assert.equal(card.zoom, 100, bad); }
 // A card set to a real Dial shows that Dial's saved pages and can never replace them.
 const linkedCalls = [];
 const linkedHass = { connection: { subscribeMessage: async () => () => {} }, callWS: async (message) => {
@@ -390,15 +336,49 @@ await settled();
 assert.deepEqual(linkedCalls.map((call) => call.type), ["ha_dial/view"], "showing a real Dial reads it");
 assert.equal(linkedCalls[0].device, "demo_dial");
 assert(!linkedCalls.some((call) => call.type === "ha_dial/configure"), "a card must never send pages for a real Dial");
+assert.deepEqual(linkedCard.config, { device: "demo_dial" }, "and it doesn't even keep them");
 linkedCard.hass = linkedHass;
 await settled();
 assert.equal(linkedCalls.length, 1, "HA's frequent state updates don't reload it");
+
+// Being added or edited on a dashboard, it shows the Dial's saved pages without being able to operate anything.
+linkedCalls.length = 0;
+const editingCard = new Card();
+editingCard.isConnected = true;
+editingCard.parentNode = { tagName: "HUI-DIALOG-EDIT-CARD" };
+editingCard.setConfig({ device: "demo_dial", pages: [{ id: "home", title: "Stale copy", parent: "" }] });
+editingCard.hass = linkedHass;
+await settled();
+const editingConfigure = linkedCalls.find((call) => call.type === "ha_dial/configure");
+assert(editingConfigure.device.startsWith("preview_"));
+assert.equal(editingConfigure.definition.pages[0].title, "Saved");
+
+// With no Dial chosen, or an old Preview card, it asks and calls nothing.
+linkedCalls.length = 0;
+for (const config of [{}, { device: "preview", pages: [{ id: "home", title: "Stale" }] }]) {
+  const unpaired = new Card();
+  unpaired.isConnected = true;
+  unpaired.setConfig(config);
+  unpaired.hass = linkedHass;
+  await settled();
+  assert.equal(unpaired.shadowRoot.querySelector("[role=alert]").textContent, "Choose a Dial in this card's settings.");
+}
+assert.equal(linkedCalls.length, 0);
+
+// A Dial with nothing saved says so when previewed.
+const emptyCard = new Card();
+emptyCard.isConnected = true;
+emptyCard.parentNode = { tagName: "HUI-DIALOG-CREATE-CARD" };
+emptyCard.setConfig({ device: "new_dial" });
+emptyCard.hass = linkedHass;
+await settled();
+assert(emptyCard.shadowRoot.querySelector("[role=alert]").textContent.includes("no saved pages"));
 
 // Only the panel's preview goes live: off by default, with the warning, and sent with each input.
 const liveCalls = [];
 const liveCard = new Card();
 liveCard.isConnected = true;
-liveCard.setConfig({ device: "preview" });
+liveCard.setDraft({ pages: [] });
 liveCard.hass = { connection: { subscribeMessage: async () => () => {} }, callWS: async (message) => { liveCalls.push(message); return { revision: liveCalls.length, deployment: "preview", scene: { regions: [], elements: [] }, frames: {} }; } };
 await settled();
 const liveBanner = liveCard.shadowRoot.querySelector(".live-banner");
@@ -420,12 +400,13 @@ assert(fs.readFileSync("custom_components/ha_dial/www/ha-dial-card.js", "utf8").
 
 globalThis.localStorage = { get getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); } };
 const blocked = new Card();
-blocked.setConfig({device:"preview"});
+blocked.setDraft({pages:[]});
 assert.equal(blocked.zoom, 100, "blocked storage still gives a working preview");
 blocked.shadowRoot.querySelector(".zoom input").events.input({target:{value:"150"}});
 assert.equal(blocked.zoom, 150);
 delete globalThis.localStorage;
 const card = new Card(); card.setConfig({ device: "demo_dial" });
+assert.equal(card._device(), "demo_dial");
 assert(!card.shadowRoot.innerHTML.includes('class="controls"'));
 assert(card.shadowRoot.innerHTML.includes('class="click-chip"'));
 assert(card.shadowRoot.innerHTML.includes('<svg'));
@@ -436,6 +417,8 @@ card.parentNode = { tagName: "HUI-CARD-EDIT-MODE" };
 assert.equal(card._device(), "demo_dial");
 card.parentNode = { tagName: "HUI-DIALOG-CREATE-CARD" };
 assert(card._device().startsWith("preview_"));
+card.parentNode = undefined;
+card.setDraft({ pages: [{ id: "home", title: "Home" }] });
 const calls = [];
 let subscriber, released = 0, revision = 0;
 const result = (label = "Home") => ({ scene: { label }, revision: ++revision, deployment: "preview" });
@@ -459,12 +442,12 @@ assert.deepEqual(calls.slice(1).map((request) => request.action), ["rotate_right
 card.disconnectedCallback();
 assert.equal(released, 1);
 
-const racing = new Card(); racing.setConfig({ device: "preview", pages: [{ id: "home", title: "Old" }] });
+const racing = new Card(); racing.setDraft({ pages: [{ id: "home", title: "Old" }] });
 racing.isConnected = true;
 const pending = [];
 racing.hass = { callWS: (request) => new Promise((resolve) => pending.push({ request, resolve })),
   connection: { subscribeMessage: async () => () => {} } };
-racing.setConfig({ device: "preview", pages: [{ id: "home", title: "New" }] });
+racing.setDraft({ pages: [{ id: "home", title: "New" }] });
 pending[0].resolve(result("Old"));
 while (pending.length < 2) await tick();
 assert.equal(pending[1].request.definition.pages[0].title, "New");

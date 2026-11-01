@@ -278,9 +278,7 @@ tools/serve
 On the first deployment, restart Home Assistant manually, then follow [Getting started](#getting-started). Add **HA Dial Server** once for all Dials; each **HA Dial** dashboard card configures one Dial. Later integration updates raise a restart Repair. The optional advanced template field supports reusable Jinja macros. This example builds Home → Ground floor → Office → a light:
 
 ```yaml
-type: custom:ha-dial-card
-device: ha_dial
-theme: ember
+# In the panel: Dial settings, Advanced, Page template.
 template: |
   {% set ns = namespace(lights=[]) %}
   {% macro light(entity, label) -%}

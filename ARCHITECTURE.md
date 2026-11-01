@@ -359,3 +359,11 @@ A page in a hand-built tree can carry `explorer` options, and `build_definition`
 ordinary tree nodes with stable ids, so the Navigator, visibility filter and scene code treat them like any
 other. The 8-item limit is a property of a style, in `PAGED_STYLES`, not of the tree. Registry events rebuild
 the definition after a one-second settle, and `Navigator.restore` returns to the nearest surviving page.
+
+## Cards and the panel
+
+The panel is the only editor. A dashboard card's configuration is one Dial: it shows that Dial's saved pages
+through `ha_dial/view`, shares its Navigator, and operates it with `ha_dial/input`. While being added or edited
+on a dashboard it shows them on an isolated preview device. The panel's preview is the same element, given a
+draft through `setDraft`. `ha_dial/configure` refuses a real Dial without `save: true`, which only the panel
+sends. Where this file's earlier sections say a card stores or sends a definition, this section replaces them.

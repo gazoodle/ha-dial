@@ -22,9 +22,9 @@ Appearance dialogs keep a stable position between tabs and show a live HA-render
 the controls on wide screens. Why: on 2026-10-30 the owner found the moving dialog distracting and
 wants to see the effect of the growing set of options while editing.
 
-A dashboard card only views and operates a Dial; it can't edit one, and HA refuses a save that doesn't come
-from the panel. Why: on 2026-11-01 a card's stale pages replaced a Dial's saved tree on loading. The card's
-own editor is still to be reduced to match, by the owner's choice.
+A dashboard card only views and operates a Dial. Its one setting is which Dial, it holds no pages, and HA
+refuses a save that doesn't come from the panel. Why: on 2026-11-01 a card's stale pages replaced a Dial's
+saved tree on loading, and the owner ruled that cards can't be editors too.
 
 The panel's Operate live house switch is off whenever the panel opens, and when on the preview says
 "Warning: changes made here are live". It's sent with each input, so nothing in HA can stay switched on.

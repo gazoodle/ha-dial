@@ -1,18 +1,18 @@
 import { renderScene } from "./scene.js";
 
-import { defaultConfig } from "./editor.js";
+import { dialNames } from "./editor.js";
 
 const ZOOM_KEY = "ha-dial-preview-zoom";
 const ZOOM_MIN = 100, ZOOM_MAX = 400, ZOOM_STEP = 25;
 // One Dial pixel per CSS pixel is the point where hard edges start being honest rather than ragged.
 const SCREEN_PIXELS = 240;
 
-// Per browser, because a phone and a Mac want different sizes, and only for the panel's preview: a card
-// on a dashboard starts at 100%. Storage can be blocked or empty, and the preview must still work, so
+// Per browser, because a phone and a Mac want different sizes, and kept apart for the panel's preview and
+// for each Dial's cards, so a size chosen in one never turns up in another. Storage can be blocked or empty, and the preview must still work, so
 // this only ever falls back to 100%.
-function storedZoom() {
+function storedZoom(key) {
   try {
-    const value = Number(localStorage.getItem(ZOOM_KEY));
+    const value = Number(localStorage.getItem(key));
     return value >= ZOOM_MIN && value <= ZOOM_MAX ? Math.round(value / ZOOM_STEP) * ZOOM_STEP : ZOOM_MIN;
   } catch { return ZOOM_MIN; }
 }
@@ -35,13 +35,32 @@ class HaDialCard extends HTMLElement {
     this.configVersion++;
   }
 
+  // A dashboard card views and operates one Dial, so that's all its configuration holds. Anything else an
+  // older card has saved, including its own pages, is dropped here.
   setConfig(config) {
-    const device = String(config.device || "preview").replaceAll("-", "_");
-    if (!/^[a-z0-9_]{1,64}$/.test(device)) throw new Error("Invalid HA Dial device name");
-    const { zoom: _retired, ...rest } = config;
-    const next = { ...rest, device };
+    const device = String(config?.device || "").replaceAll("-", "_");
+    if (device && !/^[a-z0-9_]{1,64}$/.test(device)) throw new Error("Invalid HA Dial device name");
+    const next = { device: device === "preview" ? "" : device };
     if (JSON.stringify(next) !== JSON.stringify(this.config)) this.configVersion++;
     this.config = next;
+    this._build();
+    this.applyZoom(storedZoom(this._zoomKey()));
+    this.load();
+  }
+
+  _zoomKey() { return this.draftDefinition ? ZOOM_KEY : `${ZOOM_KEY}-${this.config.device}`; }
+
+  // The panel's preview, showing a draft on a device of its own. Nothing else calls this.
+  setDraft(definition) {
+    if (JSON.stringify(definition) !== JSON.stringify(this.draftDefinition)) this.configVersion++;
+    this.draftDefinition = definition;
+    this.config = { device: "" };
+    this._build();
+    this.applyZoom(storedZoom(this._zoomKey()));
+    this.load();
+  }
+
+  _build() {
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
       this.shadowRoot.innerHTML = `<style>${HaDialCard.styles}</style><ha-card><p class="live-banner" role="alert" hidden>Warning: changes made here are live</p><label class="zoom"><span>Zoom</span><input type="range" min="${ZOOM_MIN}" max="${ZOOM_MAX}" step="${ZOOM_STEP}" aria-label="Preview zoom"><output></output></label><div class="viewport"><div class="stage"><div class="dial"><img class="frame" src="/ha_dial/dial-frame.png" alt="" draggable="false"><canvas width="240" height="240" tabindex="0" aria-label="HA Dial preview"></canvas><button class="click-chip" data-action="press" aria-label="Click dial"><span>CLICK</span></button></div><button class="spin left" data-action="rotate_left" aria-label="Rotate left"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="sweep" d="M75 79A37 37 0 1 1 86 42"/><path class="head" d="M74 39L96 39L85 59Z"/></svg></button><button class="spin right" data-action="rotate_right" aria-label="Rotate right"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="sweep" d="M75 79A37 37 0 1 1 86 42"/><path class="head" d="M74 39L96 39L85 59Z"/></svg></button><p role="alert" hidden></p></div></div></ha-card>`;
@@ -51,9 +70,8 @@ class HaDialCard extends HTMLElement {
       });
       this.shadowRoot.querySelector(".zoom input").addEventListener("input", (event) => {
         this.applyZoom(Number(event.target.value));
-        if (this.rememberZoom) try { localStorage.setItem(ZOOM_KEY, String(this.zoom)); } catch { /* Remembering is a convenience. */ }
+        try { localStorage.setItem(this._zoomKey(), String(this.zoom)); } catch { /* Remembering is a convenience. */ }
       });
-      this.applyZoom(this.rememberZoom ? storedZoom() : ZOOM_MIN);
       const canvas = this.shadowRoot.querySelector("canvas");
       canvas.addEventListener("click", (event) => this.touch(event));
       canvas.addEventListener("keydown", (event) => {
@@ -61,7 +79,6 @@ class HaDialCard extends HTMLElement {
         if (action) { event.preventDefault(); this.input(action); }
       });
     }
-    this.load();
   }
 
   // Enlarges the whole rectangle. The viewport scrolls, so a phone pans around what no longer fits.
@@ -83,20 +100,20 @@ class HaDialCard extends HTMLElement {
   set hass(hass) { this._hass = hass; this.load(); }
 
   _device() {
+    if (this.draftDefinition) return this.draftDevice;
+    // Being added or edited on a dashboard: show the Dial on a device of its own, so trying it is safe.
     for (let node = this; node; node = node.parentNode || node.getRootNode?.().host) {
       if (["HUI-DIALOG-EDIT-CARD", "HUI-DIALOG-CREATE-CARD"].includes(node.tagName) ||
           (["HUI-CARD", "HUI-SECTION"].includes(node.tagName) && (node.preview || node.hasAttribute?.("preview"))))
         return this.draftDevice;
     }
-    return this.config.device === "preview" ? this.draftDevice : this.config.device;
+    return this.config.device;
   }
 
-  _definition() {
-    return {
-      template: this.config.template || "", theme: this.config.theme || "ember",
-      ...(this._device() !== this.config.device && this.config.device !== "preview" ? {preview_of:this.config.device} : {}),
-      pages: this.config.pages || HaDialCard.getStubConfig().pages,
-    };
+  async _savedPages() {
+    const saved = (await this._hass.callWS({ type: "ha_dial/definitions" }))[this.config.device];
+    if (!saved) throw new Error("This Dial has no saved pages yet. Add them in the HA Dial panel.");
+    return { ...saved, preview_of: this.config.device };
   }
 
   // Set by the panel only. It travels with each input, so nothing in HA can stay switched on.
@@ -127,13 +144,17 @@ class HaDialCard extends HTMLElement {
     try {
       do {
         this.needsLoad = false;
+        if (!this.draftDefinition && !this.config.device) {
+          this.error = "Choose a Dial in this card's settings.";
+          this.render();
+          continue;
+        }
         const device = this._device(), version = this.configVersion, real = !device.startsWith("preview_");
-        // A real Dial shows its saved pages, and a card never sends its own.
-        const key = real ? `${device}:saved` : `${device}:${JSON.stringify(this._definition())}`;
+        const key = this.draftDefinition ? `${device}:${JSON.stringify(this.draftDefinition)}` : `${device}:${this.config.device}`;
         if (key === this.attemptedKey) continue;
         this.attemptedKey = key;
         try {
-          const definition = real ? undefined : this._definition();
+          const definition = real ? undefined : this.draftDefinition || await this._savedPages();
           const result = real
             ? await this._hass.callWS({ type: "ha_dial/view", device })
             : await this._hass.callWS({ type: "ha_dial/configure", device, definition });
@@ -198,8 +219,9 @@ class HaDialCard extends HTMLElement {
 
   getCardSize() { return 5; }
   static getConfigElement() { return document.createElement("ha-dial-card-editor"); }
-  static getStubConfig() {
-    return defaultConfig();
+  static getStubConfig(hass) {
+    const [device] = dialNames(hass);
+    return device ? { device } : {};
   }
 
   static styles = `
@@ -237,4 +259,4 @@ class HaDialCard extends HTMLElement {
 
 customElements.define("ha-dial-card", HaDialCard);
 window.customCards = window.customCards || [];
-window.customCards.push({ type: "ha-dial-card", name: "HA Dial", description: "Configure themed Dial navigation and controls", preview: true });
+window.customCards.push({ type: "ha-dial-card", name: "HA Dial", description: "Shows a Dial and operates it", preview: true });

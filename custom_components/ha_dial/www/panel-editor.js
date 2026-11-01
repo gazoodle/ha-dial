@@ -1,11 +1,12 @@
 import { confirmDialog, openOptions } from './editor/options.js';
 import { CONTROL_STYLES, DOMAINS, PAGED_STYLES, SETTINGS } from './editor/catalogue.js';
 import { conditionsEditor } from './editor/conditions.js';
+import { PagesEditor } from './editor.js';
 
 const LEFT_OUT = {hidden:'hidden in HA',disabled:'disabled',diagnostic:'diagnostic or configuration',unsupported:'not supported on the Dial',excluded:'excluded by you',not_exposed:'not exposed to Assist',security:'security items left out',out_of_scope:'outside this floor or area'};
 const styleName = (style) => style.replace(/^(NAV|CAM)-/,'').toLowerCase();
 
-class HaDialPanelEditor extends customElements.get('ha-dial-card-editor') {
+class HaDialPanelEditor extends PagesEditor {
   disconnectedCallback() { this.conditionEditor?.destroy(); }
   render() {
     if (!this.config || !this._hass) return;

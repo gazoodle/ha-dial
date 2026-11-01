@@ -1,5 +1,10 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b24
+
+- A dashboard card's only setting is now which Dial it shows. Its pages, theme, template and Preview options are gone, and saving a card clears any it still held. All editing is in the panel.
+- A dashboard card keeps its zoom slider, starts at 100%, and remembers its size per Dial in that browser, separately from the panel's preview. A new card starts on your first Dial.
+
 ## 2026.10.1-b23
 
 - A dashboard card can no longer replace a Dial's saved pages. A card set to a real Dial used to send its own copy of the pages whenever it loaded, which overwrote the Dial's tree. It now shows the pages saved on that Dial, and HA refuses a save that doesn't come from the panel.

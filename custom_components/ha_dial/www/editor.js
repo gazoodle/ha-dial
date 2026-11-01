@@ -1,14 +1,9 @@
-import { openOptions } from './editor/options.js';
-import { DOMAINS } from './editor/catalogue.js';
-
 export function defaultConfig() {
-  return { device: "preview", theme: "ember", pages: [{ id: "home", title: "Home", parent: "", lights: [] }], template: "" };
+  return { theme: "ember", pages: [{ id: "home", title: "Home", parent: "", lights: [] }], template: "" };
 }
 
-const THEMES = ["ember", "verdant", "cobalt", "rose", "acid", "alloy"];
-const THEME_SELECTOR = { select: { options: THEMES } };
-
-class HaDialEditor extends HTMLElement {
+// What the panel's editor builds on: a page tree in memory, and moving things around in it.
+export class PagesEditor extends HTMLElement {
   setConfig(config) {
     this.config = { ...defaultConfig(), ...config };
     this.render();
@@ -21,70 +16,6 @@ class HaDialEditor extends HTMLElement {
     this.dispatchEvent(new CustomEvent("config-changed", {
       detail: { config }, bubbles: true, composed: true,
     }));
-  }
-
-  addPage(parent) {
-    const id = "page_" + Array.from(crypto.getRandomValues(new Uint32Array(2))).join("_");
-    this.changed({ ...this.config, pages: [...this.config.pages, { id, title: "New page", parent, entities: [] }] });
-    this.renderTree(parent);
-  }
-
-  render() {
-    if (!this.config || !this._hass) return;
-    if (!this.initialised) {
-      this.initialised = true;
-      this.innerHTML = `<style>
-        .options-dialog{color:var(--primary-text-color);background:var(--card-background-color,#1c1c1c);border:1px solid var(--divider-color);border-radius:18px;max-width:600px;width:calc(100vw - 24px);max-height:calc(100dvh - 40px);padding:0;box-sizing:border-box;overflow:hidden}
-        .options-dialog[open]{display:flex;flex-direction:column}.options-head{padding:16px 18px 6px}.options-head h3{margin:0}.options-body{min-height:0;overflow:auto;padding:10px 18px 6px}.options-foot{flex:none;display:flex;justify-content:flex-end;gap:8px;padding:14px 18px 16px;border-top:1px solid var(--divider-color)}
-        .options-dialog::backdrop{background:#0009}.options-dialog textarea{box-sizing:border-box;width:100%;font:inherit;color:inherit;background:var(--secondary-background-color);padding:12px}.options-dialog [role=alert]{color:var(--error-color);overflow-wrap:anywhere}
-        details{margin:12px 0}summary{cursor:pointer;padding:10px 0}
-        .children{padding-left:16px;border-left:2px solid var(--divider-color,#8884)}
-        button{font:inherit;padding:8px 12px;margin:8px 8px 8px 0;cursor:pointer;color:var(--primary-text-color);background:var(--secondary-background-color);border:1px solid var(--divider-color);border-radius:8px}
-        .hint{color:var(--secondary-text-color);line-height:1.4}
-        .grab{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;border:0;background:transparent;padding:8px;margin:0;min-width:44px;min-height:44px}
-        .tree.dragging,.tree.dragging *{user-select:none;-webkit-user-select:none;cursor:grabbing}
-        .entity{display:flex;align-items:center;gap:8px}.entity span{flex:1;overflow-wrap:anywhere}
-        .drop-before{box-shadow:0 -3px var(--primary-color)}.drop-after{box-shadow:0 3px var(--primary-color)}
-        .drop-inside{outline:2px solid var(--primary-color);border-radius:8px}
-        .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
-        button:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
-      </style><ha-form class="settings"></ha-form><p class="hint">Add subpages to build your tree. Add controls or read-only entities on any page. Open Appearance & conditions or Edit for detailed options. Changes stay local until you save.</p><p class="hint">Drag a page above/below another to reorder, or onto its title to nest it. On a handle, arrow keys move; Left/Right change nesting.</p><p class="sr-only" role="status"></p><div class="tree"></div><details><summary>Advanced Jinja template</summary><ha-form class="advanced"></ha-form></details>`;
-      this.querySelector(".settings").addEventListener("value-changed", (event) => {
-        event.stopPropagation(); this.changed({ ...this.config, ...event.detail.value });
-      });
-      this.querySelector(".advanced").addEventListener("value-changed", (event) => {
-        event.stopPropagation(); this.changed({ ...this.config, ...event.detail.value });
-      });
-    }
-    const settings = this.querySelector(".settings"), advanced = this.querySelector(".advanced");
-    for (const form of [settings, advanced]) {
-      form.hass = this._hass; form.data = this.config;
-      form.computeLabel = (field) => ({ device: "Dial device", theme: "Default page theme", template: "Template" })[field.name] || field.name;
-      form.computeHelper = (field) => ({ device: "Choose an installed Dial, or Preview for local simulation. Add new Dials through the ESPHome integration.", template: "Return a tree object or JSON. Jinja macros and HA custom_templates are supported; pages and theme are available as variables." })[field.name];
-    }
-    const services = this._hass.services?.esphome;
-    if (!this.settingsSchema || services !== this.deviceServices || this.config.device !== this.deviceSelection) {
-      const suffix = "_ha_dial_show_view";
-      const selected = this.config.device.replaceAll("-", "_");
-      const devices = Object.keys(services || {}).filter((name) => name.endsWith(suffix))
-        .map((name) => name.slice(0, -suffix.length)).filter((device) => /^[a-z0-9_]{1,64}$/.test(device) && device !== "preview" && !device.startsWith("preview_")).sort();
-      const options = [{ value: "preview", label: "Preview" }, ...devices.map((device) => ({
-        value: device === selected ? this.config.device : device, label: device.replaceAll("_", "-"),
-      }))];
-      if (selected !== "preview" && !devices.includes(selected))
-        options.push({ value: this.config.device, label: `${this.config.device} (unavailable)` });
-      this.settingsSchema = [
-        { name: "device", selector: { select: { mode: "dropdown", options } } },
-        { name: "theme", selector: THEME_SELECTOR },
-      ];
-      this.deviceServices = services;
-      this.deviceSelection = this.config.device;
-    }
-    settings.schema = this.panelMode ? this.settingsSchema.filter((field) => field.name === "theme") : this.settingsSchema;
-    advanced.schema = [{ name: "template", selector: { template: {} } }];
-    const key = this.config.pages === this.treePages ? this.treeKey : JSON.stringify(this.config.pages);
-    if (key !== this.treeKey) this.renderTree();
-    else for (const form of this.querySelectorAll(".tree ha-form")) form.hass = this._hass;
   }
 
   entities(pageId) {
@@ -181,124 +112,50 @@ class HaDialEditor extends HTMLElement {
     });
     return handle;
   }
+}
 
-  renderTree(openPage) {
-    const tree = this.querySelector(".tree");
-    const pages = this.config.pages;
-    const byId = new Map(pages.map((page) => [page.id, page]));
-    const childrenByParent = new Map();
-    for (const page of pages) {
-      if (!childrenByParent.has(page.parent)) childrenByParent.set(page.parent, []);
-      childrenByParent.get(page.parent).push(page);
-    }
-    this.openPages ||= new Set(pages.filter((page) => !page.parent).map((page) => page.id));
-    for (const node of tree.querySelectorAll("details")) {
-      if (node.open) this.openPages.add(node.dataset.id);
-      else this.openPages.delete(node.dataset.id);
-    }
-    if (openPage) this.openPages.add(openPage);
-    for (const id of this.openPages) if (!byId.has(id)) this.openPages.delete(id);
-    tree.replaceChildren();
-    const button = (label, callback) => {
-      const node = document.createElement("button"); node.type = "button";
-      node.textContent = label; node.addEventListener("click", callback); return node;
-    };
-    const rendered = new Set();
-    const row = (page, container) => {
-      page = byId.get(page.id);
-      if (rendered.has(page.id)) return;
-      rendered.add(page.id);
-      const details = document.createElement("details"), summary = document.createElement("summary");
-      details.dataset.id = page.id; details.open = this.openPages.has(page.id);
-      summary.textContent = page.title || "Untitled page";
-      summary.dataset.kind = "page"; summary.dataset.id = page.id;
-      if (page.parent) summary.append(this.handle({ kind: "page", id: page.id }, "Move " + page.title));
-      details.append(summary);
-      const body = document.createElement("div");
-      const populate = () => {
-        const form = document.createElement("ha-form");
-        form.hass = this._hass; form.data = { ...page, entities: [...(page.lights || []), ...(page.entities || [])] };
-        form.schema = [
-          { name: "title", required: true, selector: { text: {} } },
-        ];
-        form.computeLabel = (field) => ({ title: "Page title", parent: "Parent page", theme: "Page theme", entities: "Controls" })[field.name];
-        form.computeHelper = (field) => field.name === "theme" ? "Leave empty to use the default theme." : undefined;
-        form.addEventListener("value-changed", (event) => {
-          event.stopPropagation();
-          const updated = { ...page, ...event.detail.value }; delete updated.lights;
-          if (!updated.theme) delete updated.theme;
-          this.changed({ ...this.config, pages: this.config.pages.map((item) => item.id === page.id ? updated : item) });
-          page = updated;
-          byId.set(page.id, updated);
-          summary.firstChild.textContent = updated.title || "Untitled page";
-          this.treeKey = JSON.stringify(this.config.pages);
-          this.treePages = this.config.pages;
-        });
-        const controls = document.createElement("div");
-        for (const entry of [...(page.lights || []), ...(page.entities || [])]) {
-          const entity = typeof entry === "string" ? entry : entry.entity_id;
-          const control = document.createElement("div"); control.className = "entity";
-          control.dataset.kind = "entity"; control.dataset.page = page.id; control.dataset.id = entity;
-          const label = document.createElement("span"); label.textContent = entry.label || this._hass.states?.[entity]?.attributes.friendly_name || entity;
-          control.append(this.handle({ kind: "entity", page: page.id, id: entity }, "Move " + label.textContent), label,
-            button("Edit", () => openOptions(this, page.id, entity)),
-            button("Remove", () => this.setEntities(page.id, this.entities(page.id).filter((item) => (typeof item === "string" ? item : item.entity_id) !== entity))));
-          controls.append(control);
-        }
-        const add = document.createElement("ha-form");
-        add.hass = this._hass; add.data = {};
-        add.schema = [{ name: "entity", selector: { entity: { filter: { domain: DOMAINS } } } }];
-        add.computeLabel = () => "Add control";
-        add.addEventListener("value-changed", (event) => {
-          event.stopPropagation();
-          const entity = event.detail.value.entity;
-          if (entity && !this.entities(page.id).some((item) => (typeof item === "string" ? item : item.entity_id) === entity)) this.setEntities(page.id, [...this.entities(page.id), entity]);
-        });
-        body.append(form, button("Appearance & conditions", () => openOptions(this, page.id)), controls, add, button("Add subpage", () => { details.open = true; this.addPage(page.id); }));
-        if (page.parent) body.append(button("Remove page", () => {
-          const currentPages = this.config.pages;
-          const children = currentPages.filter((candidate) => candidate.parent === page.id);
-          this.changed({ ...this.config, pages: currentPages.filter((candidate) => candidate.id !== page.id).map((candidate) => children.includes(candidate) ? { ...candidate, parent: page.parent } : candidate) });
-          this.renderTree();
-        }));
-        const children = document.createElement("div"); children.className = "children";
-        for (const child of childrenByParent.get(page.id) || []) row(child, children);
-        body.append(children);
-        details.append(body);
-      };
-      details.addEventListener("toggle", () => {
-        if (!tree.contains(details)) return;
-        if (details.open) {
-          this.openPages.add(page.id);
-          if (!body.children.length) populate();
-        } else {
-          this.openPages.delete(page.id);
-          for (const nested of body.querySelectorAll("details")) rendered.delete(nested.dataset.id);
-          body.replaceChildren();
-          body.remove();
-        }
+// A dashboard card views and operates a Dial, so the only thing to choose is which one. Saving this
+// also clears anything an older card still holds, such as its own copy of the pages.
+class HaDialCardEditor extends HTMLElement {
+  setConfig(config) {
+    this.config = config;
+    this.render();
+  }
+
+  set hass(hass) { this._hass = hass; this.render(); }
+
+  render() {
+    if (!this.config || !this._hass) return;
+    if (!this.initialised) {
+      this.initialised = true;
+      this.innerHTML = `<ha-form class="settings"></ha-form><p class="hint">Pages are edited in the HA Dial panel. Operating this card operates the real Dial.</p>`;
+      const form = this.querySelector(".settings");
+      form.computeLabel = () => "Dial";
+      form.addEventListener("value-changed", (event) => {
+        event.stopPropagation();
+        const config = { ...(this.config.type ? { type: this.config.type } : {}), device: event.detail.value.device };
+        this.config = config;
+        this.dispatchEvent(new CustomEvent("config-changed", { detail: { config }, bubbles: true, composed: true }));
       });
-      container.append(details);
-      if (details.open) populate();
-    };
-    if (!pages.length) tree.append(button("Add Home page", () => {
-      this.changed({ ...this.config, pages: defaultConfig().pages });
-      this.renderTree();
-    }));
-    // Find disconnected roots without mounting descendants of collapsed pages.
-    const reachable = new Set();
-    const roots = [];
-    const visit = (page) => {
-      if (reachable.has(page.id)) return;
-      reachable.add(page.id);
-      for (const child of childrenByParent.get(page.id) || []) visit(child);
-    };
-    for (const page of pages) if (!page.parent || !byId.has(page.parent)) { roots.push(page); visit(page); }
-    for (const page of pages) if (!reachable.has(page.id)) { roots.push(page); visit(page); }
-    for (const page of roots) row(page, tree);
-    this.treeKey = JSON.stringify(pages);
-    this.treePages = pages;
+    }
+    const form = this.querySelector(".settings"), services = this._hass.services?.esphome, device = this.config.device === "preview" ? "" : this.config.device || "";
+    form.hass = this._hass; form.data = { device };
+    if (!form.schema || services !== this.deviceServices || device !== this.deviceSelection) {
+      const selected = device.replaceAll("-", "_");
+      const devices = dialNames(this._hass);
+      const options = devices.map((name) => ({ value: name === selected ? device : name, label: name.replaceAll("_", "-") }));
+      if (selected && !devices.includes(selected)) options.push({ value: device, label: `${device} (unavailable)` });
+      form.schema = [{ name: "device", required: true, selector: { select: { mode: "dropdown", options } } }];
+      this.deviceServices = services;
+      this.deviceSelection = device;
+    }
   }
 }
 
-customElements.define("ha-dial-card-editor", HaDialEditor);
+export function dialNames(hass) {
+  const suffix = "_ha_dial_show_view";
+  return Object.keys(hass?.services?.esphome || {}).filter((name) => name.endsWith(suffix))
+    .map((name) => name.slice(0, -suffix.length)).filter((name) => /^[a-z0-9_]{1,64}$/.test(name) && name !== "preview" && !name.startsWith("preview_")).sort();
+}
+
+customElements.define("ha-dial-card-editor", HaDialCardEditor);

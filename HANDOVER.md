@@ -29,6 +29,8 @@ inspected contact sheets. The owner reviews sheets by phone; an approved sheet c
 - b23 makes dashboard cards view-and-operate only and adds panel drafts and Operate live house. Two dashboards hold cards
   with stale pages for one Dial: b23 ignores them, but a browser must reload to stop running older card code, and that
   older code is refused by HA. Live operation has only run against fakes.
+- b24 reduces the dashboard card's editor to choosing a Dial and removes the card's Preview mode; committed, not
+  deployed. The card editor and live switch have only run against test stand-ins, so check them in a real browser.
 - b21 adds Explorer (`explorer.py`) and b20 the cover safety fixes. Explorer has only
   run against stand-in registries shaped from HA's source, with its HA calls type-checked. First real checks: a live home,
   rebuilds as the registries change and after an HA restart, and the panel's Explorer settings. The cover control's

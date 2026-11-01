@@ -117,7 +117,7 @@ class HaDialPanel extends HTMLElement {
     if (kept) { this.draft = {...this.draft,...kept,device}; this.dirty = JSON.stringify(this.definition()) !== this.saved; }
     const editor = this.querySelector('ha-dial-panel-editor');
     editor.selectedPage = editor.selectedEntity = editor.expanded = editor.treePages = undefined;
-    editor.panelMode = true; editor.setConfig(this.draft); editor.hass = this._hass;
+    editor.setConfig(this.draft); editor.hass = this._hass;
     this.querySelector('.error').hidden = true;
     this.updateState(); this.preview();
     if (kept && this.dirty) this.querySelector('.state').textContent = 'Unsaved changes restored';
@@ -153,8 +153,7 @@ class HaDialPanel extends HTMLElement {
   definition() { return {template:this.draft.template || '', theme:this.draft.theme || 'ember', pages:this.draft.pages}; }
   preview() {
     const card = this.querySelector('ha-dial-card');
-    card.rememberZoom = true;
-    card.setConfig({...this.draft, device:'preview'}); card.hass = this._hass;
+    card.setDraft(this.definition()); card.hass = this._hass;
   }
   updateButtons() {
     const busy = this.saving || this.resetting;

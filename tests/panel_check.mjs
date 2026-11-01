@@ -13,7 +13,7 @@ vm.runInThisContext(fs.readFileSync('custom_components/ha_dial/www/panel.js', 'u
 const panel = new Panel();
 const nodes = Object.fromEntries(['select','.error','.save','.discard','.reset','.live','.preview-note','.state','ha-dial-panel-editor','ha-dial-card'].map(key => [key, {}]));
 nodes['ha-dial-panel-editor'].setConfig = function(config) { this.config = config; };
-nodes['ha-dial-card'].setConfig = function(config) { this.config = config; };
+nodes['ha-dial-card'].setDraft = function(draft) { this.draft = draft; };
 panel.querySelector = key => nodes[key];
 panel.querySelectorAll = () => [];
 panel.definitions = {first:{theme:'ember', pages:[{id:'one'}]}, second:{theme:'cobalt', pages:[{id:'two'}]}};
@@ -21,7 +21,7 @@ const calls = [];
 panel._hass = {callWS: async message => { calls.push(message); return {deployment:'waiting'}; }};
 panel.selectDevice('first', true);
 assert.equal(panel.draft.pages[0].id, 'one');
-assert.equal(nodes['ha-dial-card'].config.device, 'preview');
+assert.equal(nodes['ha-dial-card'].draft.pages[0].id, 'one');
 panel.draft = {...panel.draft, theme:'rose'}; panel.dirty = true;
 panel.selectDevice('second');
 assert.equal(panel.device, 'first', 'switching cannot discard a draft silently');
@@ -75,7 +75,6 @@ assert(!/class="live"[^>]*checked/.test(fs.readFileSync('custom_components/ha_di
 
 // Only the panel saves, and it says so.
 assert(calls.filter(call => call.type === 'ha_dial/configure').every(call => call.save === true), 'the panel must ask to save');
-assert.equal(nodes['ha-dial-card'].rememberZoom, true, 'only the panel preview remembers its zoom');
 
 // Leaving the panel can't lose work: HA changes panels without unloading the page, so nothing warns.
 const store = new Map();
