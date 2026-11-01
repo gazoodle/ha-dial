@@ -369,3 +369,5 @@ through `ha_dial/view`, shares its Navigator, and operates it with `ha_dial/inpu
 on a dashboard it shows them on an isolated preview device. The panel's preview is the same element, given a
 draft through `setDraft`. `ha_dial/configure` refuses a real Dial without `save: true`, which only the panel
 sends. Where this file's earlier sections say a card stores or sends a definition, this section replaces them.
+
+Websocket commands live in `commands/`: `dial.py` for what cards and Dials use, `editor.py` for what only the panel uses.

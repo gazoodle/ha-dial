@@ -1,5 +1,9 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b26
+
+- Internal: the websocket commands moved out of the integration's main file into `commands/`. No change in behaviour.
+
 ## 2026.10.1-b25
 
 - New card setting, Follow the Dial's screen, on by default. Off, the card browses on its own, so using a dashboard doesn't disturb the Dial on the wall. It still operates real devices, and it follows saved changes to the Dial's pages.
