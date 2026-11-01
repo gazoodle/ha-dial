@@ -35,6 +35,8 @@ inspected contact sheets. The owner reviews sheets by phone; an approved sheet c
   panel and card have now run in headless Chromium against a stand-in for HA's websocket (scratch only, not in the suite).
 - b28 adds white and colour on lights. It has only run against stand-in lights, so check a real
   one: mireds rounding, and lights that report neither temperature nor colour until they're on.
+- Integration b29 and firmware b6 add value ownership (`value_owner.h`) and fix colour handling; committed, not deployed. It has
+  only run with a controlled clock and stand-in lights. Judge the feel on the Dial, and tune T1, T2, T3 and the resend limit in YAML.
 - b21 adds Explorer (`explorer.py`) and b20 the cover safety fixes. Explorer has only
   run against stand-in registries shaped from HA's source, with its HA calls type-checked. First real checks: a live home,
   rebuilds as the registries change and after an HA restart, and the panel's Explorer settings. 

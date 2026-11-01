@@ -1,5 +1,12 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b29
+
+- Fix pale colours when turning a light that was in white. Colour now starts at full saturation unless the light is already in colour.
+- A light's rounding no longer stops a colour or white value counting as reached, including around 359° to 0°, and a control shows what was asked for once it's close.
+- Asking for a value a control already holds no longer leaves it pending. The Dial's new firmware relies on this.
+- HA logs a warning when a Dial gives up on a value.
+
 ## 2026.10.1-b28
 
 - Lights that support them now offer tunable white and colour. A button on the control moves turning between brightness, white and colour, offering only what the light can do. The ring shows the real range in colour, in every light style. No firmware change is needed.

@@ -17,7 +17,7 @@ namespace esphome::ha_dial {
 static const char *const TAG = "ha_dial";
 static const Color ORANGE(244, 111, 34);
 static const Color ITEM(42, 45, 50);
-static constexpr uint32_t VALUE_DEBOUNCE_MS = 150;
+static constexpr uint32_t VALUE_NOTICE_MS = 3000;
 static constexpr int MAX_PILL_WIDTH = 150;
 static constexpr int MAX_PILL_HEIGHT = 22;
 static constexpr size_t ATLAS_FRAME_BYTES = 240 * 240 * 2;
@@ -111,15 +111,27 @@ void HaDial::loop() {
   if (connected != this->was_connected_) {
     if (!connected) {
       this->scene_received_ = false;
-      this->value_dirty_ = this->value_pending_ = false;
+      // Replaying a demand minutes later could surprise someone in the room, so the edit ends here.
+      this->value_owner_.release();
     }
     if (this->display_ != nullptr) this->display_->update();
   }
   if (connected && !this->was_connected_)
     this->send_input_("ready");
   this->was_connected_ = connected;
-  if (this->value_dirty_ && millis() - this->last_rotate_ms_ >= VALUE_DEBOUNCE_MS)
-    this->flush_value_();
+  switch (this->value_owner_.tick(millis())) {
+    case ValueOwner::Step::SEND:
+    case ValueOwner::Step::RESEND:
+      this->send_value_();
+      break;
+    case ValueOwner::Step::GAVE_UP:
+      this->value_refused_();
+      // The scenes that arrived meanwhile were dropped, so ask for what's true now.
+      this->send_input_("ready");
+      break;
+    case ValueOwner::Step::NONE:
+      break;
+  }
   FrameOutcome outcome;
   if (this->frames_.collect(outcome)) {
     if (outcome.ok) ESP_LOGD(TAG, "Frame %08x received in %u ms", static_cast<unsigned>(outcome.crc), static_cast<unsigned>(outcome.elapsed_ms));
@@ -152,9 +164,11 @@ void HaDial::show_view(std::string view) {
   bool stale = false;
   bool clear_requested = false;
   bool incoming_settings = false;
+  bool held = false;
+  bool refused = false;
   const bool valid = json::parse_json(view, [this, &incoming_scene,
                                              &incoming_previous, &incoming_revision,
-                                             &stale, &clear_requested, &incoming_settings](JsonObject root) {
+                                             &stale, &clear_requested, &incoming_settings, &held, &refused](JsonObject root) {
     incoming_settings = root["settings"] | false;
     JsonObject scene = root["scene"].as<JsonObject>();
     if (!root["clear"].isNull()) {
@@ -167,6 +181,20 @@ void HaDial::show_view(std::string view) {
         stale = true;
         return false;
       }
+      // While the Dial owns this screen's value it keeps its own screen. HA always sends a final scene
+      // when it stops being pending, so what's held can simply be dropped, which costs no memory.
+      const char *screen = scene["screen"] | "";
+      if (this->value_owner_.owned() && this->scenes_.current != nullptr && this->scenes_.current->screen == screen &&
+          !root["value"].isNull() && (root["available"] | true)) {
+        const float replied = root["value"] | 0.0f;
+        const auto reply = this->value_owner_.reply(millis(), root["input_sequence"] | uint64_t(0), root["pending"] | false,
+                                                    std::fabs(replied - this->value_) <= this->step_ / 2);
+        if (reply == ValueOwner::Reply::HOLD) {
+          held = true;
+          return true;
+        }
+        refused = reply == ValueOwner::Reply::REFUSED;
+      }
       incoming_scene = std::make_unique<SceneBuffer>();
       if (!parse_scene(scene, *incoming_scene))
         return false;
@@ -176,10 +204,8 @@ void HaDial::show_view(std::string view) {
         if (!parse_scene(previous, *incoming_previous))
           return false;
       }
-      if (this->scenes_.current == nullptr || this->scenes_.current->screen != incoming_scene->screen) {
-        this->value_dirty_ = false;
-        this->value_pending_ = false;
-      }
+      if (this->scenes_.current == nullptr || this->scenes_.current->screen != incoming_scene->screen)
+        this->value_owner_.release();
     }
     const char *title = root["title"];
     const char *profile = root["profile"];
@@ -211,7 +237,7 @@ void HaDial::show_view(std::string view) {
       this->step_ = 1;
     this->has_value_ = incoming_has_value;
     this->control_available_ = root["available"] | true;
-    if (!this->control_available_) this->value_dirty_ = this->value_pending_ = false;
+    if (!this->control_available_) this->value_owner_.release();
     if (incoming_has_value) {
       const bool pending = root["pending"] | false;
       if (!pending) {
@@ -219,15 +245,12 @@ void HaDial::show_view(std::string view) {
         this->has_confirmed_value_ = true;
       }
       const uint64_t acknowledged = root["input_sequence"] | uint64_t(0);
-      if (acknowledged >= this->input_sequence_ && !this->value_dirty_) {
+      if (acknowledged >= this->input_sequence_ && !this->value_owner_.owned())
         this->value_ = incoming_value;
-        this->value_pending_ = pending;
-      }
       this->input_sequence_ = std::max(this->input_sequence_, acknowledged);
     } else {
       this->has_confirmed_value_ = false;
-      this->value_dirty_ = false;
-      this->value_pending_ = false;
+      this->value_owner_.release();
     }
     this->has_back_ = root["back"] | false;
     const int selected = root["selected"] | 0;
@@ -251,6 +274,13 @@ void HaDial::show_view(std::string view) {
       this->selected_ %= this->item_count_;
     return true;
   });
+  if (held) {
+    // Received, so HA can stop retrying, though it isn't what's on screen.
+    this->fire_homeassistant_event("esphome.ha_dial_scene_status",
+                                  {{"device", this->device_}, {"revision", std::to_string(incoming_revision)},
+                                   {"settings_enabled", this->settings_enabled_ ? "true" : "false"}});
+    return;
+  }
   if (!valid) {
     if (stale) ESP_LOGD(TAG, "Ignoring stale scene revision");
     else ESP_LOGW(TAG, "Ignoring invalid view JSON");
@@ -263,8 +293,9 @@ void HaDial::show_view(std::string view) {
   if (clear_requested) {
     this->scenes_.apply(incoming_revision, nullptr, nullptr);
     this->scene_received_ = false;
-    this->value_dirty_ = this->value_pending_ = false;
+    this->value_owner_.release();
   }
+  if (refused) this->value_refused_();
   this->settings_active_ = this->settings_enabled_ && !clear_requested && incoming_settings;
   this->sync_frame_();
   this->atlas_received_ = 0;
@@ -302,7 +333,13 @@ void HaDial::draw(display::Display &it) {
   if (this->scenes_.current != nullptr && this->scenes_.current->valid) {
     const FrameView frame = this->frames_.view();
     draw_scene(it, *this->scenes_.current,
-               this->has_value_ && (this->value_dirty_ || this->value_pending_) ? this->value_ : std::numeric_limits<float>::quiet_NaN(), &frame);
+               this->has_value_ && this->value_owner_.owned() ? this->value_ : std::numeric_limits<float>::quiet_NaN(), &frame);
+    if (this->value_notice_until_ != 0 && static_cast<int32_t>(millis() - this->value_notice_until_) < 0 && this->font_ != nullptr) {
+      int x, y, width, height;
+      it.get_text_bounds(120, 56, "NOT APPLIED", this->font_, display::TextAlign::CENTER, &x, &y, &width, &height);
+      it.filled_rectangle(x - 6, y - 3, width + 12, height + 6, Color::BLACK);
+      it.print(120, 56, this->font_, ORANGE, display::TextAlign::CENTER, "NOT APPLIED");
+    }
     return;
   }
   it.fill(Color::BLACK);
@@ -376,9 +413,7 @@ void HaDial::rotate(int direction) {
       this->value_ = std::clamp(this->value_ + (direction < 0 ? -this->step_ : this->step_),
                                 this->minimum_, this->maximum_);
       ++this->input_sequence_;
-      this->value_dirty_ = true;
-      this->value_pending_ = false;
-      this->last_rotate_ms_ = millis();
+      this->value_owner_.edit(millis());
       this->defer("rotary-draw", [this]() {
         if (this->display_ != nullptr) this->display_->update();
       });
@@ -421,7 +456,7 @@ void HaDial::back() {
   this->flush_value_();
   if (this->scenes_.back()) {
     this->has_value_ = false;
-    this->value_pending_ = this->value_dirty_ = false;
+    this->value_owner_.release();
     this->item_count_ = 0;
     if (this->display_ != nullptr)
       this->display_->update();
@@ -471,15 +506,34 @@ void HaDial::touch(int x, int y) {
 }
 
 void HaDial::flush_value_() {
-  if (!this->value_dirty_ || !this->is_connected())
-    return;
-  this->value_dirty_ = false;
-  this->value_pending_ = true;
+  if (this->value_owner_.editing() && this->is_connected()) this->send_value_();
+}
+
+void HaDial::send_value_() {
   this->send_input_("set_value", "", std::to_string(this->value_));
+  this->value_owner_.sent(millis(), this->input_sequence_);
+}
+
+// HA won, so say so: without this the number would just jump back with no explanation.
+void HaDial::value_refused_() {
+  ESP_LOGW(TAG, "HA did not reach %.1f", this->value_);
+  this->fire_homeassistant_event("esphome.ha_dial_value_refused", {{"device", this->device_}, {"value", std::to_string(this->value_)}});
+  this->value_notice_until_ = millis() + VALUE_NOTICE_MS;
+  this->set_timeout("value-notice", VALUE_NOTICE_MS, [this]() {
+    this->value_notice_until_ = 0;
+    if (this->display_ != nullptr) this->display_->update();
+  });
+  if (this->display_ != nullptr) this->display_->update();
 }
 
 void HaDial::send_input_(const std::string &action, const std::string &item,
                          const std::string &value) {
+  // Anything else you do means you've moved on from the edit: it goes to HA first, and HA drives again.
+  // Otherwise a press that toggles a light would look like HA refusing the value.
+  if (action != "set_value") {
+    this->flush_value_();
+    this->value_owner_.release();
+  }
   if (!this->is_connected())
     return;
   ++this->input_sequence_;

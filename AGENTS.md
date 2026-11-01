@@ -110,6 +110,13 @@ unbumped runtime change or mismatched metadata. These rules replace the earlier 
 Why: the owner requested Casa Mia's numbering and bump rules with independently identifiable
 firmware and integration builds, rather than relying on ESPHome compilation timestamps.
 
+## The Dial owns a value while it's being turned (2026-11-01)
+
+From the first detent the Dial owns the value, and HA can't change the screen until they agree. It sends after
+settling, resends if unacknowledged, waits longer if acknowledged but not reached, and after a limit HA wins and
+the Dial says so. Why: the owner's design, because a reply to an older value made the screen stutter. Menus stay
+HA-drawn for now; the Dial drawing state changes itself is a much bigger piece of work, and in the backlog.
+
 ## Verify flash targets (2026-10-29)
 
 Verify the intended device's identity before uploading firmware. Never assume a connected USB

@@ -34,7 +34,7 @@ bool HaDial::ready_() const {
 
 void HaDial::request_wifi_reset() {
   this->reset_confirmation_ = true;
-  this->value_dirty_ = this->value_pending_ = false;
+  this->value_owner_.release();
   if (this->display_ != nullptr) this->display_->update();
   this->set_timeout("reset-confirmation", 15000, [this]() {
     this->reset_confirmation_ = false;

@@ -97,7 +97,42 @@ def test_a_lights_rounding_doesnt_leave_it_pending_forever(integration, dial):
     attributes = {**COLOUR_LIGHT, "color_temp_kelvin": 3115}  # Lights work in mireds, so what comes back is close.
     nav.sync(**dial.load("controls").control_state("light.lamp", SimpleNamespace(state="on", attributes=attributes)))
     assert not nav.current()["pending"]
-    assert nav.current()["value"] == 3115
+    assert nav.current()["value"] == 3100, "agreement shows what was asked for, so nothing jumps"
+    assert nav.current()["confirmed_value"] == 3115
+
+
+def test_colour_starts_at_full_strength_from_a_light_in_white(integration, dial):
+    """Its reported colour is only derived from its temperature, and would wash out every colour."""
+    nav, controls, _ = opened(integration, dial, {**COLOUR_LIGHT, "color_mode": "color_temp", "hs_color": [30, 22]})
+    nav.input("touch", "light_mode")
+    nav.input("touch", "light_mode")
+    assert controls.control_command(nav.input("rotate_right"), "rotate_right", None)[2]["hs_color"] == [40, 100]
+
+
+def test_a_light_already_in_colour_keeps_its_saturation(integration, dial):
+    nav, controls, _ = opened(integration, dial, {**COLOUR_LIGHT, "color_mode": "hs", "hs_color": [30, 45]})
+    nav.input("touch", "light_mode")
+    nav.input("touch", "light_mode")
+    assert controls.control_command(nav.input("rotate_right"), "rotate_right", None)[2]["hs_color"] == [40, 45]
+
+
+@pytest.mark.parametrize("asked,reported,pending", [(210, 216.4, False), (210, 225, True), (0, 359.5, False), (355, 2, False), (350, 2, True), (180, 0, True)])
+def test_colour_counts_as_agreeing_despite_drift_and_going_round(integration, dial, asked, reported, pending):
+    """RGB and XY lights come back several degrees off, and otherwise the Dial would report a failure."""
+    nav, controls, _ = opened(integration, dial, COLOUR_LIGHT)
+    nav.input("touch", "light_mode")
+    nav.input("touch", "light_mode")
+    nav.input("set_value", None, asked)
+    nav.sync(**controls.control_state("light.lamp", SimpleNamespace(state="on", attributes={**COLOUR_LIGHT, "hs_color": [reported, 80]})))
+    view = nav.current()
+    assert view["pending"] is pending
+    assert view["value"] == asked
+
+
+def test_a_reported_hue_of_360_stays_in_range(integration, dial):
+    nav, _, _ = opened(integration, dial, {**COLOUR_LIGHT, "hs_color": [359.8, 80]})
+    nav.input("touch", "light_mode")
+    assert nav.input("touch", "light_mode")["value"] == 359
 
 
 def test_a_report_of_brightness_doesnt_overwrite_another_modes_value(integration, dial):
@@ -172,3 +207,15 @@ def test_white_runs_warm_to_cool_and_colours_are_real(dial):
     assert warm[0] == 255 and warm[2] < 60, "warm is orange"
     assert cool[0] == 255 and cool[1] > 240 and cool[2] > 240, "cool is near white"
     assert modes.hue_colour(0) == "#ff0000" and modes.hue_colour(120) == "#00ff00" and modes.hue_colour(240) == "#0000ff"
+
+
+def test_turning_to_the_value_it_already_is_isnt_left_pending(integration, dial):
+    """It changes no state, so nothing would ever clear it, and the Dial would report a failure."""
+    nav, _, _ = opened(integration, dial, COLOUR_LIGHT)
+    view = nav.input("set_value", None, 50)
+    assert not view["pending"] and "target_value" not in view
+    assert nav.input("set_value", None, 60)["pending"]
+    nav.input("touch", "light_mode")
+    view = nav.input("set_value", None, 3020)
+    assert not view["pending"], "within what a light's rounding allows"
+    assert nav.input("set_value", None, 3100)["pending"]

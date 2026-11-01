@@ -224,6 +224,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         async_dispatcher_send(hass, f"{DOMAIN}_scene_{device}", _scene_result(hass, device, _navigator(hass, device).current()))
 
     entry.async_on_unload(hass.bus.async_listen("esphome.ha_dial_frame_status", frame_status))
+
+    @callback
+    def value_refused(event: Event) -> None:
+        _LOGGER.warning("Dial %s gave up: its value of %s was not reached", event.data.get("device"), event.data.get("value"))
+
+    entry.async_on_unload(hass.bus.async_listen("esphome.ha_dial_value_refused", value_refused))
     if "ha_dial_frame_view" not in hass.data:
         # Views can't be unregistered, so this survives reloads; it serves nothing while unloaded.
         from .frame_view import FrameView

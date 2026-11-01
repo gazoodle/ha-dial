@@ -6,6 +6,7 @@
 #include <string>
 #include "frame_fetch.h"
 #include "scene.h"
+#include "value_owner.h"
 #include "setup_state.h"
 #include <esp_event.h>
 
@@ -38,6 +39,9 @@ class HaDial : public Component, public api::CustomAPIDevice, public AsyncWebHan
   void set_display(display::Display *display) { this->display_ = display; }
   void set_font(font::Font *font) { this->font_ = font; }
   void set_touchscreen(Component *touchscreen) { this->touchscreen_ = touchscreen; }
+  void set_value_timings(uint32_t settle_ms, uint32_t resend_ms, uint32_t wait_ms, uint8_t resends) {
+    this->value_owner_.configure({settle_ms, resend_ms, wait_ms, resends});
+  }
   void request_wifi_reset();
   void set_settings_enabled(bool enabled);
 
@@ -55,6 +59,8 @@ class HaDial : public Component, public api::CustomAPIDevice, public AsyncWebHan
   bool dismiss_settings_();
   bool ready_() const;
   void flush_value_();
+  void send_value_();
+  void value_refused_();
   void draw_pill_(display::Display &display);
   void sync_frame_();
   void send_input_(const std::string &action, const std::string &item = "",
@@ -80,8 +86,8 @@ class HaDial : public Component, public api::CustomAPIDevice, public AsyncWebHan
   float step_{1};
   bool has_value_{false};
   bool has_confirmed_value_{false};
-  bool value_dirty_{false};
-  bool value_pending_{false};
+  ValueOwner value_owner_{};
+  uint32_t value_notice_until_{0};
   bool has_back_{false};
   bool was_connected_{false};
   bool scene_received_{false};
@@ -96,7 +102,6 @@ class HaDial : public Component, public api::CustomAPIDevice, public AsyncWebHan
   bool web_server_started_{false};
   bool atlas_upload_error_{false};
   size_t atlas_received_{0};
-  uint32_t last_rotate_ms_{0};
   uint64_t input_sequence_{0};
   RAMUniquePtr<uint8_t[]> atlas_frame_;
   display::Display *display_{nullptr};

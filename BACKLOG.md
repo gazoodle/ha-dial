@@ -216,6 +216,12 @@ Consider whether a concrete use case needs the Dial to control local hardware wh
 unavailable. If so, design ownership and state reconciliation on reconnect before changing the
 current HA-owned control architecture.
 
+## Local drawing of state changes (2026-11-01)
+
+The owner would eventually like the Dial to draw state changes itself, without HA re-rendering, so menus and
+bars respond at once. It's much bigger than the value ownership already built. Today a turn gives feedback through
+the number and gauge only, and menu highlights wait for HA.
+
 ## Home explorer: what's left (2026-10-31)
 
 Explorer is built (`explorer.py`, integration b21). Not done, and not started without a request:

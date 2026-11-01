@@ -1,5 +1,9 @@
 # HA Dial firmware changelog
 
+## 2026.10.1-b6
+
+- From the first detent the Dial owns a control's value, and HA can't change the screen until they agree, so turning no longer stutters. It sends once the value settles, resends if HA hasn't acknowledged it, waits longer if HA has, and after three resends lets HA win and shows NOT APPLIED. All four are tunable.
+
 ## 2026.10.1-b5
 
 - Add scene version 6 image frames: fetched from HA on a background task into a fixed second buffer, swapped only after length and CRC pass, released when no scene needs them, and reported to HA with free heap.

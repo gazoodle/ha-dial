@@ -20,6 +20,9 @@ def abilities(attributes: dict) -> dict:
     high = attributes.get("max_color_temp_kelvin") or DEFAULT_KELVIN[1]
     kelvin = attributes.get("color_temp_kelvin")
     colour = attributes.get("hs_color")
+    # In white, a light still reports a colour, derived from its temperature and pale. Starting from that
+    # saturation would make every colour you turn to look washed out.
+    derived = attributes.get("color_mode") in {"color_temp", "white"}
     return {
         "white": "color_temp" in modes,
         "colour": bool(modes & COLOUR_MODES),
@@ -28,7 +31,7 @@ def abilities(attributes: dict) -> dict:
         # A light that's off reports neither, so start somewhere it can actually show.
         "kelvin": kelvin if isinstance(kelvin, (int, float)) else round((low + high) / 200) * 100,
         "hue": colour[0] if colour else 0,
-        "saturation": colour[1] if colour else 100,
+        "saturation": colour[1] if colour and not derived else 100,
     }
 
 
@@ -41,8 +44,20 @@ def mode_fields(mode: str, light: dict, brightness: float) -> dict:
     if mode == WHITE:
         return {"value": round(light["kelvin"]), "minimum": light["kelvin_min"], "maximum": light["kelvin_max"], "step": KELVIN_STEP, "unit": "K", "detail": "WHITE"}
     if mode == COLOUR:
-        return {"value": round(light["hue"]), "minimum": 0, "maximum": 359, "step": HUE_STEP, "unit": "°", "detail": "COLOUR"}
+        return {"value": min(359, round(light["hue"])), "minimum": 0, "maximum": 359, "step": HUE_STEP, "unit": "°", "detail": "COLOUR"}
     return {"value": brightness, "minimum": 0, "maximum": 100, "step": 5, "unit": "%"}
+
+
+def gap(mode: str, first: float, second: float) -> float:
+    """How far apart two values are. Hue goes round, so 359 and 1 are neighbours."""
+    distance = abs(first - second)
+    return min(distance, 360 - distance) if mode == COLOUR else distance
+
+
+def tolerance(mode: str, step: float) -> float:
+    """How close counts as agreeing. Lights round what they're sent, more so outside brightness: white
+    goes through mireds, and colour through RGB or XY, which can come back several degrees away."""
+    return 0.5 if mode == BRIGHTNESS else step
 
 
 def remember(light: dict, mode: str, value: float) -> None:

@@ -8,7 +8,14 @@ from copy import deepcopy
 from hashlib import sha256
 
 from .definition import CONTROL_TYPES
-from .light_modes import BRIGHTNESS, available_modes, mode_fields, remember
+from .light_modes import (
+    BRIGHTNESS,
+    available_modes,
+    gap,
+    mode_fields,
+    remember,
+    tolerance,
+)
 
 
 class Navigator:
@@ -262,7 +269,7 @@ class Navigator:
                 self.control["value"] = round(adjusted, 2)
                 self.control["target_value"] = self.control["value"]
                 self.control["active"] = True
-                self.control["pending"] = True
+                self._mark_pending()
                 self._remember_light()
             elif action == "set_value" and value is not None:
                 if not math.isfinite(value):
@@ -273,7 +280,7 @@ class Navigator:
                 self.control["value"] = round(value, 2)
                 self.control["target_value"] = self.control["value"]
                 self.control["active"] = True
-                self.control["pending"] = True
+                self._mark_pending()
                 self._remember_light()
             elif action == "press":
                 if self.control.get("domain") not in {
@@ -307,6 +314,18 @@ class Navigator:
             self._activate(items[self.selected])
         return self.current()
 
+    def _mark_pending(self) -> None:
+        """Asking for what it already is changes no state, so no report would ever clear this."""
+        control = self.control
+        assert control is not None
+        confirmed = control.get("confirmed_value")
+        mode = control.get("light_mode", BRIGHTNESS)
+        if confirmed is not None and gap(mode, control["value"], confirmed) < tolerance(mode, control["step"]):
+            control["pending"] = False
+            control.pop("target_value", None)
+        else:
+            control["pending"] = True
+
     def _next_light_mode(self) -> None:
         """Changes what turning adjusts. It sends nothing, so it can't change the light."""
         control = self.control
@@ -319,6 +338,7 @@ class Navigator:
         control["pending"] = False
         control["light_mode"] = following
         control.update(mode_fields(following, control.get("light", {}), control.get("brightness", control["value"])))
+        control["confirmed_value"] = control["value"]
 
     def _remember_light(self) -> None:
         control = self.control
@@ -479,7 +499,8 @@ class Navigator:
             if self.control.get("confirm") and self.control.get("domain") == "cover":
                 properties["continuous"] = False
             # The value a light reports is its brightness; in another mode the control shows that instead.
-            tolerance = 0.5
+            mode = BRIGHTNESS
+            step = 1
             if "light" in properties:
                 properties["brightness"] = value
                 mode = self.control.get("light_mode", BRIGHTNESS)
@@ -490,21 +511,16 @@ class Navigator:
                 value = properties.pop("value")
                 if mode == BRIGHTNESS:
                     self.control.pop("detail", None)
-                else:
-                    # Lights round what they're sent, so an exact match might never come.
-                    tolerance = properties["step"] / 2
+                step = properties["step"]
             target = self.control.get("target_value")
-            pending = (
-                target is not None
-                and available
-                and properties.get("continuous", True)
-                and abs(value - target) >= tolerance
-            )
+            tracking = target is not None and available and properties.get("continuous", True)
+            pending = tracking and target is not None and gap(mode, value, target) >= tolerance(mode, step)
             if not pending:
                 self.control.pop("target_value", None)
             self.control.update(
                 confirmed_value=value,
-                value=target if pending else value,
+                # Close enough shows what was asked for, so the Dial sees agreement rather than a jump.
+                value=target if tracking else value,
                 active=active,
                 available=available,
                 pending=pending,

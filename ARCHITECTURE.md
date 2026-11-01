@@ -376,3 +376,9 @@ Websocket commands live in `commands/`: `dial.py` for what cards and Dials use, 
 
 A light's turn adjusts brightness, white or colour, from `light_modes.py`. Each mode is only a value, range and
 step on the control, so firmware's local turn handling works unchanged, and the mode itself lives in HA.
+
+## Value ownership
+
+`value_owner.h` holds the Dial's state machine for a turned value, with no display or network code. While it owns a
+value the Dial drops scenes for that screen, and HA's final scene when it stops being pending hands the screen back.
+Turning draws locally only through `number` and `gauge` elements, so everything else on the screen waits for that scene.
