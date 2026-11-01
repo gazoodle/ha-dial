@@ -24,7 +24,7 @@ inspected contact sheets. The owner reviews sheets by phone; an approved sheet c
 - On the Dial: peak heap with v5 scenes, draw time for the 490-segment worst case (NAV-LIST in Crisp),
   rotary feel on faces, and how Crisp's moiré looks on the panel. Only the owner can judge the last two.
 - Cameras became tree entities in integration b12, b13 added the preview zoom slider, and b17 added colour, mono,
-  tint and dither for every picture. b28 is the build on HA, copied on 2026-11-01 and its files verified, HA restart pending; firmware unchanged at b5. Panning and
+  tint and dither for every picture. b29 is the build on HA, copied on 2026-11-01 and its files verified, HA restart pending; firmware b6 on the Dial. Panning and
   the panel's column growth have only run against test stubs, so check them in a real browser.
 - b23 makes dashboard cards view-and-operate only and adds panel drafts and Operate live house. Two dashboards hold cards
   with stale pages for one Dial: b23 ignores them, but a browser must reload to stop running older card code, and that
@@ -35,7 +35,7 @@ inspected contact sheets. The owner reviews sheets by phone; an approved sheet c
   panel and card have now run in headless Chromium against a stand-in for HA's websocket (scratch only, not in the suite).
 - b28 adds white and colour on lights. It has only run against stand-in lights, so check a real
   one: mireds rounding, and lights that report neither temperature nor colour until they're on.
-- Integration b29 and firmware b6 add value ownership (`value_owner.h`) and fix colour handling; committed, not deployed. It has
+- Integration b29 and firmware b6 add value ownership (`value_owner.h`) and fix colour handling, deployed 2026-11-01. It has
   only run with a controlled clock and stand-in lights. Judge the feel on the Dial, and tune T1, T2, T3 and the resend limit in YAML.
 - b21 adds Explorer (`explorer.py`) and b20 the cover safety fixes. Explorer has only
   run against stand-in registries shaped from HA's source, with its HA calls type-checked. First real checks: a live home,
