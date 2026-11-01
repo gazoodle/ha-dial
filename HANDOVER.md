@@ -26,6 +26,9 @@ inspected contact sheets. The owner reviews sheets by phone; an approved sheet c
 - Cameras became tree entities in integration b12, b13 added the preview zoom slider, and b17 added colour, mono,
   tint and dither for every picture. b22 is the build on HA, copied on 2026-11-01 and its files verified, HA restart pending; firmware unchanged at b5. Panning and
   the panel's column growth have only run against test stubs, so check them in a real browser.
+- b23 makes dashboard cards view-and-operate only and adds panel drafts and Operate live house; committed, not deployed.
+  Two dashboards hold cards with stale pages for one Dial, which older card code would apply on loading, so
+  rebuild nothing until b23 is on HA. Live operation has only run against fakes.
 - b21 adds Explorer (`explorer.py`) and b20 the cover safety fixes. Explorer has only
   run against stand-in registries shaped from HA's source, with its HA calls type-checked. First real checks: a live home,
   rebuilds as the registries change and after an HA restart, and the panel's Explorer settings. The cover control's

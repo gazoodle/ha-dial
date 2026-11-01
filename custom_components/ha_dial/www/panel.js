@@ -3,6 +3,8 @@ import { confirmDialog } from './editor/options.js';
 import './panel-editor.js';
 if (!customElements.get('ha-dial-card')) await import(`./ha-dial-card.js${new URL(import.meta.url).search}`);
 
+const DRAFT_KEY = 'ha-dial-draft-';
+
 class HaDialPanel extends HTMLElement {
   connectedCallback() {
     if (this.initialised) return;
@@ -27,7 +29,7 @@ class HaDialPanel extends HTMLElement {
       ha-dial-panel .page-row,ha-dial-panel .control-row{display:flex;align-items:center;min-width:0} ha-dial-panel .tree button{margin:0} ha-dial-panel .pick{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;text-align:left;border:0;background:none;padding:8px;color:var(--text);white-space:nowrap}
       ha-dial-panel .pick[aria-pressed=true]{background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:inset 3px 0 0 var(--accent)} ha-dial-panel .expand,ha-dial-panel .grab{border:0;background:none;color:var(--muted);padding:5px;min-width:28px} ha-dial-panel .grab{cursor:grab;touch-action:none}
       ha-dial-panel .editor-actions{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0} ha-dial-panel .inspector-head h3{margin:4px 0} ha-dial-panel .inspector-label{margin:24px 0 8px} ha-dial-panel .advanced-details{margin-top:24px;border-top:1px solid var(--border);padding-top:14px} ha-dial-panel summary{cursor:pointer;color:var(--muted)}
-      ha-dial-panel .explorer-pages{margin-top:8px;overflow-wrap:anywhere} ha-dial-panel .explorer-pages .pick{white-space:normal} ha-dial-panel .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)} ha-dial-panel .drop-before{box-shadow:0 -3px var(--accent)} ha-dial-panel .drop-after{box-shadow:0 3px var(--accent)} ha-dial-panel .drop-inside{outline:2px solid var(--accent)}
+      ha-dial-panel label.live-switch{display:flex;flex:none;min-width:0;max-width:none;margin:0;font-weight:500} ha-dial-panel .explorer-pages{margin-top:8px;overflow-wrap:anywhere} ha-dial-panel .explorer-pages .pick{white-space:normal} ha-dial-panel .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)} ha-dial-panel .drop-before{box-shadow:0 -3px var(--accent)} ha-dial-panel .drop-after{box-shadow:0 3px var(--accent)} ha-dial-panel .drop-inside{outline:2px solid var(--accent)}
       ha-dial-panel .options-dialog{width:min(600px,calc(100vw - 24px));max-height:calc(100dvh - 40px);padding:0;border:1px solid var(--border);border-radius:18px;background:var(--surface);color:var(--text);overflow:hidden;box-shadow:0 24px 60px #0007} ha-dial-panel .options-dialog[open]{display:flex;flex-direction:column} ha-dial-panel .options-dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}
       ha-dial-panel .options-head{padding:16px 18px 6px} ha-dial-panel .options-head h3{margin:0} ha-dial-panel .options-body{min-height:0;overflow:auto;padding:10px 18px 6px} ha-dial-panel .options-foot{flex:none;display:flex;justify-content:flex-end;gap:8px;padding:14px 18px 16px;border-top:1px solid var(--border)} ha-dial-panel .options-foot button:last-child{background:var(--accent);color:var(--on-accent)} ha-dial-panel textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px;font:inherit}
       ha-dial-panel .options-dialog{width:min(840px,calc(100vw - 24px))} ha-dial-panel .options-galleries h4{margin:20px 0 10px;color:var(--text);font-size:14px} ha-dial-panel .gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px} ha-dial-panel button.gallery-choice{display:grid;justify-items:center;gap:7px;min-width:0;padding:10px 6px;background:var(--bg);border:1px solid var(--border);border-radius:14px;color:var(--muted);font-size:11px;text-transform:capitalize;white-space:normal} ha-dial-panel .gallery-choice[aria-pressed=true]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--bg));color:var(--text)} ha-dial-panel .gallery-choice canvas{width:min(100%,104px);aspect-ratio:1;border-radius:50%}
@@ -41,20 +43,24 @@ class HaDialPanel extends HTMLElement {
       @media(max-width:800px){ha-dial-panel main{padding:20px 16px 48px} ha-dial-panel .layout{grid-template-columns:minmax(0,1fr)} ha-dial-panel .preview ha-dial-card{width:100%} ha-dial-panel .preview{position:static} ha-dial-panel .bar{padding:12px 16px}} @media(max-width:550px){ha-dial-panel .editor-workspace{grid-template-columns:1fr} ha-dial-panel .editor-tree{border-right:0;border-bottom:1px solid var(--border);padding:0 0 16px}}
     </style><header class="bar"><button class="menu" aria-label="Open sidebar">☰</button><h1>HA Dial</h1></header>
     <main><div class="intro"><h2>Make your Dial yours</h2><p>Choose a Dial, arrange its pages and controls, then try them in the preview.</p></div>
-    <div class="toolbar"><label>Dial<span class="devices"></span><select aria-label="Dial" hidden></select></label><button class="save" disabled>Save and apply</button><button class="chip danger reset" disabled>Reset Dial</button><span class="state" role="status"></span></div>
+    <div class="toolbar"><label>Dial<span class="devices"></span><select aria-label="Dial" hidden></select></label><button class="save" disabled>Save and apply</button><button class="chip discard" hidden>Discard changes</button><button class="chip danger reset" disabled>Reset Dial</button><label class="switch-row live-switch"><span>Operate live house</span><input type="checkbox" class="live" aria-label="Operate live house"></label><span class="state" role="status"></span></div>
     <p class="error" role="alert" hidden></p><p class="empty" hidden>No Dials found. Add a Dial through the ESPHome integration, then return here.</p>
     <div class="layout" hidden><section class="box"><ha-dial-panel-editor></ha-dial-panel-editor></section>
-    <section class="box preview"><h3>Try your Dial</h3><p>Changes here are a safe preview. They won’t operate your devices until applied.</p><ha-dial-card></ha-dial-card></section></div></main>`;
+    <section class="box preview"><h3>Try your Dial</h3><p class="preview-note"></p><ha-dial-card></ha-dial-card></section></div></main>`;
     this.querySelector('.menu').addEventListener('click', () => this.dispatchEvent(new CustomEvent('hass-toggle-menu', {bubbles:true, composed:true})));
     this.querySelector('select').addEventListener('change', (event) => this.selectDevice(event.target.value));
     this.querySelector('.save').addEventListener('click', () => this.save());
+    this.querySelector('.discard').addEventListener('click', () => confirmDialog(this, {title:'Discard changes', message:'Go back to the pages saved on this Dial? Changes you have not saved will be lost.', confirm:'Discard changes', action:()=>{ this.forgetDraft(this.device); this.selectDevice(this.device,true); }}));
     this.querySelector('.reset').addEventListener('click', () => this.confirmReset());
+    this.querySelector('.live').addEventListener('change', (event) => this.setLive(event.target.checked));
+    this.showLive(false);
     this.beforeUnload = (event) => { if (this.dirty) { event.preventDefault(); event.returnValue = ''; } };
     window.addEventListener('beforeunload', this.beforeUnload);
     this.querySelector('ha-dial-panel-editor').addEventListener('config-changed', (event) => {
       event.stopPropagation();
       this.draft = event.detail.config;
       this.dirty = JSON.stringify(this.definition()) !== this.saved;
+      this.keepDraft();
       this.updateState();
       this.preview();
     });
@@ -99,7 +105,7 @@ class HaDialPanel extends HTMLElement {
     if (!force && (this.saving || this.resetting || device === this.device)) return;
     if (!force && this.dirty) {
       this.querySelector('select').value = this.device;
-      confirmDialog(this, {title:'Unsaved changes', message:'Switching Dials will discard changes you have not saved.', confirm:'Discard changes', action:()=>this.selectDevice(device,true)}); return;
+      confirmDialog(this, {title:'Unsaved changes', message:'Switching Dials will discard changes you have not saved.', confirm:'Discard changes', action:()=>{ this.forgetDraft(this.device); this.selectDevice(device,true); }}); return;
     }
     this.device = device;
     this.querySelector('select').value = device;
@@ -107,16 +113,47 @@ class HaDialPanel extends HTMLElement {
     this.draft = {...defaultConfig(), ...(this.definitions[device] || {}), device};
     this.saved = this.definitions[device] ? JSON.stringify(this.definition()) : '';
     this.dirty = !this.definitions[device];
+    const kept = this.keptDraft(device);
+    if (kept) { this.draft = {...this.draft,...kept,device}; this.dirty = JSON.stringify(this.definition()) !== this.saved; }
     const editor = this.querySelector('ha-dial-panel-editor');
     editor.selectedPage = editor.selectedEntity = editor.expanded = editor.treePages = undefined;
     editor.panelMode = true; editor.setConfig(this.draft); editor.hass = this._hass;
     this.querySelector('.error').hidden = true;
     this.updateState(); this.preview();
+    if (kept && this.dirty) this.querySelector('.state').textContent = 'Unsaved changes restored';
+  }
+
+  // Off every time the panel opens. Page edits still wait for Save; this is only about the controls.
+  setLive(live) {
+    this.live = live;
+    this.showLive(live);
+    this.querySelector('ha-dial-card').setLive(live);
+  }
+  showLive(live) {
+    this.querySelector('.preview-note').textContent = live
+      ? 'Turning, pressing and tapping here operates your real devices. Page edits still aren’t applied until you save.'
+      : 'Changes here are a safe preview. They won’t operate your devices until applied.';
+  }
+
+  // Unsaved work lives in this browser until it's saved: HA moves between panels without unloading the
+  // page, so nothing warns when you leave, and the editor is gone when you come back.
+  keepDraft() {
+    try {
+      if (this.dirty) localStorage.setItem(DRAFT_KEY + this.device, JSON.stringify(this.definition()));
+      else localStorage.removeItem(DRAFT_KEY + this.device);
+    } catch { /* A convenience: the draft in this editor is unaffected. */ }
+  }
+  keptDraft(device) {
+    try { return JSON.parse(localStorage.getItem(DRAFT_KEY + device)); } catch { return null; }
+  }
+  forgetDraft(device) {
+    try { localStorage.removeItem(DRAFT_KEY + device); } catch { /* Nothing was kept, or nothing can be. */ }
   }
 
   definition() { return {template:this.draft.template || '', theme:this.draft.theme || 'ember', pages:this.draft.pages}; }
   preview() {
     const card = this.querySelector('ha-dial-card');
+    card.rememberZoom = true;
     card.setConfig({...this.draft, device:'preview'}); card.hass = this._hass;
   }
   updateButtons() {
@@ -125,6 +162,7 @@ class HaDialPanel extends HTMLElement {
     // Reset stays available during a save, which may be stuck: HA queues it behind the save under its definition lock.
     this.querySelector('.reset').disabled = !this.device || this.resetting;
     this.querySelector('select').disabled = busy;
+    this.querySelector('.discard').hidden = !this.dirty || !this.saved;
   }
   updateState() {
     this.updateButtons();
@@ -141,6 +179,7 @@ class HaDialPanel extends HTMLElement {
     try {
       const result = await this._hass.callWS({type:'ha_dial/reset',device});
       delete this.definitions[device];
+      this.forgetDraft(device);
       this.selectDevice(device,true);
       status = result.cleared ? 'Reset sent to Dial' : 'Reset saved; display not cleared';
     } catch (error) { this.showError(error); }
@@ -150,10 +189,11 @@ class HaDialPanel extends HTMLElement {
     const device = this.device, definition = this.definition(), snapshot = JSON.stringify(definition);
     this.saving = true; this.updateState();
     try {
-      const result = await this._hass.callWS({type:'ha_dial/configure', device, definition});
+      const result = await this._hass.callWS({type:'ha_dial/configure', device, definition, save:true});
       this.definitions[device] = definition;
       if (this.device === device) {
         this.saved = snapshot; this.dirty = JSON.stringify(this.definition()) !== snapshot;
+        this.keepDraft();
         this.querySelector('.error').hidden = true;
         this.querySelector('.state').textContent = ({applied:'Applied to Dial', sent:'Sent to Dial', waiting:'Saved; waiting for Dial', failed:'Saved; deployment failed'})[result.deployment] || 'Saved';
       }

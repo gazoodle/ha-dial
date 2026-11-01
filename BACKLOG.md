@@ -216,6 +216,12 @@ Consider whether a concrete use case needs the Dial to control local hardware wh
 unavailable. If so, design ownership and state reconciliation on reconnect before changing the
 current HA-owned control architecture.
 
+## Dashboard card editor (2026-11-01)
+
+Owner's direction: a dashboard card only views and operates. Its running code does this, but its editor still
+offers pages, theme, template and Preview. Reduce the editor to choosing a Dial, and make its small preview
+show that Dial's saved pages rather than the card's stale copy.
+
 ## Home explorer: what's left (2026-10-31)
 
 Explorer is built (`explorer.py`, integration b21). Not done, and not started without a request:

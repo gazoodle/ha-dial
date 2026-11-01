@@ -432,6 +432,7 @@ async def _ws_view(hass, connection, msg) -> None:
         vol.Required("action"): vol.In(INPUTS),
         vol.Optional("item"): str,
         vol.Optional("value"): vol.Coerce(float),
+        vol.Optional("live", default=False): bool,
     }
 )
 @websocket_api.async_response
@@ -439,6 +440,10 @@ async def _ws_view(hass, connection, msg) -> None:
 async def _ws_input(hass, connection, msg) -> None:
     device = msg["device"]
     state = hass.data[DOMAIN]
+    # A draft in the panel, operating real devices: for the same people who can edit it.
+    if msg.get("live") and not (connection.user and connection.user.is_admin):
+        connection.send_error(msg["id"], "unauthorized", "Administrator access required")
+        return
     if device in state.get("resetting", set()) or (device in state.get("stored_definitions", {}) and state["stored_definitions"][device] is None):
         connection.send_error(msg["id"], "not_configured", "Dial has no active configuration")
         return
@@ -447,7 +452,7 @@ async def _ws_input(hass, connection, msg) -> None:
         return
     try:
         view = await _input(
-            hass, msg["device"], msg["action"], msg.get("item"), msg.get("value")
+            hass, msg["device"], msg["action"], msg.get("item"), msg.get("value"), live=msg.get("live", False)
         )
     except HomeAssistantError as error:
         _sync_control(hass, _navigator(hass, msg["device"]))
@@ -462,6 +467,7 @@ async def _ws_input(hass, connection, msg) -> None:
         vol.Required("type"): f"{DOMAIN}/configure",
         vol.Required("device"): DEVICE_SCHEMA,
         vol.Required("definition"): dict,
+        vol.Optional("save", default=False): bool,
     }
 )
 @websocket_api.async_response
@@ -472,6 +478,12 @@ async def _ws_configure(hass, connection, msg) -> None:
         return
     source = msg["definition"]
     device = msg["device"]
+    # Only the panel may change a real Dial. A dashboard card once sent its own pages here whenever it
+    # loaded, which replaced the Dial's saved tree (2026-11-01). Asking to save has to be deliberate, so
+    # this also stops a browser still running an older card.
+    if not _is_preview(device) and not msg.get("save"):
+        connection.send_error(msg["id"], "not_allowed", "Pages for a real Dial are saved from the HA Dial panel")
+        return
     if not isinstance(source.get("template", ""), str) or not isinstance(
         source.get("theme", "ember"), str
     ):

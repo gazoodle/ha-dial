@@ -7,8 +7,9 @@ const ZOOM_MIN = 100, ZOOM_MAX = 400, ZOOM_STEP = 25;
 // One Dial pixel per CSS pixel is the point where hard edges start being honest rather than ragged.
 const SCREEN_PIXELS = 240;
 
-// Per browser, because a phone and a Mac want different sizes. Storage can be blocked or empty, and
-// the preview must still work, so this only ever falls back to 100%.
+// Per browser, because a phone and a Mac want different sizes, and only for the panel's preview: a card
+// on a dashboard starts at 100%. Storage can be blocked or empty, and the preview must still work, so
+// this only ever falls back to 100%.
 function storedZoom() {
   try {
     const value = Number(localStorage.getItem(ZOOM_KEY));
@@ -43,16 +44,16 @@ class HaDialCard extends HTMLElement {
     this.config = next;
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
-      this.shadowRoot.innerHTML = `<style>${HaDialCard.styles}</style><ha-card><label class="zoom"><span>Zoom</span><input type="range" min="${ZOOM_MIN}" max="${ZOOM_MAX}" step="${ZOOM_STEP}" aria-label="Preview zoom"><output></output></label><div class="viewport"><div class="stage"><div class="dial"><img class="frame" src="/ha_dial/dial-frame.png" alt="" draggable="false"><canvas width="240" height="240" tabindex="0" aria-label="HA Dial preview"></canvas><button class="click-chip" data-action="press" aria-label="Click dial"><span>CLICK</span></button></div><button class="spin left" data-action="rotate_left" aria-label="Rotate left"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="sweep" d="M75 79A37 37 0 1 1 86 42"/><path class="head" d="M74 39L96 39L85 59Z"/></svg></button><button class="spin right" data-action="rotate_right" aria-label="Rotate right"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="sweep" d="M75 79A37 37 0 1 1 86 42"/><path class="head" d="M74 39L96 39L85 59Z"/></svg></button><p role="alert" hidden></p></div></div></ha-card>`;
+      this.shadowRoot.innerHTML = `<style>${HaDialCard.styles}</style><ha-card><p class="live-banner" role="alert" hidden>Warning: changes made here are live</p><label class="zoom"><span>Zoom</span><input type="range" min="${ZOOM_MIN}" max="${ZOOM_MAX}" step="${ZOOM_STEP}" aria-label="Preview zoom"><output></output></label><div class="viewport"><div class="stage"><div class="dial"><img class="frame" src="/ha_dial/dial-frame.png" alt="" draggable="false"><canvas width="240" height="240" tabindex="0" aria-label="HA Dial preview"></canvas><button class="click-chip" data-action="press" aria-label="Click dial"><span>CLICK</span></button></div><button class="spin left" data-action="rotate_left" aria-label="Rotate left"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="sweep" d="M75 79A37 37 0 1 1 86 42"/><path class="head" d="M74 39L96 39L85 59Z"/></svg></button><button class="spin right" data-action="rotate_right" aria-label="Rotate right"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="sweep" d="M75 79A37 37 0 1 1 86 42"/><path class="head" d="M74 39L96 39L85 59Z"/></svg></button><p role="alert" hidden></p></div></div></ha-card>`;
       this.shadowRoot.addEventListener("click", (event) => {
         const action = event.target.closest("button")?.dataset.action;
         if (action) this.input(action);
       });
       this.shadowRoot.querySelector(".zoom input").addEventListener("input", (event) => {
         this.applyZoom(Number(event.target.value));
-        try { localStorage.setItem(ZOOM_KEY, String(this.zoom)); } catch { /* Remembering is a convenience. */ }
+        if (this.rememberZoom) try { localStorage.setItem(ZOOM_KEY, String(this.zoom)); } catch { /* Remembering is a convenience. */ }
       });
-      this.applyZoom(storedZoom());
+      this.applyZoom(this.rememberZoom ? storedZoom() : ZOOM_MIN);
       const canvas = this.shadowRoot.querySelector("canvas");
       canvas.addEventListener("click", (event) => this.touch(event));
       canvas.addEventListener("keydown", (event) => {
@@ -98,6 +99,15 @@ class HaDialCard extends HTMLElement {
     };
   }
 
+  // Set by the panel only. It travels with each input, so nothing in HA can stay switched on.
+  setLive(live) {
+    this.live = live;
+    this.shadowRoot.querySelector(".live-banner").hidden = !live;
+    this.render();
+    // The screen may be showing a simulated result, so start again from what's really there.
+    if (this.configKey) this.input("ready");
+  }
+
   accept(result) {
     if (result.error) { this.error = result.error; this.render(); return; }
     if (result.revision < this.lastRevision) return;
@@ -117,12 +127,16 @@ class HaDialCard extends HTMLElement {
     try {
       do {
         this.needsLoad = false;
-        const device = this._device(), definition = this._definition();
-        const key = `${device}:${JSON.stringify(definition)}`, version = this.configVersion;
+        const device = this._device(), version = this.configVersion, real = !device.startsWith("preview_");
+        // A real Dial shows its saved pages, and a card never sends its own.
+        const key = real ? `${device}:saved` : `${device}:${JSON.stringify(this._definition())}`;
         if (key === this.attemptedKey) continue;
         this.attemptedKey = key;
         try {
-          const result = await this._hass.callWS({ type: "ha_dial/configure", device, definition });
+          const definition = real ? undefined : this._definition();
+          const result = real
+            ? await this._hass.callWS({ type: "ha_dial/view", device })
+            : await this._hass.callWS({ type: "ha_dial/configure", device, definition });
           if (!this.isConnected || version !== this.configVersion) { this.needsLoad = true; continue; }
           if (this.subscribedDevice !== device) {
             this.unsubscribe?.();
@@ -148,7 +162,7 @@ class HaDialCard extends HTMLElement {
       if (!this._hass || !this.configKey || this.error) return;
       const device = this._device();
       try {
-        const result = await this._hass.callWS({ type: "ha_dial/input", device, action, ...(item ? { item } : {}) });
+        const result = await this._hass.callWS({ type: "ha_dial/input", device, action, ...(item ? { item } : {}), ...(this.live ? { live: true } : {}) });
         if (this.isConnected && device === this._device()) this.accept(result);
       } catch (error) { this.error = error.message || String(error); this.render(); }
     });
@@ -174,7 +188,7 @@ class HaDialCard extends HTMLElement {
       status.setAttribute("role", "status");
       this.shadowRoot.querySelector(".stage").append(status);
     }
-    status.textContent = this.frameError ? `Dial image: ${this.frameError}` : ({ preview: "Local preview", waiting: "Waiting for ESPHome device", sent: "Scene sent · awaiting device", applied: "Scene applied on device", failed: "Device deployment failed" })[this.deployment] || "";
+    status.textContent = this.frameError ? `Dial image: ${this.frameError}` : this.live ? "Operating your live house" : ({ preview: "Local preview", waiting: "Waiting for ESPHome device", sent: "Scene sent · awaiting device", applied: "Scene applied on device", failed: "Device deployment failed" })[this.deployment] || "";
     if (this.scene) {
       const canvas = this.shadowRoot.querySelector("canvas");
       canvas.setAttribute("aria-label", this.scene.label || "HA Dial preview");
@@ -190,6 +204,8 @@ class HaDialCard extends HTMLElement {
 
   static styles = `
     ha-card { display:block; width:min(100%,var(--dial-card-width,360px)); margin-inline:auto; overflow:hidden; background:radial-gradient(circle at 50% 24%,#3d4248,#16181b 70%); }
+    .live-banner { margin:0; padding:8px 14px; font:600 13px/18px system-ui,sans-serif; text-align:center; color:#fff; background:#c2412d; overflow-wrap:anywhere; }
+    .live-banner[hidden] { display:none; }
     .zoom { display:grid; grid-template-columns:auto minmax(0,1fr) 44px; align-items:center; gap:10px; padding:8px 14px; font:500 12px/16px system-ui,sans-serif; color:#ff8b2d; background:#16181b; }
     .zoom input { width:100%; accent-color:#ff8b2d; cursor:pointer; }
     .zoom output { text-align:right; font-variant-numeric:tabular-nums; }

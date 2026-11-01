@@ -11,7 +11,7 @@ globalThis.customElements = {define: (_name, type) => { Panel = type; }};
 vm.runInThisContext(fs.readFileSync('custom_components/ha_dial/www/panel.js', 'utf8').replace(/^import .*\n/gm, '').replace(/^if \(!customElements.get.*\n/m, ''));
 
 const panel = new Panel();
-const nodes = Object.fromEntries(['select','.error','.save','.reset','.state','ha-dial-panel-editor','ha-dial-card'].map(key => [key, {}]));
+const nodes = Object.fromEntries(['select','.error','.save','.discard','.reset','.live','.preview-note','.state','ha-dial-panel-editor','ha-dial-card'].map(key => [key, {}]));
 nodes['ha-dial-panel-editor'].setConfig = function(config) { this.config = config; };
 nodes['ha-dial-card'].setConfig = function(config) { this.config = config; };
 panel.querySelector = key => nodes[key];
@@ -57,4 +57,59 @@ assert.equal(panel.definitions.new_dial, undefined);
 finishSave({deployment:'waiting'});
 await stuck;
 assert.ok(!nodes['.reset'].disabled);
-console.log('Panel device selection, draft isolation, saving and Reset availability passed');
+
+// Operate live house: the note says which world the preview is in, and the card is told.
+let cardLive;
+nodes['ha-dial-card'].setLive = live => { cardLive = live; };
+panel.showLive(false);
+assert(nodes['.preview-note'].textContent.includes('safe preview'));
+panel.setLive(true);
+assert.equal(cardLive, true);
+assert(nodes['.preview-note'].textContent.includes('operates your real devices'));
+assert(nodes['.preview-note'].textContent.includes('until you save'), 'page edits are still only drafts');
+panel.setLive(false);
+assert.equal(cardLive, false);
+assert(nodes['.preview-note'].textContent.includes('safe preview'));
+assert(fs.readFileSync('custom_components/ha_dial/www/panel.js', 'utf8').includes('Operate live house'));
+assert(!/class="live"[^>]*checked/.test(fs.readFileSync('custom_components/ha_dial/www/panel.js', 'utf8')), 'off by default');
+
+// Only the panel saves, and it says so.
+assert(calls.filter(call => call.type === 'ha_dial/configure').every(call => call.save === true), 'the panel must ask to save');
+assert.equal(nodes['ha-dial-card'].rememberZoom, true, 'only the panel preview remembers its zoom');
+
+// Leaving the panel can't lose work: HA changes panels without unloading the page, so nothing warns.
+const store = new Map();
+globalThis.localStorage = { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value), removeItem: key => store.delete(key) };
+panel._hass.callWS = async message => { calls.push(message); return {deployment:'applied'}; };
+panel.definitions = {first:{theme:'ember', template:'', pages:[{id:'one'}]}};
+panel.selectDevice('first', true);
+assert.equal(panel.dirty, false);
+assert.equal(nodes['.discard'].hidden, true);
+const config = panel.draft;
+const change = theme => { panel.draft = {...config, theme}; panel.dirty = JSON.stringify(panel.definition()) !== panel.saved; panel.keepDraft(); panel.updateState(); };
+change('rose');
+assert(store.has('ha-dial-draft-first'));
+assert.equal(nodes['.discard'].hidden, false);
+const returning = new Panel();
+returning.querySelector = panel.querySelector; returning.querySelectorAll = panel.querySelectorAll;
+returning.definitions = panel.definitions; returning._hass = panel._hass;
+returning.selectDevice('first', true);
+assert.equal(returning.draft.theme, 'rose', 'coming back restores what you were doing');
+assert.equal(returning.dirty, true);
+assert.equal(nodes['.state'].textContent, 'Unsaved changes restored');
+await returning.save();
+assert(!store.has('ha-dial-draft-first'), 'a saved draft is finished with');
+returning.selectDevice('first', true);
+assert.equal(returning.dirty, false);
+assert.equal(returning.draft.theme, 'rose');
+store.set('ha-dial-draft-first', JSON.stringify({template:'',theme:'cobalt',pages:[{id:'one'}]}));
+await returning.reset('first');
+assert(!store.has('ha-dial-draft-first'), 'a reset leaves nothing to come back');
+store.set('ha-dial-draft-first', 'not json');
+returning.definitions = {first:{theme:'ember', template:'', pages:[{id:'one'}]}};
+returning.selectDevice('first', true);
+assert.equal(returning.draft.theme, 'ember', 'a damaged draft is ignored');
+delete globalThis.localStorage;
+returning.keepDraft(); returning.forgetDraft('first');
+assert.equal(returning.keptDraft('first'), null, 'blocked storage changes nothing');
+console.log('Panel device selection, draft isolation, saving, drafts and Reset availability passed');

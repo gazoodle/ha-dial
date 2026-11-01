@@ -14,7 +14,7 @@ def test_definitions_require_admin(integration):
         integration.connection.send_error.assert_called_once()
         await integration.code._ws_configure(
             integration.hass, integration.connection,
-            {"id": 3, "device": "dial_one", "definition": {}},
+            {"id": 3, "save": True, "device": "dial_one", "definition": {}},
         )
         assert integration.connection.send_error.call_count == 2
         integration.data["definition_store"].async_save.assert_not_awaited()

@@ -48,7 +48,7 @@ def test_state_condition_watches_hidden_page_and_updates(integration, dial, monk
     ]}
 
     async def run():
-        await case.code._ws_configure(case.hass, case.connection, {"id": 1, "device": "demo", "definition": source})
+        await case.code._ws_configure(case.hass, case.connection, {"id": 1, "save": True, "device": "demo", "definition": source})
         assert case.data["definitions"]["demo"]["tree"]["items"] == []
         callback = next(callback for entities, callback in case.watches if "select.example" in entities)
         case.hass.states["select.example"].state = "Home"

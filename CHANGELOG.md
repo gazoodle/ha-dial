@@ -1,5 +1,12 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b23
+
+- A dashboard card can no longer replace a Dial's saved pages. A card set to a real Dial used to send its own copy of the pages whenever it loaded, which overwrote the Dial's tree. It now shows the pages saved on that Dial, and HA refuses a save that doesn't come from the panel.
+- Unsaved work in the panel survives leaving the page: it's kept in your browser and restored when you return, with a Discard changes button.
+- A dashboard card starts at 100% zoom. Only the panel's preview remembers its size.
+- New Operate live house switch beside Save and Reset, off whenever the panel opens. While it's on, the preview's controls operate real devices and the preview shows a warning. Page edits still wait for Save.
+
 ## 2026.10.1-b22
 
 - A hand-built page can now go past 8 items in a style that scrolls or pages: List, Grid, Snake, Compass, Ribbon, Rolodex or Pager. Its style gallery offers only those while it holds more than 8.

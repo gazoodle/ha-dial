@@ -86,6 +86,7 @@ async def _input(
     value: float | None = None,
     push: bool = True,
     input_sequence: int | None = None,
+    live: bool = False,
 ) -> dict:
     if hass.data[DOMAIN].get("unloading"):
         return _navigator(hass, device).current()
@@ -107,7 +108,8 @@ async def _input(
     # must not also operate it: without this, opening a light from a camera would toggle the light.
     if was_control and view.get("id") != before.get("id"):
         was_control = False
-    if _is_preview(device) and navigator.control is not None:
+    simulated = _is_preview(device) and not live
+    if simulated and navigator.control is not None:
         if was_control:
             preview_feedback(navigator.control, action, item)
         navigator.control["pending"] = False
@@ -119,7 +121,7 @@ async def _input(
     if (
         was_control
         and view.get("kind") == "control"
-        and not _is_preview(device)
+        and not simulated
         and (command := control_command(view, action, item))
     ):
         domain, service, data = command

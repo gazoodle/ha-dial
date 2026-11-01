@@ -338,7 +338,17 @@ explorerSpace.selectedPage = explorerPage.id; explorerSpace.renderTree();
 await new Promise((resolve) => setTimeout(resolve, 0));
 const storage = new Map();
 globalThis.localStorage = { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) };
+// A card on a dashboard starts at 100% whatever the panel's preview was last set to, and doesn't change it.
+storage.set("ha-dial-preview-zoom", "300");
+const dashboardCard = new Card();
+dashboardCard.setConfig({device:"preview"});
+assert.equal(dashboardCard.zoom, 100);
+const dashboardZoom = dashboardCard.shadowRoot.querySelector(".zoom input");
+dashboardZoom.value = "200"; dashboardZoom.events.input({target:dashboardZoom});
+assert.equal(storage.get("ha-dial-preview-zoom"), "300");
+storage.clear();
 const zoomCard = new Card();
+zoomCard.rememberZoom = true;
 zoomCard.setConfig({device:"preview",zoom:200});
 const zoomRoot = zoomCard.shadowRoot, zoomStyle = zoomRoot.querySelector("ha-card").style;
 assert.equal(zoomCard.zoom, 100, "a saved card's old zoom value is ignored");
@@ -352,6 +362,7 @@ assert.equal(zoomCard.style["--dial-preview-width"], "1440px");
 assert.equal(zoomRoot.querySelector(".zoom output").textContent, "400%");
 assert.equal(storage.get("ha-dial-preview-zoom"), "400");
 const sharp = new Card();
+sharp.rememberZoom = true;
 sharp.setConfig({device:"preview"});
 assert.equal(sharp.zoom, 400, "the size is remembered per browser");
 assert.equal(sharp.shadowRoot.querySelector(".zoom input").value, "400");
@@ -363,6 +374,50 @@ canvasEl.getBoundingClientRect = () => ({width:190});
 sharp.applyZoom(100);
 assert.equal(canvasEl.style.imageRendering, "auto", "scaling down must not drop pixels raggedly");
 for (const bad of ["999","abc","99"]) { storage.set("ha-dial-preview-zoom", bad); const card = new Card(); card.setConfig({device:"preview"}); assert.equal(card.zoom, 100, bad); }
+// A card set to a real Dial shows that Dial's saved pages and can never replace them.
+const linkedCalls = [];
+const linkedHass = { connection: { subscribeMessage: async () => () => {} }, callWS: async (message) => {
+  linkedCalls.push(message);
+  if (message.type === "ha_dial/definitions") return { demo_dial: { template: "", theme: "cobalt", pages: [{ id: "home", title: "Saved", parent: "", entities: ["light.saved"] }] } };
+  return { revision: 1, deployment: "applied", scene: { regions: [], elements: [] }, frames: {} };
+} };
+const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
+const linkedCard = new Card();
+linkedCard.isConnected = true;
+linkedCard.setConfig({ device: "demo-dial", pages: [{ id: "home", title: "Stale copy", parent: "" }] });
+linkedCard.hass = linkedHass;
+await settled();
+assert.deepEqual(linkedCalls.map((call) => call.type), ["ha_dial/view"], "showing a real Dial reads it");
+assert.equal(linkedCalls[0].device, "demo_dial");
+assert(!linkedCalls.some((call) => call.type === "ha_dial/configure"), "a card must never send pages for a real Dial");
+linkedCard.hass = linkedHass;
+await settled();
+assert.equal(linkedCalls.length, 1, "HA's frequent state updates don't reload it");
+
+// Only the panel's preview goes live: off by default, with the warning, and sent with each input.
+const liveCalls = [];
+const liveCard = new Card();
+liveCard.isConnected = true;
+liveCard.setConfig({ device: "preview" });
+liveCard.hass = { connection: { subscribeMessage: async () => () => {} }, callWS: async (message) => { liveCalls.push(message); return { revision: liveCalls.length, deployment: "preview", scene: { regions: [], elements: [] }, frames: {} }; } };
+await settled();
+const liveBanner = liveCard.shadowRoot.querySelector(".live-banner");
+await liveCard.input("press");
+assert.equal(liveCalls.at(-1).live, undefined, "off by default");
+liveCard.setLive(true);
+assert.equal(liveBanner.hidden, false);
+await liveCard.inputQueue;
+assert.equal(liveCalls.at(-1).action, "ready", "going live starts from what's really there");
+await liveCard.input("press");
+assert.equal(liveCalls.at(-1).live, true);
+assert.equal(liveCard.shadowRoot.querySelector("[role=status]").textContent, "Operating your live house");
+liveCard.setLive(false);
+assert.equal(liveBanner.hidden, true);
+await liveCard.input("press");
+assert.equal(liveCalls.at(-1).live, undefined);
+assert.equal(liveCard.shadowRoot.querySelector("[role=status]").textContent, "Local preview");
+assert(fs.readFileSync("custom_components/ha_dial/www/ha-dial-card.js", "utf8").includes("Warning: changes made here are live"));
+
 globalThis.localStorage = { get getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); } };
 const blocked = new Card();
 blocked.setConfig({device:"preview"});

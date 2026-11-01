@@ -15,8 +15,8 @@ SOURCE = {
 def test_reset_one_device_clears_configuration_and_blocks_old_inputs(integration):
     async def run():
         i = integration
-        await i.code._ws_configure(i.hass, i.connection, {"id": 1, "device": "dial_one", "definition": SOURCE})
-        await i.code._ws_configure(i.hass, i.connection, {"id": 2, "device": "dial_two", "definition": SOURCE})
+        await i.code._ws_configure(i.hass, i.connection, {"id": 1, "save": True, "device": "dial_one", "definition": SOURCE})
+        await i.code._ws_configure(i.hass, i.connection, {"id": 2, "save": True, "device": "dial_two", "definition": SOURCE})
         i.connection.user.is_admin = False
         await i.code._ws_reset(i.hass, i.connection, {"id": 3, "device": "dial_one"})
         assert i.connection.send_error.call_args.args[1] == "unauthorized"
@@ -32,7 +32,7 @@ def test_reset_one_device_clears_configuration_and_blocks_old_inputs(integration
         i.hass.services.async_call.assert_not_called()
         await i.code._ws_definitions(i.hass, i.connection, {"id": 5})
         assert i.connection.send_result.call_args.args[1] == {"dial_two": SOURCE}
-        await i.code._ws_configure(i.hass, i.connection, {"id": 6, "device": "dial_one", "definition": SOURCE})
+        await i.code._ws_configure(i.hass, i.connection, {"id": 6, "save": True, "device": "dial_one", "definition": SOURCE})
         assert i.data["stored_definitions"]["dial_one"] == SOURCE
 
     asyncio.run(run())
@@ -75,7 +75,7 @@ def test_draft_isolation_saved_deployment_and_invalid_save(integration):
         assert i.code._navigator(i.hass, "preview_demo").current()["value"] == 55
         i.hass.services.async_call.assert_not_called()
         await i.code._ws_configure(
-            i.hass, i.connection, {"id": 2, "device": "demo_dial", "definition": SOURCE}
+            i.hass, i.connection, {"id": 2, "save": True, "device": "demo_dial", "definition": SOURCE}
         )
         assert i.data["stored_definitions"]["demo_dial"] == SOURCE
         assert (
@@ -85,13 +85,13 @@ def test_draft_isolation_saved_deployment_and_invalid_save(integration):
         await i.code._input(i.hass, "demo_dial", "press")
         page_id = i.code._navigator(i.hass, "demo_dial").view_id
         await i.code._ws_configure(
-            i.hass, i.connection, {"id": 3, "device": "demo_dial", "definition": SOURCE}
+            i.hass, i.connection, {"id": 3, "save": True, "device": "demo_dial", "definition": SOURCE}
         )
         assert i.code._navigator(i.hass, "demo_dial").view_id == page_id
         await i.code._ws_configure(
             i.hass,
             i.connection,
-            {"id": 4, "device": "demo_dial", "definition": {"pages": []}},
+            {"id": 4, "save": True, "device": "demo_dial", "definition": {"pages": []}},
         )
         assert i.connection.send_error.call_args.args[1] == "invalid_format"
         assert i.data["stored_definitions"]["demo_dial"] == SOURCE
@@ -179,7 +179,7 @@ def test_switch_cover_capabilities_services_and_preview(integration):
         }
         for device in ("preview_domains", "demo_domains"):
             await i.code._ws_configure(
-                i.hass, i.connection, {"id": 1, "device": device, "definition": source}
+                i.hass, i.connection, {"id": 1, "device": device, "definition": source, "save": True}
             )
             await i.code._input(i.hass, device, "touch", "switch.demo")
             i.hass.services.async_call.reset_mock()
@@ -250,7 +250,7 @@ def test_burst_coalesces_scenes_and_commands_do_not_wait_for_display(integration
         await i.code._ws_configure(
             i.hass,
             i.connection,
-            {"id": 1, "device": "burst_dial", "definition": SOURCE},
+            {"id": 1, "save": True, "device": "burst_dial", "definition": SOURCE},
         )
         await i.code._input(i.hass, "burst_dial", "press")
         await i.code._input(i.hass, "burst_dial", "press")
@@ -316,7 +316,7 @@ def test_state_confirmation_retains_target_until_confirmed_and_service_failure_c
         await i.code._ws_configure(
             i.hass,
             i.connection,
-            {"id": 1, "device": "feedback_dial", "definition": SOURCE},
+            {"id": 1, "save": True, "device": "feedback_dial", "definition": SOURCE},
         )
         await i.code._input(i.hass, "feedback_dial", "press")
         await i.code._input(i.hass, "feedback_dial", "press")
@@ -366,7 +366,7 @@ def test_immediate_eager_delivery_does_not_leave_a_finished_worker_cached(integr
         i.hass.services.async_call.side_effect = HomeAssistantError(
             "Demo transport not connected"
         )
-        message = {"id": 1, "device": "demo_dial", "definition": SOURCE}
+        message = {"id": 1, "save": True, "device": "demo_dial", "definition": SOURCE}
         await i.code._ws_configure(i.hass, i.connection, message)
         assert not i.data["scene_workers"], (
             "completed eager worker must not block future sends"

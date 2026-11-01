@@ -73,7 +73,7 @@ def test_unconfigured_dial_stays_in_onboarding(lifecycle):
         )
         i.hass.services.async_call.assert_not_called()
         await i.code._ws_configure(
-            i.hass, i.connection, {"id": 1, "device": "demo_dial", "definition": SOURCE}
+            i.hass, i.connection, {"id": 1, "save": True, "device": "demo_dial", "definition": SOURCE}
         )
         i.hass.services.async_call.reset_mock()
         case.listeners["esphome.ha_dial_input"][0](
@@ -115,7 +115,7 @@ def test_unload_clears_live_screens_and_blocks_late_input(lifecycle):
         i = case.i
         assert await i.code.async_setup_entry(i.hass, case.entry)
         await i.code._ws_configure(
-            i.hass, i.connection, {"id": 1, "device": "demo_dial", "definition": SOURCE}
+            i.hass, i.connection, {"id": 1, "save": True, "device": "demo_dial", "definition": SOURCE}
         )
         await i.code._input(i.hass, "demo_dial", "press")
         await i.code._input(i.hass, "demo_dial", "press")
@@ -169,7 +169,7 @@ def test_reload_restores_but_removal_requires_a_saved_card_to_restore(lifecycle)
         assert await i.code.async_unload_entry(i.hass, case.entry)
         await i.code.async_remove_entry(i.hass, case.entry)
         assert not case.saved.exists()
-        message = {"id": 1, "device": "demo_dial", "definition": SOURCE}
+        message = {"id": 1, "save": True, "device": "demo_dial", "definition": SOURCE}
         await i.code._ws_configure(i.hass, i.connection, message)
         assert i.connection.send_error.call_args.args[1] == "not_loaded"
         assert not case.saved.exists(), "an open card must not recreate removed storage"
@@ -192,7 +192,7 @@ def test_unload_reports_unreachable_display(lifecycle, caplog):
         i = case.i
         assert await i.code.async_setup_entry(i.hass, case.entry)
         await i.code._ws_configure(
-            i.hass, i.connection, {"id": 1, "device": "demo_dial", "definition": SOURCE}
+            i.hass, i.connection, {"id": 1, "save": True, "device": "demo_dial", "definition": SOURCE}
         )
         i.hass.services.async_call.side_effect = HomeAssistantError(
             "Demo device disconnected"
@@ -240,7 +240,7 @@ def test_removal_waits_for_save_and_rejects_queued_saves(lifecycle):
             await original_save(value)
 
         i.data["definition_store"].async_save = save
-        message = {"id": 1, "device": "demo_dial", "definition": SOURCE}
+        message = {"id": 1, "save": True, "device": "demo_dial", "definition": SOURCE}
         first = asyncio.create_task(i.code._ws_configure(i.hass, i.connection, message))
         await saving.wait()
         queued = asyncio.create_task(
@@ -257,3 +257,51 @@ def test_removal_waits_for_save_and_rejects_queued_saves(lifecycle):
         assert not i.data.get("scene_workers")
 
     asyncio.run(run())
+
+
+def _preview_light(i):
+    asyncio.run(
+        i.code._ws_configure(
+            i.hass,
+            i.connection,
+            {"id": 1, "device": "preview_live", "definition": {"pages": [{"id": "home", "title": "Home", "entities": ["light.example"]}]}},
+        )
+    )
+
+
+def test_a_preview_only_operates_real_devices_when_asked(integration):
+    i = integration
+    _preview_light(i)
+
+    async def run():
+        await i.code._input(i.hass, "preview_live", "press")
+        i.hass.services.async_call.reset_mock()
+        await i.code._input(i.hass, "preview_live", "press")
+        i.hass.services.async_call.assert_not_called()
+        await i.code._input(i.hass, "preview_live", "press", live=True)
+        i.hass.services.async_call.assert_called_once()
+        assert i.hass.services.async_call.call_args.args[0] == "light"
+        i.hass.services.async_call.reset_mock()
+        await i.code._input(i.hass, "preview_live", "press")
+        i.hass.services.async_call.assert_not_called()
+
+    asyncio.run(run())
+
+
+def test_going_live_needs_an_administrator(integration):
+    i = integration
+    _preview_light(i)
+    i.connection.user.is_admin = False
+    asyncio.run(i.code._ws_input(i.hass, i.connection, {"id": 2, "device": "preview_live", "action": "press", "live": True}))
+    assert i.connection.send_error.call_args.args[1] == "unauthorized"
+    i.hass.services.async_call.assert_not_called()
+
+
+def test_a_card_cannot_save_a_real_dial(integration):
+    i = integration
+    source = {"pages": [{"id": "home", "title": "Home"}]}
+    asyncio.run(i.code._ws_configure(i.hass, i.connection, {"id": 1, "device": "demo_dial", "definition": source}))
+    assert i.connection.send_error.call_args.args[1] == "not_allowed"
+    assert not i.data["stored_definitions"]
+    asyncio.run(i.code._ws_configure(i.hass, i.connection, {"id": 2, "device": "demo_dial", "definition": source, "save": True}))
+    assert i.data["stored_definitions"]["demo_dial"] == source

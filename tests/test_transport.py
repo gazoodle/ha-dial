@@ -11,7 +11,7 @@ def test_reconnect_and_service_registration_resend_without_polling(integration):
     async def run():
         i = integration
         await i.code._ws_configure(
-            i.hass, i.connection, {"id": 1, "device": "demo_dial", "definition": SOURCE}
+            i.hass, i.connection, {"id": 1, "save": True, "device": "demo_dial", "definition": SOURCE}
         )
         transport = importlib.import_module("dial_test.transport")
         updates, state_changes, cleanup, listeners = [], [], [], {}
@@ -76,7 +76,7 @@ def test_unchanged_saved_card_mount_resynchronises_without_resetting_navigation(
 ):
     async def run():
         i = integration
-        message = {"id": 1, "device": "demo_dial", "definition": SOURCE}
+        message = {"id": 1, "save": True, "device": "demo_dial", "definition": SOURCE}
         await i.code._ws_configure(i.hass, i.connection, message)
         await i.code._input(i.hass, "demo_dial", "press")
         page = i.code._navigator(i.hass, "demo_dial").view_id
