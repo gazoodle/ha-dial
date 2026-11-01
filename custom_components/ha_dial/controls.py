@@ -55,6 +55,7 @@ def control_state(entity_id: str, state: State | None) -> dict:
         "actions": actions,
         "position_known": position_known,
         "state": state.state if available and state is not None else "unavailable",
+        **({"device_class": attributes.get("device_class")} if domain == "cover" else {}),
         **extra,
     }
 

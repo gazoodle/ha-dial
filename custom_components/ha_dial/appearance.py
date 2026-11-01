@@ -69,7 +69,7 @@ NUMBERS = {
     "bar-width": ("Value", "Bar width", 24, 140, 64),
     "bar-count": ("Value", "Bar segments", 4, 24, 12),
     "bar-gap": ("Value", "Bar gap", 1, 8, 3),
-    "action-size": ("Actions", "Button radius", 12, 26, 17),
+    "action-size": ("Actions", "Button radius", 12, 26, 15),
     "action-gap": ("Actions", "Button gap", 0, 20, 6),
     "action-offset": ("Actions", "Button position", -24, 16, 0),
     "chrome-size": ("Back and home", "Size", 8, 18, 12),

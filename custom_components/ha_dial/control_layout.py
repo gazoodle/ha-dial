@@ -5,7 +5,7 @@ Domain graphics live in control_graphics.py.
 """
 
 from .canvas import Canvas
-from .control_graphics import GRAPHICS, NO_UNIT, gauge_ring, icon_name
+from .control_graphics import GRAPHICS, NO_UNIT, asks_itself, gauge_ring, icon_name
 
 ACTION_ICONS = {
     "open": "mdi:arrow-up", "close": "mdi:arrow-down", "stop": "mdi:stop", "play_pause": "mdi:play-pause",
@@ -79,6 +79,9 @@ def local_gauge(c: Canvas, view: dict, x, y, radius, start, end, width=2, under=
 
 
 def detail_text(view: dict) -> str:
+    # While asking to confirm, the question takes this line's place rather than sitting on top of it.
+    if view.get("confirmation"):
+        return ""
     if view.get("pending"):
         return "PENDING"
     if not view.get("available", True):
@@ -110,7 +113,8 @@ def _instrument(c, view, o, name):
 def _editorial(c, view, o, name):
     """Type alone: a large left-set value against a rule, with no instrument around it."""
     theme = c.theme
-    left, y = 44, 104 + o["value-offset"]
+    # Buttons take the lower edge, so the type moves up to keep its detail line clear of them.
+    left, y = 44, (96 if view.get("actions") or view.get("confirmation") else 104) + o["value-offset"]
     c.icon(icon_name(view, o), left + o["selected-icon-size"] / 2, 60, o["selected-icon-size"], theme["primary"])
     c.text(str(view.get("title", "")).upper(), left, 60 + o["selected-icon-size"], max(7, o["font-size"] - 4), theme["secondary"], align="start", tracking=o["tracking"], weight=1, max_width=150)
     size = o["value-size"] + 12
@@ -131,7 +135,7 @@ def _column(c, view, o, name):
     """A vertical stack of segments beside the value."""
     theme = c.theme
     count, gap, width = o["bar-count"], o["bar-gap"], o["bar-width"]
-    top, bottom = 52, 164
+    top, bottom = 52, 144 if view.get("actions") or view.get("confirmation") else 164
     height = (bottom - top - gap * (count - 1)) / count
     lit = _lit(view, count)
     left = 70 - width / 2 + 16
@@ -147,7 +151,7 @@ def _column(c, view, o, name):
     c.icon(icon_name(view, o), x, 74, o["selected-icon-size"], theme["primary"])
     value_element(c, view, o, x, 112 + o["value-offset"], o["value-size"], max_width=round(2 * (214 - x)))
     c.text(view.get("unit", ""), x, 112 + o["value-offset"] + o["value-size"] // 2 + 7, o["unit-size"], theme["primary"], tracking=1, weight=1)
-    c.text(detail_text(view), 120, (155 if view.get("actions") else 176) + o["detail-offset"], o["detail-size"], theme["quiet"], tracking=o["tracking"], weight=1, max_width=150)
+    c.text(detail_text(view), 120, (152 if view.get("actions") else 176) + o["detail-offset"], o["detail-size"], theme["quiet"], tracking=o["tracking"], weight=1, max_width=150)
     local_gauge(c, view, 120, 120, 106, -135, -45, o["selected-border"])
 
 
@@ -192,8 +196,10 @@ def _tumbler(c, view, o, name):
     for text, offset, size in ((above, -(height / 2 + 13), 12), (below, height / 2 + 13, 12)):
         c.text(text, 120, y + offset, size, theme["quiet"], tracking=0, max_width=width - 30)
     c.text(view.get("unit", ""), 120 + width / 2 - 14, y, o["unit-size"], theme["primary"], None if c.crisp else fill, tracking=1, weight=1)
-    c.icon(icon_name(view, o), 120, 47, o["selected-icon-size"] - 5, theme["secondary"])
-    c.text(detail_text(view), 120, (158 if view.get("actions") else 166) + o["detail-offset"], o["detail-size"], theme["quiet"], tracking=o["tracking"], weight=1, max_width=130)
+    # "Turn to cancel" takes this spot while asking.
+    if not view.get("confirmation"):
+        c.icon(icon_name(view, o), 120, 47, o["selected-icon-size"] - 5, theme["secondary"])
+    c.text(detail_text(view), 120, (154 if view.get("actions") else 166) + o["detail-offset"], o["detail-size"], theme["quiet"], tracking=o["tracking"], weight=1, max_width=130)
     local_gauge(c, view, 120, 120, 106, 60, 120, 2)
 
 
@@ -211,7 +217,8 @@ def _actions(c: Canvas, view: dict, o: dict) -> tuple[list, list]:
     actions = actions[:4]
     regions = []
     size, spacing = o["action-size"], 2 * o["action-size"] + o["action-gap"]
-    y = 183 + o["action-offset"]
+    # Clear of back and home, whose touch areas these once overlapped.
+    y = 176 + o["action-offset"]
     for index, action in enumerate(actions):
         x = round(120 + (index - (len(actions) - 1) / 2) * spacing)
         fill = c.theme["bg"] if c.crisp else c.theme["surface"]
@@ -233,8 +240,11 @@ def control_layout(c: Canvas, view: dict, o: dict) -> list[dict]:
         _top_pill(c, view, o)
     SHAPES[shape](c, view, o, name)
     if view.get("confirmation"):
-        c.text("CONFIRM " + str(view["confirmation"]).replace("_", " ").upper() + "?", 120, 161, o["detail-size"], theme["primary"], tracking=1, weight=1, max_width=150)
-        c.text("TURN TO CANCEL", 120, 40, 6, theme["secondary"], tracking=1)
+        if not (shape == "INSTRUMENT" and asks_itself(name, view)):
+            c.text("CONFIRM " + str(view["confirmation"]).replace("_", " ").upper() + "?", 120, 152, o["detail-size"], theme["primary"], tracking=1, weight=1, max_width=150)
+        # A clear strip, because this crosses the top of every ring.
+        c.pill(120, 41, 86, 11, theme["bg"], None, radius=2)
+        c.text("TURN TO CANCEL", 120, 41, 6, theme["secondary"], theme["bg"], tracking=1)
     _, regions = _actions(c, view, o)
     if view.get("domain") in {"light", "switch"} or (view.get("domain") == "cover" and "stop" in view.get("actions", [])):
         regions.append({"id": "control", "x": 120, "y": 116, "r": 30})

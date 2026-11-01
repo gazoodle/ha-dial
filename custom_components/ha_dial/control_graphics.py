@@ -122,17 +122,18 @@ def _media(c, view, o):
     _detail(c, {**view, "detail": f"VOLUME {round(view.get('value', 0))}%"}, o, y=151)
 
 
-def _cover(c, view, o):
-    """Slats drop with the position; 100 is open, so the lit slats are the covered part."""
+def _slats(c, left, top, width, height, percent, keep_clear=None):
+    """A door or blind whose slats drop with the position; 100 is open, so the lit slats are the covered part."""
     theme = c.theme
-    left, top, width, height = 68, 49, 104, 112
-    c.pill(120, top + height / 2, width, height, None if c.crisp else theme["surface"], theme["quiet"], 1, radius=7)
     under = None if c.crisp else theme["surface"]
-    count = 7
-    closed = round((100 - _percent(view)) * count / 100)
+    c.pill(left + width / 2, top + height / 2, width, height, under, theme["quiet"], 1, radius=7)
+    count = 6
+    closed = round((100 - percent) * count / 100)
     flat_on, flat_off = [], []
     for index in range(count):
-        y = top + 10 + index * (height - 20) / (count - 1)
+        y = top + 9 + index * (height - 18) / (count - 1)
+        if keep_clear and keep_clear[0] <= y <= keep_clear[1]:
+            continue
         target = flat_on if index < closed else flat_off
         for row in range(3 if not c.crisp else 2):
             target.extend((left + 6, y + row, left + width - 6, y + row))
@@ -140,9 +141,58 @@ def _cover(c, view, o):
         c.lines(flat_off, theme["grid"], under)
     if flat_on:
         c.lines(flat_on, theme["primary"], under)
+    return under
+
+
+def is_door(view: dict) -> bool:
+    """A cover that asks first can't be turned, so what matters is its state in words, not a number."""
+    return view.get("domain") == "cover" and bool(view.get("confirm"))
+
+
+def asks_itself(name: str, view: dict) -> bool:
+    """These have a large state line, and put their question there instead of a small line of its own."""
+    return name in {"SECURITY", "LOCK"} or (name == "COVER" and is_door(view))
+
+
+DOOR_WORDS = {"garage": "THE DOOR", "door": "THE DOOR", "gate": "THE GATE"}
+
+
+def _door(c, view, o):
+    from .control_layout import detail_text
+
+    theme = c.theme
+    percent = _percent(view)
+    state = str(view.get("state", "")).replace("_", " ").upper()
+    known = view.get("position_known", True)
+    _slats(c, 72, 48, 96, 78, percent)
+    y, size = 144 + o["value-offset"], o["value-size"] // 2
+    if view.get("confirmation"):
+        noun = DOOR_WORDS.get(view.get("device_class"))
+        question = str(view["confirmation"]).replace("_", " ").upper() + (f" {noun}" if noun else "") + "?"
+        c.text(question, 120, y, size - 2, theme["primary"], tracking=1, weight=1, max_width=184)
+    elif view.get("pending") or not view.get("available", True):
+        c.text(detail_text(view), 120, y, size, theme["text"], tracking=1, weight=1, max_width=184)
+    else:
+        moving = known and (state in {"OPENING", "CLOSING"} or 0 < percent < 100)
+        c.text(state + (f" {round(percent)}%" if moving else ""), 120, y, size, theme["text"], tracking=1, weight=1, max_width=184)
+
+
+def _cover(c, view, o):
+    """A cover you can turn keeps the live number, in a clear band so nothing crosses it."""
+    if is_door(view):
+        _door(c, view, o)
+        return
+    from .control_layout import number_width, readout
+
+    theme = c.theme
+    top, height, middle = 46, 92, 92
+    reach = o["value-size"] / 2 + 4
+    under = _slats(c, 68, top, 104, height, _percent(view), (middle - reach, middle + reach))
     c.gauge(120, top + height / 2, 68, 62, 118, _percent(view), theme["secondary"], 2, minimum=view.get("minimum", 0), maximum=view.get("maximum", 100))
-    _value(c, view, o, y=top + height / 2, under=under)
-    _detail(c, view, o)
+    _value(c, view, o, y=middle, under=under)
+    if readout(view) is None and view.get("unit"):
+        c.text(view["unit"], 120 + number_width(c, view, o["value-size"]) / 2 + 7, middle + 4 + o["value-offset"], o["unit-size"], theme["primary"], under, tracking=0, weight=1)
+    _detail(c, view, o, y=150)
 
 
 def _fan(c, view, o):
@@ -173,19 +223,26 @@ def _fan(c, view, o):
 def _sentinel(c, view, o):
     """Security and access: a tick ring around a large symbol, with a sober state beneath."""
     theme = c.theme
-    cy = 92
-    c.disc(120, cy, 54, theme["bg"] if c.crisp else c.tint(0.05), theme["grid"], 1)
-    c.ticks(120, cy, 50, 24, 3, theme["quiet"], 3, theme["secondary"], 6)
+    # Smaller and higher when buttons need the lower edge, so the state line clears them.
+    buttons = view.get("actions") or view.get("confirmation")
+    cy, ring = (88, 49) if buttons else (92, 54)
+    c.disc(120, cy, ring, theme["bg"] if c.crisp else c.tint(0.05), theme["grid"], 1)
+    c.ticks(120, cy, ring - 4, 24, 3, theme["quiet"], 3, theme["secondary"], 6)
     c.icon(icon_name(view, o), 120, cy, 44, theme["primary"], None if c.crisp else c.tint(0.05))
     state = str(view.get("state", "--")).replace("_", " ").upper()
     if not view.get("available", True):
         state = "--"
-    c.text(state, 120, 156, 15, theme["text"], tracking=1, weight=1, max_width=150)
     from .control_layout import detail_text
 
     pending = detail_text(view)
-    if pending in {"PENDING", "UNAVAILABLE"}:
-        c.text(pending, 120, 170, o["detail-size"], theme["quiet"], tracking=1, weight=1)
+    if view.get("confirmation"):
+        c.text(str(view["confirmation"]).replace("_", " ").upper() + "?", 120, 150, 14, theme["primary"], tracking=1, weight=1, max_width=170)
+    elif buttons:
+        c.text(pending if pending in {"PENDING", "UNAVAILABLE"} else state, 120, 150, 14, theme["text"], tracking=1, weight=1, max_width=170)
+    else:
+        c.text(state, 120, 156, 15, theme["text"], tracking=1, weight=1, max_width=150)
+        if pending in {"PENDING", "UNAVAILABLE"}:
+            c.text(pending, 120, 170, o["detail-size"], theme["quiet"], tracking=1, weight=1)
 
 
 def _vacuum(c, view, o):
@@ -198,7 +255,8 @@ def _vacuum(c, view, o):
         c.arc(120, cy, 56, -180, -180 + 360 * battery / 100, theme["primary"], 3)
     c.icon(icon_name(view, o), 120, cy - 8, 36, theme["secondary"])
     c.text(f"{round(battery)}%" if battery is not None else "--", 120, cy + 24, 14, theme["text"], tracking=0, weight=1)
-    c.text(str(view.get("state", "--")).replace("_", " ").upper(), 120, 158 if view.get("actions") else 168, 8, theme["primary"], tracking=2, weight=1, max_width=130)
+    if not view.get("confirmation"):
+        c.text(str(view.get("state", "--")).replace("_", " ").upper(), 120, 152 if view.get("actions") else 168, 8, theme["primary"], tracking=2, weight=1, max_width=130)
 
 
 def _measure(icon_size=30, lines=5):
@@ -284,7 +342,8 @@ def _scene(c, view, o):
         x, y = 90 + (index * 29) % 64, cy - 36 + (index * 17) % 28
         flat.extend((x, y, x, y))
     c.lines(flat, theme["secondary"], under)
-    c.text("ACTIVATE", 120, 155 if view.get("actions") else 168, 10, theme["text"], tracking=2, weight=1)
+    if not view.get("confirmation"):
+        c.text("ACTIVATE", 120, 150 if view.get("actions") else 168, 10, theme["text"], tracking=2, weight=1)
 
 
 def _selector(c, view, o):
@@ -316,7 +375,8 @@ def _switch(c, view, o):
     x = 120 + (width / 2 - height / 2) * (1 if on else -1)
     c.disc(x, 104, height / 2 - 6, theme["primary"] if on else theme["quiet"], None, 1, None if c.crisp else fill)
     c.icon(icon_name(view, o), 120 + (-30 if on else 30), 104, 22, theme["text"] if on else theme["quiet"], None if c.crisp else fill)
-    c.text("ON" if on else "OFF", 120, 148, 18, theme["text"], tracking=2, weight=1)
+    if not view.get("confirmation"):
+        c.text("ON" if on else "OFF", 120, 148, 18, theme["text"], tracking=2, weight=1)
 
 
 GRAPHICS = {
@@ -343,4 +403,4 @@ GRAPHICS = {
 }
 
 # These draw their own reading, so the generic unit below the value would be stray.
-NO_UNIT = {"MEDIA", "WEATHER", "SWITCH", "VACUUM", "TIMER", "CALENDAR", "SCENE", "SECURITY", "LOCK", "SELECTOR"}
+NO_UNIT = {"COVER", "MEDIA", "WEATHER", "SWITCH", "VACUUM", "TIMER", "CALENDAR", "SCENE", "SECURITY", "LOCK", "SELECTOR"}

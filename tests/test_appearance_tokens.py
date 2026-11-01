@@ -1,7 +1,9 @@
 """The checks that make a style real: its settings work, it looks distinct and its text fits."""
 
 import json
+import sys
 from itertools import combinations
+from math import hypot
 
 import pytest
 
@@ -145,3 +147,112 @@ def test_solid_bands_leave_no_unpainted_pixels(dial):
         if 66 <= hypot(x - 120, y - 120) <= 73
     )
     assert holes == 0
+
+
+ACTIONS = (
+    ("light", "LIGHT", ["toggle"]),
+    ("cover", "COVER", ["open", "stop", "close"]),
+    ("media_player", "MEDIA", ["previous", "play_pause", "next"]),
+    ("alarm_control_panel", "SECURITY", ["disarm", "arm_home", "arm_away", "arm_night"]),
+)
+
+
+@pytest.mark.parametrize("raster", ["smooth", "crisp"])
+@pytest.mark.parametrize("shape", SHAPES)
+@pytest.mark.parametrize("domain,base,actions", ACTIONS)
+def test_action_buttons_never_share_a_touch_area_with_back_or_home(dial, raster, shape, domain, base, actions):
+    scene = dial.load("scene")
+    resolved = scene.compile_scene({"kind": "control", "id": "c", "domain": domain, "title": "Example", "style": f"CTL-{base}-{shape}", "back": True, "actions": actions, "appearance": {"raster": raster}, **LEVEL})
+    chrome = [region for region in resolved["regions"] if region["id"] in {"back", "home"}]
+    buttons = [region for region in resolved["regions"] if region["id"] in actions]
+    assert len(buttons) == len(actions) and len(chrome) == 2
+    for button in buttons:
+        for other in chrome:
+            assert hypot(button["x"] - other["x"], button["y"] - other["y"]) >= button["r"] + other["r"], (button, other)
+
+
+def test_the_confirm_question_replaces_the_state_line(dial):
+    layout = dial.load("control_layout")
+    assert layout.detail_text({"state": "closed", "confirmation": "open"}) == ""
+    assert layout.detail_text({"state": "closed"}) == "CLOSED"
+
+
+def door(dial, raster="smooth", **values):
+    scene = dial.load("scene")
+    return scene.compile_scene({"kind": "control", "id": "c", "domain": "cover", "title": "Garage door", "style": "CTL-COVER-INSTRUMENT", "back": True, "confirm": True, "available": True, "actions": ["open", "stop", "close"], "appearance": {"raster": raster}, "value": 0, "state": "closed", **values})
+
+
+def spoken(dial, **values):
+    """The door's main line, captured as it's drawn."""
+    canvas = dial.load("canvas")
+    door(dial)  # Loads the modules the capture below replaces a method on.
+    said = []
+    original = canvas.Canvas.text
+
+    def capture(self, value, *args, **kwargs):
+        said.append(value)
+        return original(self, value, *args, **kwargs)
+
+    scene = sys.modules["dial_test.scene"]
+    scene.Canvas.text = capture
+    try:
+        door(dial, **values)
+    finally:
+        scene.Canvas.text = original
+    return said
+
+
+@pytest.mark.parametrize(
+    "values,expected",
+    [
+        ({}, "CLOSED"),
+        ({"state": "open", "value": 100}, "OPEN"),
+        ({"state": "opening", "value": 40}, "OPENING 40%"),
+        ({"state": "opening", "value": 100, "position_known": False}, "OPENING"),
+        ({"confirmation": "open", "device_class": "garage"}, "OPEN THE DOOR?"),
+        ({"confirmation": "close", "device_class": "gate"}, "CLOSE THE GATE?"),
+        ({"confirmation": "open"}, "OPEN?"),
+        ({"pending": True}, "PENDING"),
+    ],
+)
+def test_a_door_says_what_it_is_doing_in_words(dial, values, expected):
+    said = spoken(dial, **values)
+    assert expected in said, said
+    assert not any(text.startswith("CONFIRM") for text in said), "the door asks in its own line"
+
+
+def test_a_cover_you_can_turn_keeps_its_live_number_and_a_door_has_none(dial):
+    scene = dial.load("scene")
+    blind = scene.compile_scene({"kind": "control", "id": "c", "domain": "cover", "title": "Blind", "style": "CTL-COVER-INSTRUMENT", "continuous": True, "available": True, "actions": ["open", "stop", "close"], "value": 40, "state": "open", "unit": "%"})
+    assert any(element["op"] == "number" for element in blind["elements"])
+    assert any(element["op"] == "gauge" for element in blind["elements"])
+    shut = door(dial)
+    assert not any(element["op"] in {"number", "gauge"} for element in shut["elements"])
+
+
+CONFIRMED = (
+    ("lock", "CTL-LOCK-INSTRUMENT", {"state": "locked", "actions": ["unlock"], "confirmation": "unlock"}, "UNLOCK?", "LOCKED"),
+    ("alarm_control_panel", "CTL-SECURITY-INSTRUMENT", {"state": "armed_away", "actions": ["disarm"], "confirmation": "disarm"}, "DISARM?", "ARMED AWAY"),
+    ("scene", "CTL-SCENE-INSTRUMENT", {"actions": ["activate"], "confirmation": "activate"}, "CONFIRM ACTIVATE?", "ACTIVATE"),
+    ("switch", "CTL-SWITCH-INSTRUMENT", {"active": True, "state": "on", "confirmation": "toggle"}, "CONFIRM TOGGLE?", "ON"),
+    ("vacuum", "CTL-VACUUM-INSTRUMENT", {"state": "docked", "actions": ["start"], "confirmation": "start"}, "CONFIRM START?", "DOCKED"),
+)
+
+
+@pytest.mark.parametrize("domain,style,values,question,state", CONFIRMED)
+def test_asking_replaces_the_state_word_wherever_it_would_land(dial, domain, style, values, question, state):
+    scene = dial.load("scene")
+    said = []
+    original = scene.Canvas.text
+
+    def capture(self, value, *args, **kwargs):
+        said.append(value)
+        return original(self, value, *args, **kwargs)
+
+    scene.Canvas.text = capture
+    try:
+        scene.compile_scene({"kind": "control", "id": "c", "domain": domain, "title": "Example", "style": style, "back": True, "confirm": True, "available": True, "value": 0, **values})
+    finally:
+        scene.Canvas.text = original
+    assert question in said, said
+    assert state not in said, said

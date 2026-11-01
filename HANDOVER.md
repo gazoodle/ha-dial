@@ -31,10 +31,11 @@ inspected contact sheets. The owner reviews sheets by phone; an approved sheet c
   older code is refused by HA. Live operation has only run against fakes.
 - b24 reduces the dashboard card's editor to choosing a Dial and removes the card's Preview mode, and b25 adds Follow
   Dial. The card editor, Follow Dial and live switch have only run against test stand-ins, so check them in a real browser.
+- b26 splits `__init__.py` and b27 fixes the live banner and reworks door and confirm screens; committed, not deployed. The
+  panel and card have now run in headless Chromium against a stand-in for HA's websocket (scratch only, not in the suite).
 - b21 adds Explorer (`explorer.py`) and b20 the cover safety fixes. Explorer has only
   run against stand-in registries shaped from HA's source, with its HA calls type-checked. First real checks: a live home,
-  rebuilds as the registries change and after an HA restart, and the panel's Explorer settings. The cover control's
-  confirm screen is cramped: "CLOSED" sits on a bar and touches "CONFIRM OPEN?".
+  rebuilds as the registries change and after an HA restart, and the panel's Explorer settings. 
 - Until 2026-10-31 the scratch Pyright config checked nothing, because its paths weren't relative, so earlier clean results
   meant little. It now covers the integration with HA's types; the one remaining error is `aiohttp` missing from the venv.
 - b19 adds Snake navigation (`snake_path.py`). Its dialog has only run against test stubs;

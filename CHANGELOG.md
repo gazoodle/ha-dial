@@ -1,5 +1,12 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b27
+
+- Fix the Operate live house warning never appearing: each redraw of the preview blanked and hid it.
+- The help line under Try your Dial now wraps instead of widening the panel.
+- Doors, gates and other covers that need confirming now say their state in words, such as CLOSED or OPENING 40%, and ask in a large line, such as OPEN THE DOOR?. Covers you can turn keep their live number, in a clear band in the graphic.
+- On every control, the confirm question replaces the state line instead of overlapping it, and action buttons no longer share a touch area with Back and Home.
+
 ## 2026.10.1-b26
 
 - Internal: the websocket commands moved out of the integration's main file into `commands/`. No change in behaviour.

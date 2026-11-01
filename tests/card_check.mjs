@@ -423,7 +423,12 @@ assert.equal(liveBanner.hidden, true);
 await liveCard.input("press");
 assert.equal(liveCalls.at(-1).live, undefined);
 assert.equal(liveCard.shadowRoot.querySelector("[role=status]").textContent, "Local preview");
-assert(fs.readFileSync("custom_components/ha_dial/www/ha-dial-card.js", "utf8").includes("Warning: changes made here are live"));
+const cardSource = fs.readFileSync("custom_components/ha_dial/www/ha-dial-card.js", "utf8");
+assert(cardSource.includes("Warning: changes made here are live"));
+// The error display finds the first alert, so the banner must never be one, or each redraw blanks and hides it.
+assert.equal(cardSource.match(/role="alert"/g).length, 1, "only the error line may be an alert");
+assert(cardSource.indexOf('class="live-banner"') > 0 && !/class="live-banner"[^>]*role=/.test(cardSource));
+assert(fs.readFileSync("custom_components/ha_dial/www/panel.js", "utf8").includes(".preview-note{width:0;min-width:100%}"), "the note wraps rather than widening the panel");
 
 globalThis.localStorage = { get getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); } };
 const blocked = new Card();

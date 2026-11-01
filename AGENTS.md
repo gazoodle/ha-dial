@@ -73,6 +73,10 @@ Explorer never calls `async_should_expose`, because that saves a default and so 
 Turning the dial never moves a cover that needs confirming, and Stop never waits on a prompt. Why: a
 garage door could move on an accidental turn, and stopping one is the safe action.
 
+A door or gate that needs confirming shows its state in words, because it can't be turned; a cover you can
+turn keeps its live number. A question replaces the state line rather than sitting beside it. Why: the owner
+approved this on 2026-11-01, after the confirm text collided with the state line on every control.
+
 Layouts declare the settings they read in `appearance.py`, and the dialog is generated from that
 table. `tests/test_appearance_tokens.py` fails on a declared setting with no effect, on two styles
 for a domain that draw the same scene, and on glyph masks in Crisp. Why: 31 of 72 slider positions
