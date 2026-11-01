@@ -305,3 +305,67 @@ def test_a_card_cannot_save_a_real_dial(integration):
     assert not i.data["stored_definitions"]
     asyncio.run(i.code._ws_configure(i.hass, i.connection, {"id": 2, "device": "demo_dial", "definition": source, "save": True}))
     assert i.data["stored_definitions"]["demo_dial"] == source
+
+
+BROWSE_SOURCE = {"pages": [{"id": "home", "title": "Home", "entities": ["light.example"]}]}
+
+
+def _saved_dial(i):
+    asyncio.run(i.code._ws_configure(i.hass, i.connection, {"id": 1, "device": "demo_dial", "definition": BROWSE_SOURCE, "save": True}))
+
+
+def _browse(i, session="preview_card"):
+    asyncio.run(i.code._ws_browse(i.hass, i.connection, {"id": 2, "device": session, "dial": "demo_dial"}))
+
+
+def test_a_browsing_card_operates_real_devices_on_its_own_screen(integration):
+    i = integration
+    _saved_dial(i)
+    i.connection.user.is_admin = False  # Any user who can see a dashboard card.
+    _browse(i)
+    assert i.data["definition_sources"]["preview_card"]["preview_of"] == "demo_dial"
+
+    async def run():
+        ask = lambda action, item=None: i.code._ws_input(i.hass, i.connection, {"id": 3, "device": "preview_card", "action": action, **({"item": item} if item else {})})
+        await ask("touch", "light.example")
+        assert i.data["navigators"]["preview_card"].control["entity_id"] == "light.example"
+        assert i.data["navigators"]["demo_dial"].control is None, "the Dial's own screen doesn't move"
+        i.hass.services.async_call.reset_mock()
+        await ask("press")
+        i.hass.services.async_call.assert_called_once()
+        assert i.hass.services.async_call.call_args.args[0] == "light"
+
+    asyncio.run(run())
+
+
+def test_a_browsing_card_cannot_take_over_a_draft_or_browse_nothing(integration):
+    i = integration
+    i.connection.user.is_admin = False
+    _browse(i)
+    assert i.connection.send_error.call_args.args[1] == "not_configured", "no saved pages yet"
+    assert "preview_card" not in i.data.get("navigators", {})
+
+    i.connection.user.is_admin = True
+    _saved_dial(i)
+    asyncio.run(i.code._ws_configure(i.hass, i.connection, {"id": 4, "device": "preview_draft", "definition": {"pages": [{"id": "home", "title": "Draft"}]}}))
+    _browse(i, "preview_draft")
+    assert i.connection.send_error.call_args.args[1] == "invalid_format"
+    assert i.data["definition_sources"]["preview_draft"]["pages"][0]["title"] == "Draft"
+    _browse(i, "demo_dial")
+    assert i.connection.send_error.call_args.args[1] == "invalid_format", "a real Dial isn't a card's screen"
+
+
+def test_a_browsing_card_follows_saves_and_resets(integration):
+    i = integration
+    _saved_dial(i)
+    _browse(i)
+    updated = {"pages": [{"id": "home", "title": "Renamed", "entities": ["light.example"]}]}
+    asyncio.run(i.code._ws_configure(i.hass, i.connection, {"id": 5, "device": "demo_dial", "definition": updated, "save": True}))
+    assert i.data["navigators"]["preview_card"].current()["title"] == "Renamed"
+
+    i.connection.send_error.reset_mock()
+    asyncio.run(i.code._ws_reset(i.hass, i.connection, {"id": 6, "device": "demo_dial"}))
+    i.hass.services.async_call.reset_mock()
+    asyncio.run(i.code._ws_input(i.hass, i.connection, {"id": 7, "device": "preview_card", "action": "press"}))
+    assert i.connection.send_error.call_args.args[1] == "not_configured"
+    i.hass.services.async_call.assert_not_called()

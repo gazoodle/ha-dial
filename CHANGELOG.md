@@ -1,5 +1,9 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b25
+
+- New card setting, Follow the Dial's screen, on by default. Off, the card browses on its own, so using a dashboard doesn't disturb the Dial on the wall. It still operates real devices, and it follows saved changes to the Dial's pages.
+
 ## 2026.10.1-b24
 
 - A dashboard card's only setting is now which Dial it shows. Its pages, theme, template and Preview options are gone, and saving a card clears any it still held. All editing is in the panel.

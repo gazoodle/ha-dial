@@ -40,7 +40,7 @@ class HaDialCard extends HTMLElement {
   setConfig(config) {
     const device = String(config?.device || "").replaceAll("-", "_");
     if (device && !/^[a-z0-9_]{1,64}$/.test(device)) throw new Error("Invalid HA Dial device name");
-    const next = { device: device === "preview" ? "" : device };
+    const next = { device: device === "preview" ? "" : device, ...(config?.follow === false ? { follow: false } : {}) };
     if (JSON.stringify(next) !== JSON.stringify(this.config)) this.configVersion++;
     this.config = next;
     this._build();
@@ -100,15 +100,22 @@ class HaDialCard extends HTMLElement {
   set hass(hass) { this._hass = hass; this.load(); }
 
   _device() {
-    if (this.draftDefinition) return this.draftDevice;
-    // Being added or edited on a dashboard: show the Dial on a device of its own, so trying it is safe.
+    if (this.draftDefinition || this._isBeingEdited() || this.config.follow === false) return this.draftDevice;
+    return this.config.device;
+  }
+
+  // Being added or edited on a dashboard: it shows the Dial on a device of its own, so trying it is safe.
+  _isBeingEdited() {
     for (let node = this; node; node = node.parentNode || node.getRootNode?.().host) {
       if (["HUI-DIALOG-EDIT-CARD", "HUI-DIALOG-CREATE-CARD"].includes(node.tagName) ||
           (["HUI-CARD", "HUI-SECTION"].includes(node.tagName) && (node.preview || node.hasAttribute?.("preview"))))
-        return this.draftDevice;
+        return true;
     }
-    return this.config.device;
+    return false;
   }
+
+  // Follow Dial off: its own screen on the Dial's pages, still operating real devices.
+  _isBrowsing() { return !this.draftDefinition && this.config.follow === false && !this._isBeingEdited(); }
 
   async _savedPages() {
     const saved = (await this._hass.callWS({ type: "ha_dial/definitions" }))[this.config.device];
@@ -150,13 +157,15 @@ class HaDialCard extends HTMLElement {
           continue;
         }
         const device = this._device(), version = this.configVersion, real = !device.startsWith("preview_");
-        const key = this.draftDefinition ? `${device}:${JSON.stringify(this.draftDefinition)}` : `${device}:${this.config.device}`;
+        const browsing = this._isBrowsing();
+        const key = this.draftDefinition ? `${device}:${JSON.stringify(this.draftDefinition)}` : `${device}:${this.config.device}:${browsing}`;
         if (key === this.attemptedKey) continue;
         this.attemptedKey = key;
         try {
-          const definition = real ? undefined : this.draftDefinition || await this._savedPages();
+          const definition = real || browsing ? undefined : this.draftDefinition || await this._savedPages();
           const result = real
             ? await this._hass.callWS({ type: "ha_dial/view", device })
+            : browsing ? await this._hass.callWS({ type: "ha_dial/browse", device, dial: this.config.device })
             : await this._hass.callWS({ type: "ha_dial/configure", device, definition });
           if (!this.isConnected || version !== this.configVersion) { this.needsLoad = true; continue; }
           if (this.subscribedDevice !== device) {
@@ -165,7 +174,7 @@ class HaDialCard extends HTMLElement {
             this.subscribedDevice = device;
             const unsubscribe = await this._hass.connection.subscribeMessage((event) => {
               if (this.isConnected && this._device() === device) this.accept(event);
-            }, { type: "ha_dial/subscribe", device, ...(device.startsWith("preview_") ? { definition } : {}) });
+            }, { type: "ha_dial/subscribe", device, ...(definition ? { definition } : {}) });
             if (!this.isConnected || this._device() !== device) { unsubscribe(); continue; }
             this.unsubscribe = unsubscribe;
           }
@@ -209,7 +218,7 @@ class HaDialCard extends HTMLElement {
       status.setAttribute("role", "status");
       this.shadowRoot.querySelector(".stage").append(status);
     }
-    status.textContent = this.frameError ? `Dial image: ${this.frameError}` : this.live ? "Operating your live house" : ({ preview: "Local preview", waiting: "Waiting for ESPHome device", sent: "Scene sent · awaiting device", applied: "Scene applied on device", failed: "Device deployment failed" })[this.deployment] || "";
+    status.textContent = this.frameError ? `Dial image: ${this.frameError}` : this.live ? "Operating your live house" : this._isBrowsing() ? "Browsing separately from the Dial" : ({ preview: "Local preview", waiting: "Waiting for ESPHome device", sent: "Scene sent · awaiting device", applied: "Scene applied on device", failed: "Device deployment failed" })[this.deployment] || "";
     if (this.scene) {
       const canvas = this.shadowRoot.querySelector("canvas");
       canvas.setAttribute("aria-label", this.scene.label || "HA Dial preview");

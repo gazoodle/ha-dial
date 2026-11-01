@@ -100,7 +100,8 @@ assert.deepEqual(deviceOptions(), [], "no Preview: a card with no Dial chosen si
 const dialServices = { demo_dial_ha_dial_show_view: {}, other_dial_ha_dial_show_view: {}, unrelated_restart: {} };
 picker.hass = { services: { esphome: dialServices } };
 assert.deepEqual(deviceOptions(), [{value:"demo_dial",label:"demo-dial"}, {value:"other_dial",label:"other-dial"}]);
-assert.deepEqual(picker.querySelector(".settings").schema.map((field) => field.name), ["device"], "it's the only setting");
+assert.deepEqual(picker.querySelector(".settings").schema.map((field) => field.name), ["device", "follow"], "nothing about pages");
+assert.equal(picker.querySelector(".settings").data.follow, true, "follows the Dial unless told otherwise");
 const pickerSchema = picker.querySelector(".settings").schema;
 picker.hass = { services: { esphome: dialServices }, states: {} };
 assert.equal(picker.querySelector(".settings").schema, pickerSchema, "unrelated state changes do not rebuild the selector");
@@ -111,6 +112,9 @@ assert.deepEqual(deviceOptions().at(-1), {value:"demo-dial",label:"demo-dial (un
 assert.equal(picker.config.device, "demo-dial", "discovery changes must not retarget the card");
 picker.querySelector(".settings").events["value-changed"]({stopPropagation(){},detail:{value:{device:"other_dial"}}});
 assert.deepEqual(picker.lastEvent.detail.config, { type: "custom:ha-dial-card", device: "other_dial" }, "saving clears what an old card still held");
+picker.querySelector(".settings").events["value-changed"]({stopPropagation(){},detail:{value:{device:"other_dial",follow:false}}});
+assert.deepEqual(picker.lastEvent.detail.config, { type: "custom:ha-dial-card", device: "other_dial", follow: false });
+assert.equal(picker.config.follow, false);
 assert.deepEqual(Card.getStubConfig({ services: { esphome: dialServices } }), { device: "demo_dial" }, "a new card starts on a Dial");
 assert.deepEqual(Card.getStubConfig({}), {});
 assert.equal(typeof Editor.prototype.setEntities, "undefined", "no page editing is left in the card's editor");
@@ -352,6 +356,29 @@ await settled();
 const editingConfigure = linkedCalls.find((call) => call.type === "ha_dial/configure");
 assert(editingConfigure.device.startsWith("preview_"));
 assert.equal(editingConfigure.definition.pages[0].title, "Saved");
+
+// Follow Dial off: its own screen, from pages HA supplies, without the card sending any.
+linkedCalls.length = 0;
+const browsingCard = new Card();
+browsingCard.isConnected = true;
+browsingCard.setConfig({ device: "demo_dial", follow: false, pages: [{ id: "home", title: "Stale copy", parent: "" }] });
+browsingCard.hass = linkedHass;
+await settled();
+assert.deepEqual(linkedCalls.map((call) => call.type), ["ha_dial/browse"]);
+assert(linkedCalls[0].device.startsWith("preview_"), "its own screen");
+assert.equal(linkedCalls[0].dial, "demo_dial");
+assert.equal(browsingCard.shadowRoot.querySelector("[role=status]").textContent, "Browsing separately from the Dial");
+await browsingCard.input("press");
+assert.equal(linkedCalls.at(-1).device, linkedCalls[0].device, "operating it leaves the Dial's own screen alone");
+assert.equal(linkedCalls.at(-1).live, undefined, "HA decides, not the card");
+linkedCalls.length = 0;
+const editingBrowser = new Card();
+editingBrowser.isConnected = true;
+editingBrowser.parentNode = { tagName: "HUI-DIALOG-EDIT-CARD" };
+editingBrowser.setConfig({ device: "demo_dial", follow: false });
+editingBrowser.hass = linkedHass;
+await settled();
+assert(linkedCalls.some((call) => call.type === "ha_dial/configure") && !linkedCalls.some((call) => call.type === "ha_dial/browse"), "being edited, it's still only a safe preview");
 
 // With no Dial chosen, or an old Preview card, it asks and calls nothing.
 linkedCalls.length = 0;

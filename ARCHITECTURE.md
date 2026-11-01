@@ -362,7 +362,9 @@ the definition after a one-second settle, and `Navigator.restore` returns to the
 
 ## Cards and the panel
 
-The panel is the only editor. A dashboard card's configuration is one Dial: it shows that Dial's saved pages
+The panel is the only editor. A dashboard card's configuration is a Dial and whether to follow its screen. With
+`follow: false`, `ha_dial/browse` gives the card its own Navigator from the Dial's saved pages, whose inputs act on
+real devices. By default it shows that Dial's saved pages
 through `ha_dial/view`, shares its Navigator, and operates it with `ha_dial/input`. While being added or edited
 on a dashboard it shows them on an isolated preview device. The panel's preview is the same element, given a
 draft through `setDraft`. `ha_dial/configure` refuses a real Dial without `save: true`, which only the panel

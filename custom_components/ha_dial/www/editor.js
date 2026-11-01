@@ -114,8 +114,8 @@ export class PagesEditor extends HTMLElement {
   }
 }
 
-// A dashboard card views and operates a Dial, so the only thing to choose is which one. Saving this
-// also clears anything an older card still holds, such as its own copy of the pages.
+// A dashboard card views and operates a Dial, so the choices are which one, and whether to share its
+// screen. Saving this also clears anything an older card still holds, such as its own copy of the pages.
 class HaDialCardEditor extends HTMLElement {
   setConfig(config) {
     this.config = config;
@@ -130,22 +130,23 @@ class HaDialCardEditor extends HTMLElement {
       this.initialised = true;
       this.innerHTML = `<ha-form class="settings"></ha-form><p class="hint">Pages are edited in the HA Dial panel. Operating this card operates the real Dial.</p>`;
       const form = this.querySelector(".settings");
-      form.computeLabel = () => "Dial";
+      form.computeLabel = (field) => ({ device: "Dial", follow: "Follow the Dial's screen" })[field.name];
+      form.computeHelper = (field) => field.name === "follow" ? "On, this card and the Dial show the same screen. Off, this card browses on its own, and still operates real devices." : undefined;
       form.addEventListener("value-changed", (event) => {
         event.stopPropagation();
-        const config = { ...(this.config.type ? { type: this.config.type } : {}), device: event.detail.value.device };
+        const config = { ...(this.config.type ? { type: this.config.type } : {}), device: event.detail.value.device, ...(event.detail.value.follow === false ? { follow: false } : {}) };
         this.config = config;
         this.dispatchEvent(new CustomEvent("config-changed", { detail: { config }, bubbles: true, composed: true }));
       });
     }
     const form = this.querySelector(".settings"), services = this._hass.services?.esphome, device = this.config.device === "preview" ? "" : this.config.device || "";
-    form.hass = this._hass; form.data = { device };
+    form.hass = this._hass; form.data = { device, follow: this.config.follow !== false };
     if (!form.schema || services !== this.deviceServices || device !== this.deviceSelection) {
       const selected = device.replaceAll("-", "_");
       const devices = dialNames(this._hass);
       const options = devices.map((name) => ({ value: name === selected ? device : name, label: name.replaceAll("_", "-") }));
       if (selected && !devices.includes(selected)) options.push({ value: device, label: `${device} (unavailable)` });
-      form.schema = [{ name: "device", required: true, selector: { select: { mode: "dropdown", options } } }];
+      form.schema = [{ name: "device", required: true, selector: { select: { mode: "dropdown", options } } }, { name: "follow", selector: { boolean: {} } }];
       this.deviceServices = services;
       this.deviceSelection = device;
     }
