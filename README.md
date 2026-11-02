@@ -1,638 +1,272 @@
-# M5Dial Controller for Home Assistant
+# HA Dial
 
-A beautiful, dynamically assigned physical control surface for Home Assistant.
+Turn an [M5Stack Dial](https://docs.m5stack.com/en/homeassistant/devices/dial) into a physical control surface for Home Assistant.
 
-Home Assistant chooses what the Dial controls. The Dial chooses the right interaction and presentation for it.
+You arrange pages and controls in a Home Assistant panel, and the Dial shows them on its round screen. Turn to move or adjust, press to act, and touch for anything the dial can't express. Changing what it controls never needs a firmware rebuild.
 
-Turn it. Press it. Done.
+![Twelve Dial screens: navigation styles, watch and data faces, light, thermostat and door controls, and a camera](docs/screens.png)
 
-> Status: first deployable page tree with NAV-ORBIT menus and light, switch and cover instruments
+*Every screen above comes from the same renderer the Dial uses, with invented names.*
 
-The rendering and interaction boundaries are defined in [ARCHITECTURE.md](ARCHITECTURE.md).
+> **Status: prototype.** This is built and tested in development, but it's early. There's no HACS package or release yet, and much of it has only run against test stand-ins. See [What hasn't been proven yet](#what-hasnt-been-proven-yet).
 
-## The idea
+## What it does
 
-M5Dial projects support a range of interface and deployment models. This project focuses on one control at a time, assigned dynamically by Home Assistant:
+- **13 navigation styles**, from Orbit and Petals to List, Grid and Snake. See [Navigation styles](#navigation-styles).
+- **19 watch, clock and data faces**, plus 3 camera styles, showing real sources from HA.
+- **Controls for 23 kinds of entity**, with up to five styles each.
+- **Explorer:** a page that fills itself from your floors, areas and entities.
+- **Two drawing modes:** Smooth, and Crisp, which is built from line-step lines and circles.
+- **Control over the details:** padding, sizes, gaps, widths, borders, positions and colours, with a live preview.
+- **Dashboard cards** that show a Dial and operate it.
+- **Local only:** no cloud, and no HA access token stored on the Dial.
 
-```text
-Home Assistant selects an entity and control profile
-                         ↓
-             Dial displays its current state
-                         ↓
-               turn / press / touch
-                         ↓
-             command goes back to HA
-                         ↓
-               HA returns confirmed state
-```
+## How it fits together
 
-Examples:
-
-- Walk into the kitchen and the Dial controls the kitchen speaker.
-- Start watching television and it controls TV volume.
-- Select the living-room thermostat from the Dial itself.
-- Assign a light from an automation or dashboard.
-- Show a temperature sensor as a read-only ambient display.
-- Return to a quiet clock when nothing is assigned.
-
-Changing the controlled entity must never require recompiling the firmware.
-
-## Goals
-
-- Excellent UX designed specifically for the M5Dial’s round display and physical encoder.
-- Dynamic entity assignment from Home Assistant.
-- A small set of polished, reusable control profiles.
-- Immediate visual feedback while turning the dial.
-- Honest disconnected, unavailable and pending states.
-- Local Home Assistant operation with no cloud dependency.
-- Simple standalone installation for any Home Assistant setup.
-- A protocol that other Home Assistant tools can drive.
-
-## Non-goals
-
-- A multi-page Lovelace dashboard running on the Dial.
-- Displaying every entity or capability Home Assistant exposes.
-- Replicating the full Lovelace interface on a 240 × 240 screen.
-- Inventing an interface for every possible entity.
-- Requiring a particular Home Assistant setup or companion project.
-- Storing a powerful Home Assistant access token on the Dial.
-- Supporting several hardware families before the M5Dial experience is right.
-
-## Control profiles
-
-The visual and physical interaction is selected by a control profile, not merely by the Home Assistant domain.
-
-| Profile | Turn | Press | Additional control |
-| --- | --- | --- | --- |
-| `dimmer` | Set brightness, white or colour | Toggle | Button to choose what turning sets |
-| `thermostat` | Set target temperature | Toggle HVAC | Select mode |
-| `volume` | Set volume | Mute | Play/pause |
-| `seek` | Nudge position | Play/pause | Previous/next |
-| `selector` | Move through options | Select | Long press to leave |
-| `position` | Set cover position | Stop | Open/close |
-| `toggle` | — | Toggle | — |
-| `readout` | — | — | Show sensor detail |
-
-Home Assistant may infer a sensible default profile from an entity’s domain and supported features, but callers can explicitly choose another profile.
-
-A `media_player`, for example, might use `volume`, `seek` or `selector`.
-
-## Interaction model
-
-### Focused control
-
-When an entity is assigned:
-
-- The outer arc communicates its current value and range.
-- The centre shows the primary value or state.
-- The entity name remains short and readable.
-- Turning changes the primary value.
-- Pressing performs the profile’s primary action.
-- Touch exposes only controls that cannot be expressed naturally by the dial.
-- Long press leaves the current interaction.
-
-The display updates immediately while the user turns. Home Assistant updates are throttled, and confirmed state is reconciled without visually jumping backwards.
-
-### Entity picker
-
-Home Assistant can provide an ordered list of favourite entities.
-
-- Turn to move through the list.
-- Press to select.
-- Long press to leave.
-- Only explicitly selected or labelled entities appear.
-
-The picker is not a browser for every entity in the home.
-
-### Idle
-
-When no entity is assigned, the Dial shows a restrained clock or ambient readout before dimming or sleeping.
-
-## UX principles
-
-The physical dial is the interface. The screen explains it.
-
-- One control fills the screen.
-- Navigation stays out of the way.
-- Names stay short enough to read without scrolling.
-- Motion helps explain changes.
-- Colour communicates state.
-- Every encoder detent produces immediate feedback.
-- Touch targets remain comfortably large.
-- The same gesture means the same thing across profiles.
-- Unavailable and disconnected states are unmistakable.
-- The common action is always the easiest action.
-
-The outer on-screen arc should visually meet the physical encoder surrounding it.
-
-## Architecture
-
-The project contains both halves of the product:
+Home Assistant owns the meaning and the layout. It works out one finished screen, and the Dial and the browser both draw that same screen.
 
 ```text
-Card editor template + Home Assistant state
-                         │
-                         ▼
-             HA page tree and navigator
-                         │
-                         ▼
-              HA scene compiler
-                ┌────────┴────────┐
-                ▼                 ▼
-          Card canvas       ESPHome renderer
+HA Dial panel + Home Assistant state
+                 │
+                 ▼
+      Page tree and navigation (HA)
+                 │
+                 ▼
+          Scene compiler (HA)
+            ┌────┴─────┐
+            ▼          ▼
+     Browser canvas   Dial
 ```
 
-The integration owns the complete navigation tree, page themes and scene geometry. The editor supports Jinja templates for reusable tree macros. Menus use `NAV-ORBIT`; controls use `CTL-LIGHT-INSTRUMENT`, `CTL-SWITCH-INSTRUMENT` or `CTL-COVER-INSTRUMENT`. The preview canvas and Dial consume the same resolved scene.
+The Dial receives only what it needs: final geometry, colours, text masks and touch regions. It sends back what you did, and HA turns that into an action. [ARCHITECTURE.md](ARCHITECTURE.md) has the full design.
 
-Other Home Assistant tools may use the public protocol in the future, but the project does not depend on them.
+## Installation
 
-## Protocol model
+You need an M5Stack Dial v1.1, Home Assistant with the ESPHome integration, and a Mac or Linux machine with Python 3.11 or later. It's developed against Home Assistant 2026.10.
 
-### Chronograph pages
-
-Choose `CHR-TRICOMPAX`, `CHR-WORLDTIMER`, `CHR-SKELETON` or `CHR-MOONPHASE` in a page's
-Atlas gallery. Clock options live in the appearance dialog's Options tab. A blank clock time
-zone uses HA's configured local time; explicit zones use IANA names and include daylight saving.
-Worldtimer accepts two to eight zones. Its optional power reserve sensor must report `%` in
-the range 0–100. Moonphase accepts a Moon integration sensor. Missing, unavailable or invalid
-complication readings display an unavailable indication; they never receive sample readings.
-
-```yaml
-pages:
-  - id: time
-    title: Time
-    style: CHR-WORLDTIMER
-    clock:
-      timezone: UTC
-      world_zones: [Europe/London, America/New_York, Asia/Tokyo, Australia/Sydney]
-      reserve_entity: sensor.example_reserve
-      moon_entity: sensor.example_moon
-```
-
-Tricompax shows a 24-hour register, small seconds and a day-of-month register. Skeleton uses
-separate hour, minute and second registers. Moonphase replaces the date register with the
-selected sensor's phase. Turn to select a configured destination and press to enter it; Back
-and Home retain their normal meaning. Without destinations, the face shows the date.
-
-HA resolves clock time and geometry on scheduled second boundaries and uses the existing
-coalescing scene publisher. This is a clock deadline, not state polling. Leaving the face
-stops clock scene delivery; replacing its definition, closing a preview or unloading the server
-removes its time/state subscriptions. Browser and Dial receive the same resolved clock reading.
-These faces require firmware with scene v4 support (private build b3 or later).
-
-Home Assistant sends a resolved scene containing only what the Dial needs: final geometry,
-theme colours, compact antialiased text masks and touch regions. The definition and navigation
-tree remain in Home Assistant. For example, the scene's drawing instructions use:
-
-```json
-{"revision":1,"scene":{"version":1,"screen":"home","width":240,"height":240,"background":"#060707",
- "elements":[{"op":"circle","x":120,"y":120,"r":116,"stroke":"#ff8b2d"}],
- "regions":[{"id":"light.example","x":120,"y":36,"r":22}]}}
-```
-
-The Dial returns semantic navigation and control intents:
-
-```json
-{"device":"ha_dial","action":"set_value","value":21.0}
-```
-
-Home Assistant remains responsible for translating those intents into domain actions.
-
-## Target for the first usable release
-
-The current first release supports:
-
-- M5Stack Dial v1.1.
-- Wi-Fi provisioning.
-- Encrypted ESPHome API.
-- OTA updates.
-- Rotary encoder, push button, touch, display and backlight.
-- Multi-level page trees with light, switch and cover controls at the leaves.
-- Per-page Atlas theme selection.
-- `NAV-ORBIT` navigation and `CTL-LIGHT-INSTRUMENT` light controls.
-- HA Jinja templates with state tracking and reusable macros.
-- One resolved scene shared by the dashboard card and ESPHome renderer.
-
-Other Atlas concepts remain outside this first release.
-
-## Definition of good
-
-The first version is successful when:
-
-- Changing the controlled entity never requires a firmware rebuild.
-- The displayed value reacts immediately to every encoder detent.
-- An externally changed HA state appears promptly on the Dial.
-- Losing HA cannot leave a control looking live.
-- Each supported profile is understandable without instructions.
-- The picker remains pleasant with at least twenty configured entities.
-- The interface feels coherent and intentionally designed.
-- The device can be installed in any Home Assistant setup.
-
-## Hardware
-
-Initial target:
-
-- M5Stack Dial v1.1
-- ESP32-S3
-- 240 × 240 GC9A01A round display
-- FT5x06 capacitive touch controller
-- Rotary encoder and front button
-- Display backlight
-- Buzzer
-- PCF8563 RTC
-- RC522-compatible NFC hardware
-
-NFC and the RTC are not required for the first control prototype.
-
-Hardware definitions should begin with M5Stack’s current ESPHome configuration:
-
-- https://docs.m5stack.com/en/homeassistant/devices/dial
-- https://devices.esphome.io/devices/m5stack-dial/
-
-## Prototype firmware
-
-Firmware and HA Dial Server now have independent calendar versions. See
-[Versioning](#versioning) for the sources and bump commands. ESPHome exposes **Firmware Version**
-as a diagnostic text sensor; project metadata and the startup screen use the same value.
-
-The first USB prototype displays **Hello** in the centre and moves a pointer around the edge as the encoder turns. It deliberately has no Wi-Fi, Home Assistant API or device-specific configuration yet.
-
-The connected prototype is `firmware/ha-dial-connected.yaml`. It adds the reusable external component, native API, OTA updates, encoder button and FT5x06 touch input. The HA integration binds its navigation to one configured light: turning sets brightness, pressing toggles power, and external state changes return to both the card and Dial. The base hardware test remains network-free.
+### 1. Flash the firmware
 
 ```shell
 python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
-.venv/bin/pytest -q
-tools/compile
-tools/compile ha-dial-connected.yaml
+tools/flash /dev/cu.usbmodem… ha-dial-connected.yaml
 ```
 
-## Prototype installation
-
-The development host serves the repository to ESPHome and mirrors the integration and card directly into the mounted Home Assistant config folder. The default is `/Volumes/config`; set `HA_CONFIG` when the mount lives elsewhere.
-
-```shell
-tools/serve
-```
-
-On the first deployment, restart Home Assistant manually, then follow [Getting started](#getting-started). Add **HA Dial Server** once for all Dials; each **HA Dial** dashboard card configures one Dial. Later integration updates raise a restart Repair. The optional advanced template field supports reusable Jinja macros. This example builds Home → Ground floor → Office → a light:
-
-```yaml
-# In the panel: Dial settings, Advanced, Page template.
-template: |
-  {% set ns = namespace(lights=[]) %}
-  {% macro light(entity, label) -%}
-    {% set ns.lights = ns.lights + [{'id': entity, 'label': label,
-      'entity_id': entity, 'profile': 'dimmer', 'style': 'CTL-LIGHT-INSTRUMENT'}] %}
-  {%- endmacro %}
-  {% set _ = light('light.example', 'Desk') %}
-  {{ {'tree': {'id': 'home', 'title': 'Home', 'theme': theme,
-    'style': 'NAV-ORBIT', 'items': [{'id': 'ground', 'label': 'Ground floor',
-    'theme': 'verdant', 'children': [{'id': 'office', 'label': 'Office',
-    'theme': 'cobalt', 'children': ns.lights}]}]}} | tojson }}
-```
-
-The underscore is the ESPHome service slug; the firmware node name remains `ha-dial`. Dashboard
-editor drafts use a local preview navigator. The saved card compiles and deploys its current scene
-when it is loaded outside the editor.
-Later code changes write a content-based restart marker, including changes made without a
-version bump, and the loaded integration raises a Repair.
-
-To push an integration-only edit immediately without restarting the Git host:
-
-```shell
-python3 tools/deploy.py /Volumes/config
-```
-
-ESPHome can consume the component from the same development host:
-
-```yaml
-external_components:
-  - source:
-      type: git
-      url: git://192.0.2.10:9421/ha-dial
-      ref: fake-git-host
-    components: [ha_dial]
-```
-
-For a browser-only view of the shared scene fixtures, run `.venv/bin/python -m http.server` in the
-repository and open `http://localhost:8000/tools/card-preview.html`. Choose a theme and a navigation, light, switch or cover style. Configure and simulate the live navigation tree in the Home Assistant card editor.
-
-The HA Dial Git proxy defaults to port **9421**, separate from the shared host's default. Set
-`HA_DIAL_GIT_PORT` when starting `tools/serve` to override it and use that same port in the client's
-Git URL. Each proxy instance serves this repository only.
-
-Deploy to a provisioned device over OTA:
+Check which serial port is your Dial before flashing. If the first flash can't reset it, hold the StampS3's G0 button while reconnecting USB, release once it has power, and run the command again. After that you can update over the network:
 
 ```shell
 tools/flash ha-dial.local ha-dial-connected.yaml
 ```
 
-For initial USB installation, check the detected serial port and flash it explicitly:
+Each Dial needs its own ESPHome device name.
+
+### 2. Install the integration
+
+Copy `custom_components/ha_dial` into your HA config folder, or point the deploy tool at a mounted config share:
 
 ```shell
-tools/flash /dev/cu.usbmodem…
-tools/flash /dev/cu.usbmodem… ha-dial-connected.yaml
+.venv/bin/python tools/deploy.py /path/to/ha/config
 ```
 
-If the first flash cannot reset the Dial automatically, hold the StampS3’s G0 button while reconnecting USB, release it once powered, and run the command again.
+Restart Home Assistant. Later updates raise a Repair when a restart is needed. Refresh your browser after each one.
 
-The pointer geometry is kept independent of ESPHome and tested on the Mac by compiling and running a small C++ assertion program, following the same fast host-test pattern as ProxyStick.
+### 3. Connect everything
 
-## Development order
+1. **Join Wi-Fi.** The Dial's **Needs Wi-Fi** screen shows its setup network, password and portal address. Join that network and enter your Wi-Fi details.
+2. **Add the Dial to HA.** Go to **Settings → Devices & services → Add integration → ESPHome**, using the IP address the Dial shows. On the same network it's usually discovered automatically; across subnets or VLANs, adding it by hand is normal.
+3. **Allow actions.** In the ESPHome device's options, enable **Allow the device to perform Home Assistant actions**. Without this, the Dial's input can't reach HA.
+4. **Add HA Dial Server, once.** Go to **Settings → Devices & services → Add integration → HA Dial Server**. One server handles all your Dials.
+5. **Refresh your browser.** **HA Dial** then appears in the sidebar, for administrators.
+6. **Build your pages.** Open **HA Dial**, choose your Dial, add some pages and controls, then press **Save and apply**.
 
-1. Confirm the exact device revision and flash a hardware test.
-2. Bring up the display, encoder, button and touch.
-3. Build one excellent simulated `dimmer` face.
-4. Connect that face to a dynamically assigned Home Assistant light.
-5. Establish target, command and state-update messages.
-6. Add thermostat, volume and selector profiles.
-7. Add the favourites picker.
-8. Test failure, reconnection and stale-state behaviour.
-9. Decide whether the Home Assistant companion still fits comfortably in a package or deserves a custom integration.
+The Dial shows **Waiting for HA** until it has pages. That screen still mentions adding a dashboard card, but you don't need one.
 
-## Prior art
+## The panel
 
-Related projects and resources:
+All editing happens in the **HA Dial** panel. Changes stay as a draft until you press **Save and apply**, and they're kept in your browser if you leave the page, so you can pick up where you left off. **Discard changes** drops them.
 
-- https://github.com/SmartHome-yourself/m5-dial-for-esphome
-- https://github.com/samusamu81/M5Dial
-- https://github.com/Jasionf/smart-home-button
-- https://github.com/Apfelsafft/m5dial
-- https://github.com/Skons/M5Dial
-- https://esphome.io/components/lvgl/
+- **Pages and controls:** add pages, subpages and entities, and drag the handles to rearrange. Arrow keys on a handle move things too, and Left and Right change nesting.
+- **Appearance:** choose a style and theme from galleries of live thumbnails, then adjust it under **Options**. Options only shows settings the current style actually uses, and only values you change are saved.
+- **Visibility:** show a page or control only when conditions pass. You can use state, numeric state, time, template, and `and`, `or` and `not` groups. HA follows these by events. This isn't access control.
+- **Dial settings:** the default theme, and an optional [page template](#page-templates).
+- **Reset Dial:** removes that Dial's saved pages, after asking. Wi-Fi, pairing and firmware stay as they are.
 
-## Licence
+### Try your Dial
 
-Licensed under the [MIT License](LICENSE).
+The preview shows your draft exactly as the Dial will. Its **Zoom** slider enlarges the whole picture up to 400%, and you can drag to pan if it no longer fits.
 
+Normally it's a **safe simulation**: controls respond on screen, but nothing real happens. It still reads live states, and opening a camera takes a real snapshot.
 
-### Building a page tree
+**Operate live house**, beside Save and Reset, makes the preview's controls operate your real devices, and a red banner warns you while it's on. It's off every time the panel opens. Your page edits still wait for Save.
 
-In the visual card editor, expand Home and choose **Add subpage**. Give the new page a title,
-select its controls, and add further subpages the same way. IDs are generated automatically.
-Drag its handle onto another page's title to nest it, or above/below a title to reorder.
-Arrow keys on the handle move it; Left/Right change its nesting. Entity handles reorder controls. Removing a page moves its subpages up one level.
-Each page can override the default theme. Existing `lights` lists remain supported; the editor
-migrates edited rows to `entities`, which accepts light, switch and cover entities.
+## Navigation styles
 
-Switches toggle on press. Covers show supported Open, Stop and Close touch actions; pressing stops
-when supported, and turning sets position only when the cover supports it and reports a position.
-Unavailable controls ignore input. Brightness and cover rotation show the requested value locally and send the final target after
-150 ms of rotary silence. This uses scene version 2 and requires the matching firmware update. The branded card picker preview stays local.
+Orbit, Pointer, Rolodex, Petals, Constellation, Compass, Ribbon, Breadcrumb, List, Grid, Pager, Needle and Snake.
 
-The advanced Jinja template still overrides page rows and supports HA `custom_templates` macros.
-For template leaves, omit profile/style to infer the domain defaults, or use `dimmer` /
-`CTL-LIGHT-INSTRUMENT`, `toggle` / `CTL-SWITCH-INSTRUMENT`, or `position` /
-`CTL-COVER-INSTRUMENT`. Page themes inherit through the compiled tree.
+A page can hold more than 8 items only in a style that scrolls or pages: **List, Grid, Snake, Compass, Ribbon, Rolodex or Pager**. The others show every item at once, so they stop at 8.
 
+**Snake** lays icons in rows joined by one line, read in alternating directions. You can choose icons per row or spacing along the path, including on the returns, and set turn extension, a twist of the whole snake, single or double edges, and line colours.
 
-## Getting started
+## Explorer
 
-The firmware and HA custom integration must already be installed. On the first integration
-installation, restart HA once so it can load the custom integration. Later integration updates
-raise a restart Repair. Each Dial needs a distinct ESPHome device name.
+Explorer builds pages from your home so you don't have to. It's an item, not a mode: choose **+ Explorer** on any page and it takes one slot beside your own items.
 
-1. **Join Wi-Fi.** On the Dial's Needs Wi-Fi screen, find its setup network, password and
-   portal address. Join that network and enter your Wi-Fi credentials in the portal. If the
-   portal does not open automatically, use the address displayed on the Dial. The Dial shows
-   its selected network while connecting, never the network password.
-2. **Add the ESPHome device to HA.** Once Wi-Fi connects, use the displayed IP in HA under
-   **Settings → Devices & services → Add integration → ESPHome**. On the same LAN/subnet,
-   automatic discovery is expected when mDNS multicast is allowed. Across subnets/VLANs,
-   manual addition is normal unless mDNS is forwarded. In the ESPHome device's options,
-   enable **Allow the device to perform Home Assistant actions** so it can send input events.
-3. **Add HA Dial Server once.** Under **Settings → Devices & services → Add integration**,
-   choose **HA Dial Server**. It manages screen definitions, navigation and controls for all
-   your Dials. This is separate from adding each physical device through ESPHome. The server
-   waits for a card to supply a screen; an API connection alone is not a configured Dial.
-4. **Refresh your browser.** Refresh the HA page after adding the server. This made the card
-   appear in the verified first-run walkthrough; adding the integration did not require an
-   HA restart.
-5. **Add the HA Dial card.** Open your dashboard, choose **Edit dashboard → Add card**, search
-   for **HA Dial** and choose it. Select your installed Dial from the **Dial device** dropdown;
-   **Preview** keeps the simulation local. The list uses compatible ESPHome screen actions,
-   excluding unrelated devices. An unavailable saved target remains selected and labelled.
-6. **Configure and save.** Expand Home, add a light, switch or cover, and add subpages if
-   needed. Save the card and finish editing the dashboard. The saved card sends its screen
-   to the Dial; editor drafts stay local. Check the card's deployment status and the physical
-   screen, then test one deliberate control action. Use one saved card per Dial to avoid
-   different cards sending competing definitions.
+- **Structure:** floors, then areas, then your entities. A room with more than 8 entities splits into groups such as Lights and Climate. A lone floor and empty levels are skipped, and anything without an area goes in **Other devices**.
+- **Coverage:** the whole home, one floor or one area.
+- **What's included:** it follows HA's automatic dashboard rules, leaving out hidden, disabled, diagnostic and unsupported entities. The panel lists how many were left out and why. You can also limit it to entities exposed to Assist, which only reads those settings, and exclude individual entities.
+- **Safety:** locks, alarms and garage, gate and door covers always ask for confirmation, and one switch leaves them all out.
+- **Style:** any navigation style on pages of up to 8 items, with a separate scrolling style for longer ones. Tap a generated page to give it its own look. **Random** gives every page a different style, which stays put until you press **Shuffle styles**.
+- **Cameras:** one setting for the style and picture treatment of all its cameras.
 
-The Dial distinguishes Wi-Fi, ESPHome API connectivity and receipt of an HA screen. A waiting
-screen with the API connected asks you to add HA Dial Server and then its dashboard card.
-Unconfigured Dials do not receive a placeholder menu from a ready event. On connection loss,
-the compiled setup interface replaces the cached scene. Touch faults have a separate message.
+It rebuilds when your floors, areas or entities change, and if the page you're on disappears, the Dial returns to the nearest one that still exists.
 
-### Preview size
+## Controls
 
-Use the **Zoom** slider above the preview to enlarge the whole rectangle from 100% to 400%, Dial
-artwork and controls included. Where it no longer fits, drag to pan around it; on a wide screen the
-panel gives it more room first. Each browser remembers its own zoom, and it isn't part of your Dial's
-configuration. The device screen is unchanged.
+| Entity | Turning | Also |
+| --- | --- | --- |
+| Light | Brightness, white or colour | Press toggles. A button chooses what turning sets, offering only what the light supports |
+| Switch | — | Press toggles |
+| Cover | Position, if supported | Press stops. Open and close buttons |
+| Climate | Target temperature | Mode controls |
+| Media player | Volume | Transport buttons, where supported |
+| Fan | Speed | Actions the fan supports |
+| Number, select | Value or option | — |
+| Lock, alarm | — | Actions always ask first. PIN-protected actions are unavailable, and no PIN is stored |
+| Vacuum, timer | — | Actions they support |
+| Scene, button | — | Activating asks first by default |
+| Sensor, binary sensor, weather, calendar | — | Read-only |
+| Camera, image | — | The picture, plus up to two action buttons in Portal |
 
-### What resets and removals retain
+Each has an **Instrument** graphic and a big-type **Editorial** style. Anything with a level also offers **Column**, **Segment** and **Tumbler**. Sensors can also use energy, air quality, water, vehicle and data graphics.
 
-Screen definitions live in HA. Runtime scenes on the Dial are volatile; a device factory reset
-cannot erase HA's definitions or the configuration stored in a dashboard card.
+**Doors and gates** that need confirming show their state in words and ask in a large line, such as **OPEN THE DOOR?**. Turning the dial never moves them, and Stop always acts at once.
+
+### How turning feels
+
+From the first detent the Dial owns the value, and HA can't change the screen until they agree. The number and a slim gauge move straight away; bars and markers catch up when they agree.
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `value_settle` | 150 ms | No change for this long sends the value |
+| `value_resend` | 1.5 s | HA hasn't acknowledged it, so send it again |
+| `value_wait` | 10 s | HA has it but the device isn't there yet, so wait this long before resending |
+| `value_resends` | 3 | After this many, HA wins and the Dial shows **NOT APPLIED** |
+
+These are firmware settings on the `ha_dial:` component, so you can tune them for your network and devices. A slow blind may need a longer `value_wait`.
+
+## Faces
+
+Faces only show real sources. If a source isn't set or available, it shows `--`, and a chart without recorded history says **NO HISTORY**.
+
+| Family | Styles | Updates |
+| --- | --- | --- |
+| Chronograph | Tricompax, Worldtimer, Skeleton, Moonphase | Every second |
+| Ambient | Solar, Typographic, Orbital, Status | Every minute, and when a source changes |
+| Watch | Contour, Modular, Palette, Rings, Solar, Reflections, Photos | Every minute, and when a source changes |
+| Data | Area, Radar, Bands, Spark | Every minute, and when a source changes |
+
+The page's **Options** ask for what its style reads, such as a time zone, weather entity, history window or metric sensors.
+
+### Cameras and images
+
+Add a camera or image entity to a page like any other entity, and choose **Portal**, **Cinema** or **Radar**. The **Photos** watch face shows one behind the time.
+
+Each picture can be colour, mono, tint or dither, in either drawing mode. Pictures aren't a live feed: one is captured when you enter the page and when a bound entity fires, such as a motion sensor, or when an image entity updates. Otherwise it shows its age.
+
+The Dial fetches pictures from HA's internal URL over **plain HTTP**, so it must be able to reach that address. If it can't, the page shows **NO LINK** and the preview says why.
+
+## Crisp and Smooth
+
+These are two drawing styles for lines and curves, and each page can choose one.
+
+- **Smooth** anti-aliases every shape and uses a regular font.
+- **Crisp** draws everything with line-step lines and midpoint circles, including its single-stroke capitals and line icons. Its fine lines show the algorithm's moiré on purpose. Text folds to capitals without accents, and characters outside its set appear as a box, so non-Latin labels don't read in Crisp.
+
+## Dashboard cards
+
+Add the **HA Dial** card to any dashboard to show a Dial and operate it. Cards can't edit anything, and HA refuses a save that doesn't come from the panel.
+
+- **Dial:** which Dial it shows.
+- **Follow the Dial's screen:** on, the card and the Dial show the same screen. Off, the card browses on its own, so using a dashboard doesn't disturb the Dial on the wall.
+
+**Operating a card operates real devices**, for any HA user who can see it, except while the card is being added or edited, when its preview is safe. Its zoom slider starts at 100%, and each browser remembers the size for each Dial.
+
+## Page templates
+
+For repeatable trees, **Dial settings → Advanced** takes a Jinja template that returns a tree. It supports macros from HA's `custom_templates`, and HA follows the states it reads.
+
+```jinja
+{% set lights = [{'id': 'light.example', 'label': 'Desk', 'entity_id': 'light.example'}] %}
+{{ {'tree': {'id': 'home', 'title': 'Home', 'theme': theme, 'style': 'NAV-ORBIT',
+    'items': [{'id': 'office', 'label': 'Office', 'theme': 'cobalt', 'children': lights}]}} | tojson }}
+```
+
+Leave out a control's profile and style to use its domain's defaults.
+
+## Recovery and resets
+
+Pages live in HA. The Dial keeps only what it's showing now, so it doesn't lose pages when reset, and HA sends the screen again when it reconnects.
 
 | Action | Result |
 | --- | --- |
-| Ordinary Dial restart or HA restart | Preserves Wi-Fi and saved HA definitions. HA resends the screen after reconnection. |
-| Local Wi-Fi reset | Clears the Dial's saved network credentials. HA definitions and dashboard cards remain. |
-| ESPHome Factory Reset button | Erases all ESPHome preferences, including provisioned Wi-Fi. HA definitions and dashboard cards remain. |
-| Remove a Dial's ESPHome integration entry | Removes its connection from HA. HA Dial Server definitions and cards remain. |
-| Remove HA Dial Server | Deletes the server's saved definitions for **all Dials**. Device Wi-Fi and dashboard cards remain. |
-| Remove a dashboard card | Removes that card's configuration. The last saved definition remains in HA Dial Server, so the Dial can keep working without an open dashboard. |
+| Restart the Dial or HA | Keeps Wi-Fi and saved pages |
+| **Reset Dial** in the panel | Removes that Dial's pages. Wi-Fi, pairing and firmware stay |
+| Hold the front button for 5–60 s, then release | Asks **Reset Wi-Fi?** Press to confirm, or turn or wait 15 s to cancel. Pages stay |
+| ESPHome **Factory Reset** button | Erases the Dial's settings, including Wi-Fi. Pages stay. Disabled by default |
+| Remove the Dial's ESPHome entry | Removes its connection. Pages stay |
+| Remove HA Dial Server | **Deletes saved pages for all Dials.** Wi-Fi stays |
 
-**To change one Dial's setup**, edit its card, remove unwanted pages/controls, and save the new
-configuration. This replaces its saved definition without affecting other Dials.
+If Wi-Fi fails, the Dial reopens its setup portal after 30 seconds. **Show Settings**, an ESPHome switch that's off by default, adds a local page with IP, firmware version, uptime, signal and connection status. It works even when HA is down.
 
-With the paired 0.4.0 firmware, server unload also clears the live device screen and shows
-setup guidance even if ESPHome stays connected. A later complete scene replaces that guidance.
-If the clear cannot be delivered, HA logs the failure; a disconnected Dial uses its local
-fallback interface. Older firmware needs the matching update for this explicit clear command.
+**Connection loss:** the Dial never keeps showing a stale control as live. It shows its setup screen, which says whether Wi-Fi, the ESPHome connection or the screen from HA is missing.
 
-**To start the server completely fresh**, first remove old cards or change their target to
-Preview on every relevant dashboard, then remove HA Dial Server and add it again. A saved
-card opened after reinstalling the server can send its configuration again. Leave an old card
-in place only if that restoration is intended. Card commands are rejected while the server is
-unloaded, so they cannot recreate its deleted definitions before it is re-added.
+## What hasn't been proven yet
 
-### Recovery
+Most of this has been tested through automated checks, stand-ins for HA and comparisons of browser and firmware pixels, not long-term use in a real home. These especially need real-world testing:
 
-To change or clear saved Wi-Fi locally, hold the front button for 5–60 seconds and release.
-The screen asks **Reset Wi-Fi?** Press briefly to confirm, turn to cancel, or wait 15 seconds.
-The hold does not send a control press. Ordinary short presses act on release.
+- Explorer on a real home, including rebuilds and HA restarts.
+- Pictures from real cameras, and the Dial reaching HA across subnets.
+- White and colour on real lights, which round values differently.
+- How turning feels on the Dial, and suitable values for its settings.
+- Live operation from the preview, and Follow Dial turned off.
+- Memory use and draw time on the Dial at its most complex screens.
 
-A failed connection reopens the standard ESPHome recovery portal after 30 seconds; driver
-failure reasons are shown when available. Wi-Fi and API reboot timeouts are disabled so setup
-remains available while HA is unreachable. Reopening the portal and the displayed layout
-still require failure-path checks on the physical Dial.
+## Development
 
-HA's ESPHome device tools expose **Restart**, **Restart in Safe Mode** and **Factory Reset**.
-Safe Mode and Factory Reset are disabled by default. Restart preserves settings; Safe Mode
-reboots with networking and OTA for recovery. Factory Reset erases the device preferences and
-requires Wi-Fi provisioning again. Neither recovery route removes HA dashboard cards.
+```shell
+.venv/bin/pytest -q                      # Python, browser and host C++ checks
+tools/compile ha-dial-connected.yaml     # Full firmware build
+.venv/bin/python tools/ux-gallery/server.py   # The design Atlas
+```
 
-The HA adapter resends the current scene when ESPHome becomes available. Refreshing a saved
-card also resynchronises it without returning Home or changing its saved definition. If the
-API is reachable but no screen arrives, check HA Dial Server and the card's deployment status.
+Some C++ pixel checks need ArduinoJson from a firmware build, and they're skipped until you've run one.
 
-A firmware-owned local Settings menu and its availability policy remain planned. The baseline
-uses ESPHome's [standard captive portal](https://esphome.io/components/captive_portal/).
-Improv Serial/BLE remain alternatives to investigate after the baseline is verified on hardware.
+| Path | Contents |
+| --- | --- |
+| `custom_components/ha_dial/` | The HA integration, panel and card |
+| `components/ha_dial/` | The ESPHome component |
+| `firmware/` | ESPHome configurations: hardware test and connected |
+| `tests/` | Python tests, Node browser checks and host C++ checks |
+| `tools/` | Compiling, flashing, deploying, versioning and the design Atlas |
 
-## Versioning
-
-The integration and firmware follow Casa Mia's numbering independently: `YYYY.M.R-bN` for
-private builds and `YYYY.M.R` for releases. The month is unpadded, as in HA. Both were migrated
-from 0.x to their own `2026.10.1-b1` build on 2026-10-29; matching initial numbers do not couple
-future changes.
-
-| Component | Canonical version | Changelog |
-| --- | --- | --- |
-| HA Dial Server, including its card | `pyproject.toml` | `CHANGELOG.md` |
-| Firmware | `firmware/version.yaml` | `firmware/CHANGELOG.md` |
-
-Before editing a component's runtime files, bump that component:
+The integration and firmware have separate versions, as `YYYY.M.R-bN` for builds. Bump the one you're changing before editing it:
 
 ```shell
 .venv/bin/python tools/versioning.py bump integration
 .venv/bin/python tools/versioning.py bump firmware
 ```
 
-The command increments the build only if HEAD already contains the current version. Repeated
-edits in the same uncommitted build keep its number. Commit the version with the work before
-starting the next build cycle. A private build increments bN even if the month changes. After
-a release, the next build advances the release number in the same month, or starts the new
-month's release 1 at b1. Add that build's notes under the generated changelog heading; breaking
-changes come first and explain what the user must do.
+Notes go in [CHANGELOG.md](CHANGELOG.md) and [firmware/CHANGELOG.md](firmware/CHANGELOG.md). [BACKLOG.md](BACKLOG.md) has what's planned, and [AGENTS.md](AGENTS.md) records the project's design decisions and why they were made.
 
-The tool stamps the integration manifest from `pyproject.toml`; do not edit the manifest's
-version by hand. The card cache key and restart Repair use that installed manifest. Firmware
-uses its version substitution for the ESPHome project identity, startup screen and diagnostic
-**Firmware Version** text sensor. The sensor publishes once at boot; it does not poll.
+## Prior art
 
-```shell
-.venv/bin/python tools/versioning.py check integration
-.venv/bin/python tools/versioning.py check firmware
-.venv/bin/python tools/versioning.py sync integration
-```
+- [SmartHome-yourself/m5-dial-for-esphome](https://github.com/SmartHome-yourself/m5-dial-for-esphome)
+- [samusamu81/M5Dial](https://github.com/samusamu81/M5Dial)
+- [Jasionf/smart-home-button](https://github.com/Jasionf/smart-home-button)
+- [Apfelsafft/m5dial](https://github.com/Apfelsafft/m5dial)
+- [Skons/M5Dial](https://github.com/Skons/M5Dial)
+- [M5Stack's Dial documentation](https://docs.m5stack.com/en/homeassistant/devices/dial)
 
-Compile/deploy tools check the relevant version and metadata before proceeding. Only promote
-a release when the owner requests it, using `release integration` or `release firmware` in
-place of `bump`. This removes bN, uses the current month if it changed, and combines the build
-notes. It does not create a Git tag, publish or deploy anything.
+## Licence
 
-## Atlas editors, appearance and visibility
-
-Each page has **Appearance & conditions**; each entity has **Edit**. The modal is created
-only when opened, keeping large navigation trees light. Existing entity strings remain
-valid; an edited entity becomes an object with `entity_id` and its overrides.
-
-Page styles cover navigation (**Orbit**, **Pointer**, **Rolodex**, **Petals**, **Constellation**,
-**Compass**, **Ribbon**, **Breadcrumb**, **List**, **Grid**, **Pager**, **Needle**) and faces: four chronographs, ambient
-(**Solar**, **Typographic**, **Orbital**, **Status**), watch (**Contour**, **Modular**, **Palette**, **Rings**, **Solar**,
-**Reflections**) and data (**Area**, **Radar**, **Bands**, **Spark**). Each domain has its own **Instrument**
-graphic and big-type **Editorial**; anything with a level also offers **Column**, **Segment** and **Tumbler**.
-The entity selector offers light, switch, cover, climate, media player, fan, alarm, lock, vacuum,
-sensor, binary sensor, weather, timer, calendar, camera, image, scene, select/input select, number/input number and
-button/input button. Sensor instruments include energy, air quality, water, vehicle and data.
-Add a camera or image entity to a page like any other entity; **Portal**, **Cinema** and **Radar** are its
-styles. The watch face **Photos** is a page style that shows a bound camera or image entity.
-
-Faces show real sources only. The page's Options tab asks for the sources its style reads: time zone,
-weather, a history window, and metric sensors with an optional maximum, which Rings and Bands fill
-towards. A source that isn't set or available shows `--`, a chart with no recorded history says NO
-HISTORY, and a reading with no maximum shows no progress. Ambient and watch faces redraw once a minute;
-only chronographs update each second.
-
-A picture is captured when you enter its page and when a bound entity fires: pick a motion or doorbell
-entity as **New picture when this changes**, or use an image entity, which updates itself. Otherwise it
-stays as captured and shows its age. Portal can show two bound entities as action
-buttons: turn to choose, press to open that entity's control, Back to return. Radar shows a bound detection sensor's state, and its confidence if the sensor reports one; it
-draws no detection boxes. The Dial must be able to reach HA's internal URL over plain HTTP. If it can't,
-the card reports why and the page shows NO LINK. Every picture can be colour, mono, tint or dither: the **Picture** group under Options. This is separate
-from Crisp and Smooth, which only change how lines and curves are drawn. Each style has its own starting
-point: Portal mono, Radar tint, Cinema and Photos colour.
-
-Rotary controls use the entity's current limits and step. Media/fan/cover/vacuum actions
-respect reported capabilities. Sensors, binary sensors, weather and calendars are read-only;
-calendar shows the current event, rather than fetching future agenda entries. Access and alarm
-actions require explicit confirmation. PIN-protected actions are unavailable; no PIN is stored.
-Draft previews never call entity services. Changing visibility does not provide access control.
-
-The icon picker uses the bundled Material Design Icons font, rendered in HA as a small
-mask shared with the card and Dial. It needs no icon download on the device.
-
-**Crisp** and **Smooth** are two drawing styles, not one setting for text. Crisp draws everything with
-line-step lines and midpoint circles, including its single-stroke capitals and line icons, and its
-fine line work shows the algorithm's moiré on purpose. Text is folded to capitals without accents, and
-characters outside its set appear as a box. Smooth anti-aliases every shape and uses the regular font.
-
-The Options tab shows only the settings the current style reads, grouped: frame, type, items, hub,
-gauge, value, actions, back and home, and others that depend on the style. They cover padding, sizes,
-gaps, widths, borders and positions. Only values you change are saved, so a page keeps following the
-defaults for its mode. Appearance options are compiled by HA, not browser CSS.
-
-The structured controls and **Advanced style** edit the same settings. Supported declarations:
-
-```css
-outer-border: off;
-border-width: 2;
-accent: #ff8b2d;
-background: #060707;
-text: #fff7eb;
-icon-size: 18px;
-font-size: 11px;
-orbit-radius: 84px;
-raster: smooth;
-```
-
-Additional colour keys are `surface`, `secondary`, `quiet` and `grid`. Values must be
-`#RRGGBB`. Border width is 1–4, icon size 12–28, title size 6–16 and orbit radius 70–90.
-Unknown properties fail validation. Entity overrides can be written directly:
-
-```yaml
-pages:
-  - id: home
-    title: Home
-    style: NAV-POINTER
-    appearance:
-      outer-border: false
-      raster: crisp
-    entities:
-      - entity_id: climate.example
-        label: Heating
-        icon: mdi:thermometer
-        style: CTL-THERMOSTAT-EDITORIAL
-        conditions:
-          - condition: state
-            entity_id: input_boolean.example
-            state: "on"
-```
-
-Use HA's [condition selector](https://www.home-assistant.io/docs/blueprint/selectors/#condition-selector)
-on any page or entity. Supported visibility conditions are `state`, `numeric_state`,
-`template`, `and`, `or` and `not`, including nested groups. Conditions are ANDed at the
-outer level. HA tracks their state/template dependencies by events, including hidden
-branches, and returns to a surviving ancestor if the current page disappears. The root
-remains present with an empty list when its conditions fail. Time/device/browser conditions
-and state `for` durations are rejected; put those rules in an HA template/helper sensor.
-
-### Optional local settings
-
-The Dial exposes an ESPHome **Show Settings** configuration switch in HA. It defaults off
-and restores its last value on reboot. When enabled, **Settings** joins the root menu's
-rotary selection and appears as a cog in a reserved inner/top position; it does not reduce the eight normal
-orbit destinations. It is absent from sub-pages. Rolodex reserves a top position for it.
-
-The firmware-owned page shows IP, firmware version, uptime, Wi-Fi signal, API/HA status and
-touch health. Press or turn to return. With HA unavailable, a short press on the fallback
-screen opens Settings when enabled. Turning the switch off closes the page and removes the
-cog. The independent physical Wi-Fi recovery gesture is retained even when Settings is off.
-
-Deploy paired firmware before this server build. Scene v3 adds signed/decimal local numeric
-feedback; the firmware still accepts v1/v2 scenes. Integration updates require the restart
-Repair, then a browser refresh. Dashboard definitions and device Wi-Fi are preserved.
+Licensed under the [MIT License](LICENSE).
