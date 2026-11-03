@@ -22,6 +22,10 @@ Appearance dialogs keep a stable position between tabs and show a live HA-render
 the controls on wide screens. Why: on 2026-10-30 the owner found the moving dialog distracting and
 wants to see the effect of the growing set of options while editing.
 
+The panel workspace uses the available browser width, and zooming its preview must not move or
+resize the zoom slider or squeeze the page tree. Zoom the Dial inside its scrollable viewport.
+Why: on 2026-11-03 the owner found that changing zoom moved the panel out from under the mouse.
+
 A dashboard card only views and operates a Dial. Its settings are which Dial and whether to follow its screen;
 it holds no pages, and HA refuses a save that doesn't come from the panel. With Follow off, HA supplies the pages. Why: on 2026-11-01 a card's stale pages replaced a Dial's
 saved tree on loading, and the owner ruled that cards can't be editors too.

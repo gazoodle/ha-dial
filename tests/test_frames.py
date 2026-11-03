@@ -117,6 +117,36 @@ def test_capture_on_entry_and_events_never_on_republish(integration, dial, camer
     asyncio.run(run())
 
 
+def test_cached_camera_entry_during_capture_is_retried(integration, dial, monkeypatch):
+    frames = dial.load("frames")
+    hass = integration.hass
+    first, second = page(entity="camera.first"), page(entity="camera.second")
+    calls = []
+
+    async def run():
+        started, release = asyncio.Event(), asyncio.Event()
+
+        async def capture(_hass, view, key):
+            calls.append(key[0])
+            started.set()
+            await release.wait()
+
+        async def publish():
+            frames.request_frame(hass, "dial", second, publish)
+
+        monkeypatch.setattr(frames, "capture", capture)
+        hass.data["ha_dial"]["frames"] = {frames.frame_key(second): object()}
+        frames.request_frame(hass, "dial", first, publish)
+        await started.wait()
+        frames.request_frame(hass, "dial", second, publish)
+        release.set()
+        while tasks := hass.data["ha_dial"]["frame_tasks"]:
+            await asyncio.gather(*list(tasks.values()))
+        assert calls == ["camera.first", "camera.second"]
+
+    asyncio.run(run())
+
+
 def test_camera_state_is_not_a_trigger_but_an_image_entity_is(integration, dial):
     clock = dial.load("chronograph")
     frames = dial.load("frames")

@@ -103,7 +103,7 @@ def _number(state):
     return value if isfinite(value) else None
 
 
-def _metric(hass, metric, series):
+def _metric(hass, metric, series, hours):
     state = hass.states.get(metric["entity_id"])
     attributes = getattr(state, "attributes", {}) or {}
     value = _number(state)
@@ -121,7 +121,7 @@ def _metric(hass, metric, series):
         "text": "--" if state is None or state.state in {"unknown", "unavailable"} else f"{value:g}" if value is not None else str(state.state),
         "unit": unit,
         "percent": percent,
-        "series": series.get(metric["entity_id"], []),
+        "series": series.get(metric["entity_id"], {}).get(hours, []),
     }
 
 
@@ -208,7 +208,7 @@ def resolve_clock(hass, view, now: datetime | None = None):
             "reserve": reserve,
             "sun": _sun(hass, local),
             "weather": _weather(hass, settings.get("weather_entity")),
-            "metrics": [_metric(hass, metric, series) for metric in settings.get("metrics", [])],
+            "metrics": [_metric(hass, metric, series, settings.get("history_hours", 24)) for metric in settings.get("metrics", [])],
             "image": resolve_frame(hass, view),
             "detection": _detection(hass, settings.get("detection_entity")),
         },

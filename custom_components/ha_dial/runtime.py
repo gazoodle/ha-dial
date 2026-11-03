@@ -342,7 +342,7 @@ def _watch_definition_entities(
             return
         current = navigator.current()
         entity = _event.data.get("entity_id")
-        record_change(hass, entity, _event.data.get("new_state"), current.get("clock", {}).get("history_hours", 24))
+        record_change(hass, entity, _event.data.get("new_state"))
         if entity is not None:
             mark_stale(hass, entity)
         if entity != current.get("entity_id") and entity not in source_entities(current):

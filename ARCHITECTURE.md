@@ -297,7 +297,7 @@ Faces (`CHR-`, `AMB-`, `WAT-`, `DAT-`) resolve time, sun, weather and bound metr
 publication, using the same path as chronographs below. Only chronographs tick each second; other
 faces redraw on the minute and on source changes. A source that is missing reads as `--`, and a
 metric with no known maximum claims no progress. Data faces read the recorder once per entity and
-then append from state events, so a chart adds no polling; history is dropped when a definition is
+history range, then append from state events, so a chart adds no polling; history is dropped when a definition is
 replaced. Without a recorder a chart says NO HISTORY.
 
 Measured 2026-10-31 across 1,368 scenes (every style, theme and mode, with eight items and long

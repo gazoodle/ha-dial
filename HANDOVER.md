@@ -2,6 +2,16 @@
 
 ## Current state
 
+Integration b30 fixes history ranges sharing one cache and camera entries being lost while another
+capture runs. Verified: both regressions failed before the fixes; 285 tests and Ruff pass. Pyright
+could not resolve HA imports because the scratch HA type sources are incomplete. Not deployed;
+firmware unchanged at b6.
+
+b30 also gives the panel the full available width with columns and a zoom slider that stay fixed
+while the Dial grows inside its viewport. Chromium checks at 1840, 1280, 1024 and 390 px cover
+100–400% zoom and a mouse drag; the original layout fails the same check. Screenshot inspected.
+The browser harness uses stub HA responses and lives in scratch, not the suite.
+
 Scene v5, the rebuilt Crisp/Smooth, every navigation style, domain graphics and shapes, the settings
 table and generated dialog, and the Ambient, Watch and Data faces are implemented and committed in
 integration b10 and firmware b4, with pictures added in b11 and b5. Decisions and their reasons are in AGENTS.md; the design is in

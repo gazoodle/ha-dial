@@ -63,7 +63,7 @@ class HaDialCard extends HTMLElement {
   _build() {
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
-      this.shadowRoot.innerHTML = `<style>${HaDialCard.styles}</style><ha-card><p class="live-banner" aria-live="assertive" hidden>Warning: changes made here are live</p><label class="zoom"><span>Zoom</span><input type="range" min="${ZOOM_MIN}" max="${ZOOM_MAX}" step="${ZOOM_STEP}" aria-label="Preview zoom"><output></output></label><div class="viewport"><div class="stage"><div class="dial"><img class="frame" src="/ha_dial/dial-frame.png" alt="" draggable="false"><canvas width="240" height="240" tabindex="0" aria-label="HA Dial preview"></canvas><button class="click-chip" data-action="press" aria-label="Click dial"><span>CLICK</span></button></div><button class="spin left" data-action="rotate_left" aria-label="Rotate left"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="sweep" d="M75 79A37 37 0 1 1 86 42"/><path class="head" d="M74 39L96 39L85 59Z"/></svg></button><button class="spin right" data-action="rotate_right" aria-label="Rotate right"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="sweep" d="M75 79A37 37 0 1 1 86 42"/><path class="head" d="M74 39L96 39L85 59Z"/></svg></button><p role="alert" hidden></p></div></div></ha-card>`;
+      this.shadowRoot.innerHTML = `<style>${HaDialCard.styles}</style><ha-card part="card"><p class="live-banner" aria-live="assertive" hidden>Warning: changes made here are live</p><label class="zoom"><span>Zoom</span><input type="range" min="${ZOOM_MIN}" max="${ZOOM_MAX}" step="${ZOOM_STEP}" aria-label="Preview zoom"><output></output></label><div class="viewport"><div class="stage"><div class="dial"><img class="frame" src="/ha_dial/dial-frame.png" alt="" draggable="false"><canvas width="240" height="240" tabindex="0" aria-label="HA Dial preview"></canvas><button class="click-chip" data-action="press" aria-label="Click dial"><span>CLICK</span></button></div><button class="spin left" data-action="rotate_left" aria-label="Rotate left"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="sweep" d="M75 79A37 37 0 1 1 86 42"/><path class="head" d="M74 39L96 39L85 59Z"/></svg></button><button class="spin right" data-action="rotate_right" aria-label="Rotate right"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="sweep" d="M75 79A37 37 0 1 1 86 42"/><path class="head" d="M74 39L96 39L85 59Z"/></svg></button><p role="alert" hidden></p></div></div></ha-card>`;
       this.shadowRoot.addEventListener("click", (event) => {
         const action = event.target.closest("button")?.dataset.action;
         if (action) this.input(action);
@@ -88,9 +88,7 @@ class HaDialCard extends HTMLElement {
     card.style.setProperty("--dial-zoom", String(zoom / 100));
     card.style.setProperty("--dial-card-width", `${width}px`);
     // At 100% the card still shrinks to fit a narrow phone; past that it deliberately doesn't.
-    card.style.setProperty("--dial-stage-width", zoom === ZOOM_MIN ? "100%" : `${width}px`);
-    // A layout around the card, such as the panel, can make room for it.
-    this.style.setProperty("--dial-preview-width", zoom === ZOOM_MIN ? "" : `${width}px`);
+    card.style.setProperty("--dial-stage-width", zoom === ZOOM_MIN ? "min(100%,360px)" : `${width}px`);
     this.shadowRoot.querySelector(".zoom input").value = String(zoom);
     this.shadowRoot.querySelector(".zoom output").textContent = `${zoom}%`;
     const canvas = this.shadowRoot.querySelector("canvas");

@@ -40,10 +40,12 @@ async def ensure_history(hass, view: dict) -> None:
     start = end - timedelta(hours=hours)
     for metric in view.get("clock", {}).get("metrics", []):
         entity = metric["entity_id"]
-        if entity in cache:
+        ranges = cache.setdefault(entity, {})
+        recorded_samples = samples.setdefault(entity, {})
+        if hours in ranges:
             continue
-        cache[entity] = []
-        samples[entity] = []
+        ranges[hours] = []
+        recorded_samples[hours] = []
         if "recorder" not in hass.config.components:
             _LOGGER.info("No recorder is loaded, so %s has no history to plot", entity)
             continue
@@ -58,26 +60,28 @@ async def ensure_history(hass, view: dict) -> None:
             continue
         for recorded in states.get(entity, []):
             try:
-                samples[entity].append((recorded.last_changed, float(recorded.state)))
+                recorded_samples[hours].append((recorded.last_changed, float(recorded.state)))
             except (TypeError, ValueError):
                 continue
-        cache[entity] = _binned(samples[entity], start, end)
+        ranges[hours] = _binned(recorded_samples[hours], start, end)
 
 
-def record_change(hass, entity: str, new_state, hours: int = 24) -> None:
+def record_change(hass, entity: str, new_state) -> None:
     """Keep a loaded series current from the state event, rather than querying again."""
     state = hass.data[DOMAIN]
-    samples = state.get("history_samples", {}).get(entity)
-    if samples is None or new_state is None:
+    ranges = state.get("history_samples", {}).get(entity)
+    if ranges is None or new_state is None:
         return
     try:
-        samples.append((new_state.last_changed, float(new_state.state)))
+        sample = (new_state.last_changed, float(new_state.state))
     except (TypeError, ValueError):
         return
     end = dt_util.utcnow()
-    start = end - timedelta(hours=hours)
-    samples[:] = [sample for sample in samples if sample[0] >= start]
-    state["history"][entity] = _binned(samples, start, end)
+    for hours, samples in ranges.items():
+        start = end - timedelta(hours=hours)
+        samples.append(sample)
+        samples[:] = [sample for sample in samples if sample[0] >= start]
+        state["history"][entity][hours] = _binned(samples, start, end)
 
 
 def forget_history(hass) -> None:

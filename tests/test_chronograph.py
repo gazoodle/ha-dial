@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -281,13 +281,13 @@ def test_history_loads_once_updates_from_events_and_survives_no_recorder(integra
     async def run():
         await history.ensure_history(hass, view)
         await history.ensure_history(hass, _face("NAV-ORBIT"))
-        assert hass.data["ha_dial"]["history"] == {"sensor.level": []}
+        assert hass.data["ha_dial"]["history"] == {"sensor.level": {2: []}}
         now = dt_util_now()
-        history.record_change(hass, "sensor.level", SimpleNamespace(state="not a number", last_changed=now), 2)
-        assert hass.data["ha_dial"]["history"]["sensor.level"] == []
-        history.record_change(hass, "sensor.level", SimpleNamespace(state="5", last_changed=now), 2)
-        assert hass.data["ha_dial"]["history"]["sensor.level"][-1] == 5
-        history.record_change(hass, "sensor.other", SimpleNamespace(state="5", last_changed=now), 2)
+        history.record_change(hass, "sensor.level", SimpleNamespace(state="not a number", last_changed=now))
+        assert hass.data["ha_dial"]["history"]["sensor.level"][2] == []
+        history.record_change(hass, "sensor.level", SimpleNamespace(state="5", last_changed=now))
+        assert hass.data["ha_dial"]["history"]["sensor.level"][2][-1] == 5
+        history.record_change(hass, "sensor.other", SimpleNamespace(state="5", last_changed=now))
         assert "sensor.other" not in hass.data["ha_dial"]["history"]
         history.forget_history(hass)
         assert "history" not in hass.data["ha_dial"]
@@ -327,6 +327,45 @@ def test_history_reads_the_recorder_once_and_survives_its_failure(integration, d
 
     asyncio.run(run())
     assert calls == [("sensor.level", True), ("sensor.broken", True)]
-    assert hass.data["ha_dial"]["history"]["sensor.level"][-1] == 4
-    assert hass.data["ha_dial"]["history"]["sensor.broken"] == []
+    assert hass.data["ha_dial"]["history"]["sensor.level"][24][-1] == 4
+    assert hass.data["ha_dial"]["history"]["sensor.broken"][24] == []
     assert "database locked" in caplog.text
+
+
+def test_history_ranges_stay_independent_when_loaded_and_updated(integration, dial, monkeypatch):
+    history, clock = dial.load("history"), dial.load("chronograph")
+    hass = integration.hass
+    hass.config = SimpleNamespace(components={"recorder"})
+    now = datetime(2026, 11, 3, 12, tzinfo=UTC)
+    monkeypatch.setattr(history.dt_util, "utcnow", lambda: now)
+    calls = []
+
+    def changes(_hass, start, *, entity_id, no_attributes):
+        calls.append(start)
+        return {entity_id: [
+            SimpleNamespace(last_changed=when, state=value)
+            for when, value in ((now - timedelta(hours=12), "2"), (now - timedelta(hours=1), "8"))
+            if when >= start
+        ]}
+
+    async def executor(job):
+        return job()
+
+    dial.module("homeassistant.components.recorder",
+        get_instance=lambda _: SimpleNamespace(async_add_executor_job=executor),
+        history=SimpleNamespace(state_changes_during_period=changes))
+    views = [_face("DAT-AREA", metrics=[{"entity_id": "sensor.level"}], history_hours=hours) for hours in (2, 24)]
+
+    def series(view):
+        return clock.resolve_clock(hass, view)["_clock"]["metrics"][0]["series"]
+
+    async def run():
+        for view in (*views, *views):
+            await history.ensure_history(hass, view)
+        assert calls == [now - timedelta(hours=2), now - timedelta(hours=24)]
+        assert 2 not in series(views[0]) and 2 in series(views[1])
+        history.record_change(hass, "sensor.level", SimpleNamespace(last_changed=now, state="9"))
+        assert series(views[0])[-1] == series(views[1])[-1] == 9
+        assert 2 not in series(views[0]) and 2 in series(views[1])
+
+    asyncio.run(run())

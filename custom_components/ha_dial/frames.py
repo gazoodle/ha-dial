@@ -175,13 +175,14 @@ def request_frame(hass, device: str, view: dict, publish) -> None:
         visits.pop(device, None)
         return
     entered = visits.get(device) != key
-    visits[device] = key
     dirty = state.setdefault("frame_dirty", set())
     stale = key[0] in dirty or view.get("clock", {}).get("refresh_entity") in dirty
     known = key in state.get("frames", {}) or key in state.get("frame_errors", {})
     tasks = state.setdefault("frame_tasks", {})
     if not (entered or stale or not known) or device in tasks:
         return
+    # A busy capture republishes the current page; leave its entry pending until then.
+    visits[device] = key
     dirty.discard(key[0])
     dirty.discard(view.get("clock", {}).get("refresh_entity"))
 

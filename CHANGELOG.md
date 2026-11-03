@@ -1,5 +1,11 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b30
+
+- Keep each Data face's requested history range separate, including when sensor events update the charts.
+- Capture a camera freshly on entry even when another camera's capture is still running.
+- Use the full browser width for the panel and keep its preview slider and editor columns steady while zooming.
+
 ## 2026.10.1-b29
 
 - Fix pale colours when turning a light that was in white. Colour now starts at full saturation unless the light is already in colour.
