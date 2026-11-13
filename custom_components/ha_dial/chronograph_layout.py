@@ -24,7 +24,7 @@ def chronograph_layout(c: Canvas, view: dict, o: dict) -> list[dict]:
     c.disc(120, 120, 90, theme["bg"] if c.crisp else surface, quiet)
     c.ring(120, 120, 82, theme["grid"], under=surface)
     if style != "CHR-WORLDTIMER":
-        c.text(view.get("title", "HA DIAL").upper(), 120, 58, 7, theme["secondary"], under, tracking=2, weight=1, max_width=90)
+        c.text(view.get("title", "HA DIAL").upper(), 120, 58, 9, theme["secondary"], under, tracking=2, weight=1, max_width=90)
     if not clock:
         c.text("TIME UNAVAILABLE", 120, 118, 9, theme["text"], under, tracking=1, max_width=140)
         return regions
@@ -37,7 +37,7 @@ def chronograph_layout(c: Canvas, view: dict, o: dict) -> list[dict]:
     def register(x, y, radius, value, total, caption):
         c.disc(x, y, radius, theme["bg"], quiet, under=surface)
         c.ticks(x, y, radius - 2, 12, 3, quiet, under=theme["bg"])
-        c.text(caption, x, y + radius // 2, 6, quiet, None if c.crisp else theme["bg"], tracking=0)
+        c.text(caption, x, y + radius // 2, 8, theme["label"], None if c.crisp else theme["bg"], tracking=0)
         hand(x, y, radius - 6, value * 360 / total, theme["secondary"], ground=theme["bg"])
         c.disc(x, y, 2, primary, None, 1, None if c.crisp else theme["bg"])
 
@@ -50,8 +50,8 @@ def chronograph_layout(c: Canvas, view: dict, o: dict) -> list[dict]:
             c.disc(120, 157, 23, theme["bg"], quiet, under=surface)
             phase = MOON_PHASES.get(clock["moon"])
             if phase is None:
-                c.text("NO MOON", 120, 153, 6, quiet, None if c.crisp else theme["bg"], tracking=0)
-                c.text("DATA", 120, 163, 6, quiet, None if c.crisp else theme["bg"], tracking=0)
+                c.text("NO MOON", 120, 153, 8, theme["label"], None if c.crisp else theme["bg"], tracking=0)
+                c.text("DATA", 120, 163, 8, theme["label"], None if c.crisp else theme["bg"], tracking=0)
             elif phase:
                 # Orthographic illumination of a spherical moon; the HA phase selects the angle.
                 terminator = cos(phase * pi / 4)
@@ -66,15 +66,15 @@ def chronograph_layout(c: Canvas, view: dict, o: dict) -> list[dict]:
         zones = clock["zones"]
         for index, (name, value) in enumerate(zones):
             x, y = polar(120, 120, 66, (index + 0.5) * 360 / len(zones))
-            c.text(name, x, y - 5, 6, primary if index == 0 else quiet, under, tracking=0, max_width=40)
-            c.text(value, x, y + 5, 7, theme["text"], under, tracking=0)
+            c.text(name, x, y - 6, 8, primary if index == 0 else theme["label"], under, tracking=0, max_width=40)
+            c.text(value, x, y + 6, 9, theme["text"], under, tracking=0)
         c.disc(120, 120, 38, theme["bg"], quiet, under=surface)
         reserve = clock.get("reserve")
         if reserve is not None:
             c.arc(120, 120, 38, -110, -110 + 165 * reserve / 100, primary, 3, under=surface)
         ground = None if c.crisp else theme["bg"]
-        c.text("RESERVE --" if reserve is None else f"RESERVE {reserve:g}%", 120, 96, 6, quiet, ground, tracking=0, max_width=60)
-        c.text(zones[0][1], 120, 146, 7, primary, ground, tracking=0)
+        c.text("RESERVE --" if reserve is None else f"RESERVE {reserve:g}%", 120, 96, 8, theme["label"], ground, tracking=0, max_width=60)
+        c.text(zones[0][1], 120, 146, 9, primary, ground, tracking=0)
     else:
         outline = [(58, 137), (88, 70), (113, 101), (137, 51), (182, 137), (144, 175), (83, 168)]
         c.path([*outline, outline[0]], quiet, under)
@@ -92,8 +92,8 @@ def chronograph_layout(c: Canvas, view: dict, o: dict) -> list[dict]:
     items = view.get("items", [])
     if items:
         selected = items[view.get("selected", 0) % len(items)]
-        c.text(selected["label"], 120, 190, 8, primary, tracking=1, max_width=110)
+        c.text(selected["label"], 120, 190, 10, primary, tracking=1, max_width=110)
         regions.append({"id": selected["id"], "x": 120, "y": 190, "r": 8})
     else:
-        c.text(clock["date"], 120, 190, 7, quiet, tracking=1, max_width=110)
+        c.text(clock["date"], 120, 190, 9, theme["label"], tracking=1, max_width=110)
     return regions

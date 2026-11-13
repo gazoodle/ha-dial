@@ -16,21 +16,21 @@ def _picture(c: Canvas, clock: dict, x, y, width, height, radius=8) -> dict | No
         c.image(x, y, image)
     else:
         c.pill(x, y, width, height, c.theme["surface"], c.theme["quiet"], 1, radius=radius)
-        c.text(image["error"], x, y, 8, c.theme["quiet"], c.theme["surface"], tracking=1, weight=1, max_width=width - 16)
+        c.text(image["error"], x, y, 10, c.theme["label"], c.theme["surface"], tracking=1, weight=1, max_width=width - 16)
     return image if "crc" in image else None
 
 
 def _status_pill(c: Canvas, image: dict | None, y=24) -> None:
     text = f"CAMERA · {image['age']}" if image else "CAMERA"
-    width = c.text_size(text, 7, 1, 1)[0] + 20
+    width = c.text_size(text, 9, 1, 1)[0] + 20
     fill = c.tint(0.13)
     c.pill(120, y, width, 18, None if c.crisp else fill, c.theme["primary"], 1)
-    c.text(text, 120, y, 7, c.theme["secondary"], None if c.crisp else fill, tracking=1, weight=1)
+    c.text(text, 120, y, 9, c.theme["secondary"], None if c.crisp else fill, tracking=1, weight=1)
 
 
 def _warn(c: Canvas, image: dict | None, y, under=None) -> None:
     if image and image.get("error"):
-        c.text(image["error"], 120, y, 7, c.theme["primary"], under, tracking=1, weight=1)
+        c.text(image["error"], 120, y, 9, c.theme["primary"], under, tracking=1, weight=1)
 
 
 def cam_portal(c, clock, o):
@@ -48,7 +48,7 @@ def cam_cinema(c, clock, o):
     image = _picture(c, clock, 120, 106, 164, 96, 5)
     c.text(clock.get("title", "CAMERA").upper(), 120, 44, o["label-size"] + 1, c.theme["secondary"], tracking=o["tracking"], weight=1, max_width=130)
     if image:
-        c.text(image["age"], 120, 166, o["label-size"], c.theme["quiet"], tracking=o["tracking"], weight=1)
+        c.text(image["age"], 120, 166, o["label-size"], c.theme["label"], tracking=o["tracking"], weight=1)
     _warn(c, image, 178)
 
 
@@ -63,7 +63,7 @@ def cam_radar(c, clock, o):
     c.lines(flat, theme["secondary"], "#303030")
     detection = clock.get("detection")
     text = "NO SENSOR" if detection is None else detection["text"]
-    c.text(text, 120, 183, o["label-size"] + 1, theme["primary"] if detection and detection["active"] else theme["quiet"], tracking=min(o["tracking"], 1), weight=1, max_width=170)
+    c.text(text, 120, 183, o["label-size"] + 1, theme["primary"] if detection and detection["active"] else theme["label"], tracking=min(o["tracking"], 1), weight=1, max_width=170)
     _warn(c, image, 150)
 
 
@@ -73,7 +73,7 @@ def wat_photos(c, clock, o):
     if "crc" in image:
         c.image(120, 120, image, first=True)
     else:
-        c.text(image["error"], 120, 90, 8, c.theme["quiet"], tracking=1, weight=1, max_width=150)
+        c.text(image["error"], 120, 90, 10, c.theme["label"], tracking=1, weight=1, max_width=150)
     under = "#060606"
     y = 158 + o["title-offset"]
     if c.crisp or image.get("mode") == "dither":

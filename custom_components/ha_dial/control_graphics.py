@@ -35,7 +35,7 @@ def _detail(c, view, o, y=170, width=130, under=None):
 
     if view.get("actions") or view.get("confirmation"):
         y = min(y, 155)
-    c.text(detail_text(view), 120, y + o["detail-offset"], o["detail-size"], c.theme["quiet"], under, tracking=o["tracking"], weight=1, max_width=width)
+    c.text(detail_text(view), 120, y + o["detail-offset"], o["detail-size"], c.theme["label"], under, tracking=o["tracking"], weight=1, max_width=width)
 
 
 def _percent(view):
@@ -103,7 +103,7 @@ def _thermostat(c, view, o):
     gauge_ring(c, view, o, icon=False)
     mode = str(view.get("state", "")).replace("_", " ").upper()
     if mode:
-        c.text(mode, 120, 78, 8, c.theme["primary"], tracking=2, weight=1, max_width=80)
+        c.text(mode, 120, 78, 10, c.theme["primary"], tracking=2, weight=1, max_width=80)
 
 
 def _volume(c, view, o):
@@ -141,7 +141,7 @@ def _media(c, view, o):
     middle = (len(title) + 1) // 2
     c.text(" ".join(title[:middle]), 123, 82, 10, theme["text"], under, align="start", tracking=1, weight=1, max_width=62)
     c.text(" ".join(title[middle:]), 123, 96, 10, theme["text"], under, align="start", tracking=1, weight=1, max_width=62)
-    c.text(str(view.get("state", "")).upper(), 123, 112, 6, theme["quiet"], under, align="start", tracking=1, weight=1, max_width=62)
+    c.text(str(view.get("state", "")).upper(), 123, 112, 8, theme["label"], under, align="start", tracking=1, weight=1, max_width=62)
     _detail(c, {**view, "detail": f"VOLUME {round(view.get('value', 0))}%"}, o, y=151)
 
 
@@ -265,7 +265,7 @@ def _sentinel(c, view, o):
     else:
         c.text(state, 120, 156, 15, theme["text"], tracking=1, weight=1, max_width=150)
         if pending in {"PENDING", "UNAVAILABLE"}:
-            c.text(pending, 120, 170, o["detail-size"], theme["quiet"], tracking=1, weight=1)
+            c.text(pending, 120, 170, o["detail-size"], theme["label"], tracking=1, weight=1)
 
 
 def _vacuum(c, view, o):
@@ -279,7 +279,7 @@ def _vacuum(c, view, o):
     c.icon(icon_name(view, o), 120, cy - 8, 36, theme["secondary"])
     c.text(f"{round(battery)}%" if battery is not None else "--", 120, cy + 24, 14, theme["text"], tracking=0, weight=1)
     if not view.get("confirmation"):
-        c.text(str(view.get("state", "--")).replace("_", " ").upper(), 120, 152 if view.get("actions") else 168, 8, theme["primary"], tracking=2, weight=1, max_width=130)
+        c.text(str(view.get("state", "--")).replace("_", " ").upper(), 120, 152 if view.get("actions") else 168, 10, theme["primary"], tracking=2, weight=1, max_width=130)
 
 
 def _measure(icon_size=30, lines=5):
@@ -317,7 +317,7 @@ def _weather(c, view, o):
     c.icon(icon, 90, 90, 64, theme["primary"])
     temperature = str(view.get("detail", "--")).split(" / ")[0]
     c.text(temperature, 168, 102, 18, theme["text"], tracking=0, weight=1, max_width=64)
-    c.text(str(view.get("state", "--")).replace("-", " ").upper(), 120, 152, 8, theme["secondary"], tracking=2, weight=1, max_width=150)
+    c.text(str(view.get("state", "--")).replace("-", " ").upper(), 120, 152, 10, theme["secondary"], tracking=2, weight=1, max_width=150)
 
 
 def _timer(c, view, o):
@@ -329,7 +329,7 @@ def _timer(c, view, o):
     c.arc(120, cy, radius, -180, 180, theme["primary"] if active else theme["grid"], o["gauge-width"])
     c.ticks(120, cy, radius - o["gauge-width"] - 3, 60, 2, theme["quiet"], 5, theme["secondary"], 6)
     c.text(str(view.get("detail", "--")), 120, cy - 4, min(o["value-size"], 26), theme["text"], tracking=0, weight=1, max_width=radius * 2 - 24)
-    c.text(str(view.get("state", "--")).upper(), 120, cy + 20, 7, theme["primary"], tracking=2, weight=1)
+    c.text(str(view.get("state", "--")).upper(), 120, cy + 20, 9, theme["primary"], tracking=2, weight=1)
 
 
 def _calendar(c, view, o):
@@ -345,7 +345,7 @@ def _calendar(c, view, o):
     middle = (len(words) + 1) // 2
     c.text(" ".join(words[:middle]), 120, 96, 11, theme["text"], under, tracking=1, weight=1, max_width=84)
     c.text(" ".join(words[middle:]), 120, 112, 11, theme["text"], under, tracking=1, weight=1, max_width=84)
-    c.text("NOW" if busy else "NEXT", 120, 174, 7, theme["primary"], tracking=2, weight=1)
+    c.text("NOW" if busy else "NEXT", 120, 174, 9, theme["primary"], tracking=2, weight=1)
 
 
 def _scene(c, view, o):
@@ -380,7 +380,7 @@ def _selector(c, view, o):
     shown = options[:8]
     for index, option in enumerate(shown):
         x, y = polar(120, cy, 48, index * 360 / max(1, len(shown)))
-        c.text(str(option).upper(), x, y, 6, theme["secondary"] if index == current else theme["quiet"], under, tracking=0, weight=1, max_width=36)
+        c.text(str(option).upper(), x, y, 8, theme["secondary"] if index == current else theme["label"], under, tracking=0, weight=1, max_width=36)
     fill = c.tint(0.2)
     c.disc(120, cy, 25, fill if not c.crisp else theme["bg"], theme["primary"], 1, under)
     label = str(options[current]).upper() if options else str(view.get("state", "--")).upper()

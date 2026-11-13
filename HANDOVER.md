@@ -1,6 +1,16 @@
-# Handover — 2026-10-31
+# Handover — 2026-11-13
 
 ## Current state
+
+Integration b31 (copied to HA on 2026-11-13 with approval, all 57 files verified, HA restart and
+browser refresh pending; it also carries b30) makes small text 2 px larger with an 8 px floor and gives
+captions a readable `label` colour; the rule and its reason are in AGENTS.md. Verified: 286 tests,
+including identical card and firmware pixels on regenerated fixtures, and every style inspected in
+Smooth, a sample in Crisp. The owner hasn't yet judged it on the Dial, which is the real test. The
+suite is over its 15 s budget (it was 15.9 s before this build): the pixel comparison is 6 s
+of it, and b31's two new tests brought it to about 20 s. b31 also grows the interior when the ring is
+hidden or slimmed (rule in AGENTS.md); inspected in Smooth for every style and a sample in Crisp. Still
+open: the owner wants "more depth" in some styles, not yet defined.
 
 Integration b30 fixes history ranges sharing one cache and camera entries being lost while another
 capture runs. Verified: both regressions failed before the fixes; 285 tests and Ruff pass. Pyright

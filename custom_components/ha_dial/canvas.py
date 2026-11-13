@@ -11,6 +11,9 @@ from .assets import _number_mask, _text_mask, icon_mask
 from .strokes import icon_segments, text_segments, text_width
 
 MAX_SEGMENTS = 256
+# The Dial is about 0.135 mm a pixel: below this, text can't be read on it. Fitting stops here and
+# elides instead, and tests/test_appearance_tokens.py holds every default to it.
+MIN_TEXT = 8
 
 
 def polar(cx, cy, radius, degrees):
@@ -36,9 +39,28 @@ def _pixel(value):
 
 class Canvas:
     def __init__(self, theme: dict, crisp: bool):
-        self.theme = theme
+        # Small text is never drawn in quiet: at 2.2-3.8:1 it couldn't be read on the Dial. This
+        # holds 4.5:1 or better in every theme, and quiet stays for lines and rings.
+        self.theme = {**theme, "label": mix(theme["secondary"], theme["bg"], 0.66)}
         self.crisp = crisp
         self.elements: list[dict] = []
+        # Layouts draw in design units, laid out for the default frame. When the frame gives up
+        # room, scene.py raises this and everything grows about the centre, type included.
+        self.scale = 1.0
+
+    def at(self, value):
+        """A design coordinate on the display. Exactly itself at scale 1, so rounding can't drift."""
+        return value if self.scale == 1 else 120 + (value - 120) * self.scale
+
+    def _long(self, value):
+        return value if self.scale == 1 else value * self.scale
+
+    def _wide(self, width):
+        return width if self.scale == 1 else max(1, round(width * self.scale))
+
+    def _size(self, size):
+        # Rounded down: type that grew faster than the space around it would be cut short to fit.
+        return size if self.scale == 1 else int(size * self.scale)
 
     def tint(self, amount: float, colour: str | None = None) -> str:
         return mix(colour or self.theme["primary"], self.theme["bg"], amount)
@@ -47,14 +69,16 @@ class Canvas:
         return {} if self.crisp else {"background": under or self.theme["bg"]}
 
     def ring(self, x, y, r, colour, width=1, under=None):
-        element = {"op": "circle", "x": round(x), "y": round(y), "r": round(r), "stroke": colour}
+        width = self._wide(width)
+        element = {"op": "circle", "x": round(self.at(x)), "y": round(self.at(y)), "r": round(self._long(r)), "stroke": colour}
         if self.crisp and width == 1:
             self.elements.append(element)  # Midpoint circle: the line-step character itself.
             return
         self.elements.append({**element, "width": width, "solid": True, **self._soft(under)})
 
     def disc(self, x, y, r, fill, stroke=None, width=1, under=None):
-        element = {"op": "circle", "x": round(x), "y": round(y), "r": round(r), "fill": fill}
+        width = self._wide(width)
+        element = {"op": "circle", "x": round(self.at(x)), "y": round(self.at(y)), "r": round(self._long(r)), "fill": fill}
         if stroke:
             element.update(stroke=stroke, width=width)
         if self.crisp and width == 1:
@@ -63,7 +87,8 @@ class Canvas:
         self.elements.append({**element, "solid": True, **self._soft(under)})
 
     def arc(self, x, y, r, start, end, colour, width=1, cap=False, under=None):
-        element = {"op": "arc", "x": round(x), "y": round(y), "r": round(r), "start": round(start), "end": round(end), "stroke": colour, "width": width}
+        width = self._wide(width)
+        element = {"op": "arc", "x": round(self.at(x)), "y": round(self.at(y)), "r": round(self._long(r)), "start": round(start), "end": round(end), "stroke": colour, "width": width}
         if self.crisp and width == 1:
             self.elements.append(element)
             return
@@ -71,8 +96,9 @@ class Canvas:
 
     def gauge(self, x, y, r, start, end, value, colour, width, fill=None, minimum=0, maximum=100, cap=False, under=None):
         """A firmware-updated arc, so rotary feedback stays local and immediate."""
+        width = self._wide(width)
         element = {
-            "op": "gauge", "x": round(x), "y": round(y), "r": round(r), "start": round(start), "end": round(end),
+            "op": "gauge", "x": round(self.at(x)), "y": round(self.at(y)), "r": round(self._long(r)), "start": round(start), "end": round(end),
             "value": max(0, min(100, round(value))), "stroke": colour, "fill": fill or colour,
             "minimum": minimum, "maximum": maximum, "width": width,
         }
@@ -83,21 +109,25 @@ class Canvas:
 
     def line(self, x1, y1, x2, y2, colour, width=1, under=None):
         if width <= 1:
-            self.elements.append({"op": "line", "x1": _pixel(x1), "y1": _pixel(y1), "x2": _pixel(x2), "y2": _pixel(y2), "stroke": colour, **self._soft(under)})
+            self.elements.append({"op": "line", "x1": _pixel(self.at(x1)), "y1": _pixel(self.at(y1)), "x2": _pixel(self.at(x2)), "y2": _pixel(self.at(y2)), "stroke": colour, **self._soft(under)})
             return
         self.poly(capsule(x1, y1, x2, y2, width), colour, under)
 
     def lines(self, flat, colour, under=None):
         """Many strokes in one element; this is what makes fans and moiré affordable."""
+        self._segments([self.at(value) for value in flat], colour, under)
+
+    def _segments(self, flat, colour, under=None):
+        """Strokes already in display pixels: Crisp type and icons place their own."""
         flat = [_pixel(value) for value in flat]
         for start in range(0, len(flat), MAX_SEGMENTS * 4):
             self.elements.append({"op": "segments", "lines": flat[start : start + MAX_SEGMENTS * 4], "stroke": colour, **self._soft(under)})
 
     def path(self, points, colour, under=None):
-        self.elements.append({"op": "polyline", "points": [[_pixel(x), _pixel(y)] for x, y in points[:128]], "stroke": colour, **self._soft(under)})
+        self.elements.append({"op": "polyline", "points": [[_pixel(self.at(x)), _pixel(self.at(y))] for x, y in points[:128]], "stroke": colour, **self._soft(under)})
 
     def poly(self, points, fill, under=None):
-        self.elements.append({"op": "polygon", "points": [[_quarter(x), _quarter(y)] for x, y in points[:128]], "fill": fill, **self._soft(under)})
+        self.elements.append({"op": "polygon", "points": [[_quarter(self.at(x)), _quarter(self.at(y))] for x, y in points[:128]], "fill": fill, **self._soft(under)})
 
     def hatch(self, points, colour, spacing=3, under=None):
         """Even-odd horizontal hatching clipped to a polygon, for Crisp's tinted surfaces."""
@@ -155,17 +185,21 @@ class Canvas:
             self.lines(strong, major_colour or colour, under)
 
     def text_size(self, value, size, tracking=1, weight=0):
+        """Measured in design units, so a layout never sees the scale."""
+        size = self._size(size)
         if self.crisp:
-            return text_width(str(value), _cap_height(size), tracking), _cap_height(size)
-        mask = _text_mask(str(value), size, "#ffffff", tracking, weight)
-        return mask["width"], mask["height"]
+            width, height = text_width(str(value), _cap_height(size), tracking), _cap_height(size)
+        else:
+            mask = _text_mask(str(value), size, "#ffffff", tracking, weight)
+            width, height = mask["width"], mask["height"]
+        return (width, height) if self.scale == 1 else (width / self.scale, height / self.scale)
 
     def _fit(self, value, size, tracking, weight, max_width):
         """Shrink, then elide with two dots. Text is never silently cut."""
         value = str(value)
         if not max_width or not value:
             return value, size
-        floor = min(size, 6)
+        floor = min(size, MIN_TEXT)
         while size > floor and self.text_size(value, size, tracking, weight)[0] > max_width:
             size -= 1
         while len(value) > 1 and self.text_size(value, size, tracking, weight)[0] > max_width:
@@ -177,6 +211,7 @@ class Canvas:
         value, size = self._fit(value, size, tracking, weight, max_width)
         if not str(value).strip():
             return
+        x, y, size = self.at(x), self.at(y), self._size(size)
         if self.crisp:
             height = _cap_height(size)
             width = text_width(value, height, tracking)
@@ -185,39 +220,42 @@ class Canvas:
             flat = []
             for x1, y1, x2, y2 in text_segments(value, height, tracking):
                 flat.extend((round(left) + x1, top + y1, round(left) + x2, top + y2))
-            self.lines(flat, colour)
+            self._segments(flat, colour)
             return
         mask = _text_mask(value, size, colour, tracking, weight)
         centre = x if align == "middle" else x - mask["width"] / 2 if align == "end" else x + mask["width"] / 2
         self.elements.append({**mask, "x": _pixel(centre), "y": _pixel(y), "background": under or self.theme["bg"]})
 
     def icon(self, name, x, y, size, colour, under=None):
+        x, y, size = self.at(x), self.at(y), self._size(size)
         if self.crisp:
             flat = []
             left, top = round(x - size / 2), round(y - size / 2)
             for x1, y1, x2, y2 in icon_segments(name, size):
                 flat.extend((left + x1, top + y1, left + x2, top + y2))
             if flat:
-                self.lines(flat, colour)
+                self._segments(flat, colour)
             return
         self.elements.append({**icon_mask(name, size, colour), "x": _pixel(x), "y": _pixel(y), "background": under or self.theme["bg"]})
 
     def image(self, x, y, frame: dict, first=False):
         """A frame the Dial blits; first puts it under everything, for a full-bleed picture."""
         element = {
-            "op": "image", "x": _pixel(x), "y": _pixel(y), "width": frame["width"], "height": frame["height"],
+            "op": "image", "x": _pixel(self.at(x)), "y": _pixel(self.at(y)), "width": frame["width"], "height": frame["height"],
             "scale": frame["scale"], "crc": frame["crc"], "url": frame["url"], "fill": self.theme["surface"],
         }
         self.elements.insert(0, element) if first else self.elements.append(element)
 
-    def number_cell(self, size) -> int:
-        return _number_mask(size, "crisp" if self.crisp else "smooth", True)["width"]
+    def number_cell(self, size) -> float:
+        """A digit's width in design units."""
+        width = _number_mask(self._size(size), "crisp" if self.crisp else "smooth", True)["width"]
+        return width if self.scale == 1 else width / self.scale
 
     def number(self, value, x, y, size, colour, stroke, extended=False, precision=0, under=None):
         """A digit atlas the firmware reuses for immediate local rotary feedback."""
         element = {
-            "op": "number", "x": _pixel(x), "y": _pixel(y), "value": value, "colour": colour, "stroke": stroke,
-            "background": under or self.theme["bg"], **_number_mask(size, "crisp" if self.crisp else "smooth", extended),
+            "op": "number", "x": _pixel(self.at(x)), "y": _pixel(self.at(y)), "value": value, "colour": colour, "stroke": stroke,
+            "background": under or self.theme["bg"], **_number_mask(self._size(size), "crisp" if self.crisp else "smooth", extended),
         }
         if extended:
             element.update(precision=precision, characters="0123456789.-")

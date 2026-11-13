@@ -43,7 +43,7 @@ def chrome(c: Canvas, view: dict, o: dict, y: int) -> list[dict]:
         else:
             c.pill(x, y, breadth, size * 2, surface if not c.crisp else c.theme["bg"], c.theme["quiet"])
             c.icon(icon, x - breadth * 0.3, y, round(size * 1.05), primary, surface)
-            c.text(label, x + breadth * 0.14, y, 6, c.theme["text"], surface, tracking=1 if y > 180 else 0, weight=1)
+            c.text(label, x + breadth * 0.14, y, 8, c.theme["text"], surface, tracking=1 if y > 180 else 0, weight=1)
     return regions
 
 
@@ -71,7 +71,7 @@ def _hub_under(c: Canvas, o) -> str:
 def _title(c: Canvas, label, sub, o, y=104, width=108, under=None) -> None:
     y += o["title-offset"]
     c.text(label.upper(), 120, y, o["font-size"], c.theme["text"], under, tracking=o["tracking"], weight=1, max_width=width)
-    c.text(sub, 120, y + o["label-gap"], o["label-size"], c.theme["quiet"] if not c.crisp else c.theme["primary"], under, tracking=1, weight=1, max_width=width)
+    c.text(sub, 120, y + o["label-gap"], o["label-size"], c.theme["label"] if not c.crisp else c.theme["primary"], under, tracking=1, weight=1, max_width=width)
 
 
 def _selected_label(items, selected, view):
@@ -145,7 +145,7 @@ def _rolodex(c, view, items, selected, o):
         under = theme["bg"] if c.crisp else fill
         icon_x = 120 - min(top, bottom) / 2 + (height * 0.75 if active else side * 0.8)
         c.icon(icon_for(items[n], o), icon_x, y, o["selected-icon-size"] if active else o["icon-size"], theme["secondary"] if active else theme["text"], under)
-        c.text(items[n]["label"].upper(), 128, y, o["font-size"] if active else max(7, o["font-size"] - 4), theme["text"] if active else theme["secondary"], under, tracking=o["tracking"], weight=1 if active else 0, max_width=min(top, bottom) - (height * 1.3 if active else side * 1.5))
+        c.text(items[n]["label"].upper(), 128, y, o["font-size"] if active else max(9, o["font-size"] - 4), theme["text"] if active else theme["secondary"], under, tracking=o["tracking"], weight=1 if active else 0, max_width=min(top, bottom) - (height * 1.3 if active else side * 1.5))
         regions.append({"id": items[n]["id"], "x": 120, "y": round(y), "r": max(10, round(half))})
     right = 120 + o["row-width"] / 2 + 10
     c.path([(right, 100), (right + 8, 110), (right, 120)], theme["primary"])
@@ -281,7 +281,7 @@ def _breadcrumb(c, view, items, selected, o):
         stroke = theme["primary"] if current else theme["quiet"]
         c.pill(120, y, min(190, width), height, None if c.crisp else fill, stroke, o["selected-border"] if current else 1)
         size = max(o["label-size"], o["font-size"] - depth * 3)
-        c.text(name.upper(), 120, y, size, theme["text"] if current else theme["quiet"] if depth > 1 else theme["secondary"], None if c.crisp else fill, tracking=o["tracking"], weight=1 if current else 0, max_width=min(190, width) - 22)
+        c.text(name.upper(), 120, y, size, theme["text"] if current else theme["label"] if depth > 1 else theme["secondary"], None if c.crisp else fill, tracking=o["tracking"], weight=1 if current else 0, max_width=min(190, width) - 22)
     label = _selected_label(items, selected, view).upper()
     c.poly([(120, bottom + 6), (114, bottom + 13), (126, bottom + 13)], theme["primary"])
     c.text(f"{label} {selected + 1}/{len(items)}", 120, bottom + 24, o["label-size"] + 1, theme["primary"], tracking=1, weight=1, max_width=150)
@@ -309,7 +309,7 @@ def _list(c, view, items, selected, o):
             c.pill(120, y, half * 2 - 8, pitch - 3, None if c.crisp else fill, theme["primary"], o["selected-border"], radius=4)
         under = None if c.crisp or not active else c.tint(0.2)
         c.icon(icon_for(items[n], o), left + 10, y, o["selected-icon-size"] - 5 if active else o["icon-size"] - 3, theme["secondary"] if active else theme["quiet"], under)
-        c.text(items[n]["label"], left + 25, y, o["font-size"] if active else max(7, o["font-size"] - 3), theme["text"] if active else theme["secondary"], under, align="start", tracking=o["tracking"], weight=1 if active else 0, max_width=half * 2 - 44)
+        c.text(items[n]["label"], left + 25, y, o["font-size"] if active else max(9, o["font-size"] - 3), theme["text"] if active else theme["secondary"], under, align="start", tracking=o["tracking"], weight=1 if active else 0, max_width=half * 2 - 44)
         regions.append({"id": items[n]["id"], "x": 120, "y": round(y), "r": max(10, pitch // 2)})
     if count > window:
         c.arc(120, 120, 96, 60, 120, theme["grid"], 2)

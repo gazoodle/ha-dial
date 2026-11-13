@@ -128,6 +128,60 @@ def test_crisp_never_uses_glyph_masks_and_long_text_is_elided_not_cut(dial):
         assert value.endswith("..")
 
 
+def _contrast(first, second):
+    """WCAG contrast ratio of two #RRGGBB colours."""
+    light, dark = sorted((_luminance(first), _luminance(second)), reverse=True)
+    return (light + 0.05) / (dark + 0.05)
+
+
+def _luminance(colour):
+    channels = [int(colour[i : i + 2], 16) / 255 for i in (1, 3, 5)]
+    red, green, blue = (c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels)
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+
+
+def test_default_text_is_big_and_bright_enough_to_read_on_the_dial(dial, monkeypatch):
+    """The owner found the Dial hard to read: 74% of text was 8 px or less, 22% under 4.5:1."""
+    scene, catalogue = dial.load("scene"), dial.load("catalogue")
+    floor = sys.modules[scene.Canvas.__module__].MIN_TEXT
+    drawn = []
+    draw = scene.Canvas.text
+
+    def record(self, value, x, y, size, colour, under=None, **options):
+        fitted = self._fit(value, size, options.get("tracking", 1), options.get("weight", 0), options.get("max_width"))[1]
+        drawn.append((str(value), fitted, round(_contrast(colour, under or self.theme["bg"]), 1)))
+        return draw(self, value, x, y, size, colour, under, **options)
+
+    monkeypatch.setattr(scene.Canvas, "text", record)
+    for view, raster, theme in product(views(catalogue), ("smooth", "crisp"), scene.THEMES):
+        drawn.clear()
+        scene.compile_scene({**view, "theme": theme, "appearance": {"raster": raster}})
+        poor = [text for text in drawn if text[1] < floor or text[2] < 4.5]
+        assert not poor, (view["style"], raster, theme, poor)
+
+
+@pytest.mark.parametrize("raster", ["smooth", "crisp"])
+def test_hiding_the_ring_lets_the_interior_grow_and_still_fit(dial, raster):
+    """The owner asked for this: before, only the ring itself went and the space stayed empty."""
+    scene, appearance, catalogue = dial.load("scene"), dial.load("appearance"), dial.load("catalogue")
+    assert scene._interior_scale("NAV-ORBIT", appearance.DEFAULTS) == 1
+
+    def reach(resolved):
+        return max(hypot(region["x"] - 120, region["y"] - 120) for region in resolved["regions"])
+
+    for view in views(catalogue):
+        framed = scene.compile_scene({**view, "appearance": {"raster": raster}})
+        bare = scene.compile_scene({**view, "appearance": {"raster": raster, "outer-border": False}})
+        if view["style"] in appearance.PICTURE_DEFAULTS:
+            # A picture can't grow, so nothing around it may move.
+            assert all(element in framed["elements"] for element in bare["elements"]), view["style"]
+            continue
+        assert reach(bare) > reach(framed), view["style"]
+        assert len(bare["elements"]) <= 64 and len(bare["regions"]) <= 16, view["style"]
+        paired = json.dumps({"scene": bare, "previous": bare}, separators=(",", ":"))
+        assert len(paired) <= scene.MAX_VIEW_BYTES, view["style"]
+
+
 def test_solid_bands_leave_no_unpainted_pixels(dial):
     """The old concentric strokes left about 14% of a thick gauge unpainted."""
     import subprocess

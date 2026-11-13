@@ -382,3 +382,10 @@ step on the control, so firmware's local turn handling works unchanged, and the 
 `value_owner.h` holds the Dial's state machine for a turned value, with no display or network code. While it owns a
 value the Dial drops scenes for that screen, and HA's final scene when it stops being pending hands the screen back.
 Turning draws locally only through `number` and `gauge` elements, so everything else on the screen waits for that scene.
+
+## Interior scale
+
+Layouts draw in design units for the default frame. `Canvas` maps them to display pixels through one scale about
+the centre, which `scene.py` raises when the frame is slimmer or hidden; touch regions take the same mapping. It is
+exactly 1 at the default frame, so those scenes are unchanged, and firmware only ever sees final pixels. Picture
+styles stay at 1 because their frame arrives at a fixed size.

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from . import camera_layout  # noqa: F401 - registers its faces
-from .appearance import appearance
+from .appearance import DEFAULTS, PICTURE_DEFAULTS, appearance
 from .canvas import Canvas
 from .catalogue import CHRONOGRAPH_STYLES, FACE_STYLES
 from .chronograph_layout import chronograph_layout
@@ -33,6 +33,23 @@ def _frame(c: Canvas, o: dict) -> None:
         c.ring(120, 120, radius - o["border-width"] - o["ring-gap"] + 1, c.tint(0.45))
 
 
+def _clear_radius(o: dict) -> int:
+    """How far from the centre the frame leaves the display free."""
+    if not o["outer-border"]:
+        return 119
+    return 119 - o["ring-inset"] - o["border-width"] - (o["ring-gap"] if o["ring-double"] else 0)
+
+
+def _interior_scale(style: str, o: dict) -> float:
+    """Layouts are drawn for the default frame; a slimmer or hidden one lets them grow into the room.
+
+    A heavier frame doesn't shrink them, because that would take text below what can be read.
+    """
+    if style in PICTURE_DEFAULTS:
+        return 1.0  # A picture arrives at a fixed size, so what's drawn around it has to stay put.
+    return max(1.0, _clear_radius(o) / _clear_radius(DEFAULTS))
+
+
 def _settings_cog(c: Canvas, view: dict, y: int) -> dict | None:
     items = view.get("items", [])
     if not any(item.get("settings") for item in items):
@@ -60,6 +77,7 @@ def compile_scene(view: dict) -> dict:
     c = Canvas(theme, options["raster"] == "crisp")
     _frame(c, options)
     style = view.get("style", "NAV-ORBIT")
+    c.scale = _interior_scale(style, options)
     if style in CHRONOGRAPH_STYLES:
         regions = chronograph_layout(c, view, options)
         regions = regions + chrome(c, view, options, 212)
@@ -76,6 +94,9 @@ def compile_scene(view: dict) -> dict:
         regions, cog = navigation_layout(c, view, options)
     if cog is not None and (settings := _settings_cog(c, view, cog)):
         regions.append(settings)
+    if c.scale != 1:
+        # Touch areas are drawn-for-default too, and must land on what they belong to.
+        regions = [{**region, "x": round(c.at(region["x"])), "y": round(c.at(region["y"])), "r": round(region["r"] * c.scale)} for region in regions]
 
     return {
         # Only pictures need version 6, so everything else still draws on version 5 firmware.

@@ -1,5 +1,13 @@
 # HA Dial Server changelog
 
+## 2026.10.1-b31
+
+- Make small text easier to read on the Dial. Labels, captions, units, details and Back and Home are 2 px larger by default, and text is no longer shrunk below 8 px to fit: it's shortened with two dots instead. A page that saved its own label, detail or unit size keeps it.
+- Draw dim captions in a brighter colour. They used the quiet colour, which is meant for lines and was too faint for text in every theme. Setting a quiet colour no longer changes caption text; the secondary colour does.
+- Re-fit the screens the larger text crowded: the World Timer's zones, the Radar and Status faces, the Modular face's time, and the Tumbler's detail line.
+- Hiding the outer ring, or slimming it, now lets the screen grow into the room: everything is drawn up to 7% larger about the centre. Before, only the ring went and the space stayed empty. Camera and photo screens don't grow, because their picture is a fixed size. A heavier frame doesn't shrink anything.
+- No firmware change is needed.
+
 ## 2026.10.1-b30
 
 - Keep each Data face's requested history range separate, including when sensor events update the charts.

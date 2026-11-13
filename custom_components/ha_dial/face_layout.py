@@ -39,7 +39,7 @@ def amb_typographic(c, clock, o):
     x = 8 + c.text_size("00", size, 0, 0)[0] / 2
     c.text(f"{clock['hour']:02}", 120 - x, 112 + o["title-offset"], size, theme["text"], tracking=0)
     c.text(f"{clock['minute']:02}", 120 + x, 112 + o["title-offset"], size, theme["primary"], tracking=0, weight=0 if c.crisp else 1)
-    c.text(clock["date"], 120, 158, o["label-size"] + 1, theme["quiet"], tracking=o["tracking"], weight=1, max_width=140)
+    c.text(clock["date"], 120, 158, o["label-size"] + 1, theme["label"], tracking=o["tracking"], weight=1, max_width=140)
 
 
 def amb_solar(c, clock, o):
@@ -54,7 +54,7 @@ def amb_solar(c, clock, o):
         c.disc(*polar(120, 125, radius, end), 6, theme["secondary"], None, 1, theme["grid"])
     _big_time(c, clock, o, y=122)
     text = f"SUNSET {sun['setting']} · DAWN {sun['rising']}" if sun else "NO SUN DATA"
-    c.text(text, 120, 149, o["label-size"], theme["quiet"], tracking=1, weight=1, max_width=150)
+    c.text(text, 120, 149, o["label-size"], theme["label"], tracking=1, weight=1, max_width=150)
 
 
 def amb_orbital(c, clock, o):
@@ -66,7 +66,7 @@ def amb_orbital(c, clock, o):
     c.disc(*polar(120, 119, outer, clock["minute"] * 6), 7, theme["primary"], None, 1)
     c.disc(*polar(120, 119, inner, (clock["hour"] % 12 + clock["minute"] / 60) * 30), 4, theme["secondary"], None, 1)
     _big_time(c, clock, o, y=118, size=min(o["value-size"], 30))
-    c.text(clock["date"], 120, 140, o["label-size"], theme["quiet"], tracking=1, weight=1, max_width=inner * 2 - 20)
+    c.text(clock["date"], 120, 140, o["label-size"], theme["label"], tracking=1, weight=1, max_width=inner * 2 - 20)
 
 
 def amb_status(c, clock, o):
@@ -77,12 +77,12 @@ def amb_status(c, clock, o):
     if weather:
         c.icon(WEATHER_ICONS.get(weather["state"], "mdi:weather-partly-cloudy"), 96, 112, 14, theme["primary"])
         c.text(weather["temperature"], 108, 112, o["label-size"] + 2, theme["secondary"], align="start", tracking=0, weight=1)
-    c.text(clock["date"], 120, 124, o["label-size"], theme["quiet"], tracking=1, weight=1, max_width=150)
-    for (x, y), metric in zip(((72, 154), (120, 164), (168, 154)), _metrics(clock, 3)):
+    c.text(clock["date"], 120, 124, o["label-size"], theme["label"], tracking=1, weight=1, max_width=150)
+    for (x, y), metric in zip(((70, 154), (120, 164), (170, 154)), _metrics(clock, 3)):
         fill = theme["bg"] if c.crisp else theme["surface"]
-        c.disc(x, y, 22, fill, theme["quiet"])
-        c.text(metric["label"], x, y - 8, 6, theme["primary"], fill, tracking=0, weight=1, max_width=36)
-        c.text(_reading(metric), x, y + 5, 8, theme["text"], fill, tracking=0, weight=1, max_width=38)
+        c.disc(x, y, 24, fill, theme["quiet"])
+        c.text(metric["label"], x, y - 8, 8, theme["primary"], fill, tracking=0, weight=1, max_width=40)
+        c.text(_reading(metric), x, y + 5, 10, theme["text"], fill, tracking=0, weight=1, max_width=40)
 
 
 def wat_contour(c, clock, o):
@@ -93,7 +93,7 @@ def wat_contour(c, clock, o):
         x, y = polar(120, 106, o["gauge-radius"], index * 30)
         strong = index % 3 == 0
         lit = numeral == 12 and current == 12 or numeral <= current and numeral != 12
-        c.text(numeral, x, y, 19 if strong else 12, theme["primary"] if lit else theme["quiet"], tracking=0, weight=1 if strong else 0)
+        c.text(numeral, x, y, 19 if strong else 12, theme["primary"] if lit else theme["label"], tracking=0, weight=1 if strong else 0)
     _big_time(c, clock, o, y=102, size=min(o["value-size"], 30))
     c.text(clock["date"], 120, 124, o["label-size"] + 1, theme["secondary"], tracking=1, weight=1, max_width=90)
 
@@ -101,18 +101,18 @@ def wat_contour(c, clock, o):
 def wat_modular(c, clock, o):
     """Time and a disciplined stack of real complications."""
     theme = c.theme
-    c.text(_time(clock), 172, 52, o["value-size"] - 8, theme["text"], align="end", tracking=0, weight=1)
+    c.text(_time(clock), 190, 52, o["value-size"] - 8, theme["text"], align="end", tracking=0, weight=1)
     c.text(clock["date"], 62, 52, o["label-size"] + 1, theme["primary"], align="start", tracking=0, weight=1, max_width=62)
     first, second, third = _metrics(clock, 3)
     fill = theme["bg"] if c.crisp else theme["surface"]
     under = None if c.crisp else fill
     c.pill(120, 95, 150, 48, under, theme["quiet"], 1, radius=12)
-    c.text(first["label"].upper(), 58, 84, 6, theme["quiet"], under, align="start", tracking=1, weight=1, max_width=124)
+    c.text(first["label"].upper(), 58, 84, 8, theme["label"], under, align="start", tracking=1, weight=1, max_width=124)
     c.text(_reading(first), 58, 103, 12, theme["text"], under, align="start", tracking=0, weight=1, max_width=124)
     for x, metric in ((81, second), (159, third)):
         c.pill(x, 151, 72, 50, under, theme["quiet"], 1, radius=12)
         c.text(_reading(metric), x, 146, 13, theme["text"], under, tracking=0, weight=1, max_width=62)
-        c.text(metric["label"].upper(), x, 165, 6, theme["primary"], under, tracking=0, weight=1, max_width=62)
+        c.text(metric["label"].upper(), x, 165, 8, theme["primary"], under, tracking=0, weight=1, max_width=62)
 
 
 def wat_palette(c, clock, o):
@@ -148,7 +148,7 @@ def wat_rings(c, clock, o):
         if metric["percent"]:
             c.arc(100, 108, radius, -180, -180 + 360 * metric["percent"] / 100, colours[index], width, cap=True, under=theme["grid"])
         y = 72 + index * 36
-        c.text(metric["label"].upper(), 188, y - 7, 6, theme["quiet"], tracking=0, weight=1, max_width=46)
+        c.text(metric["label"].upper(), 188, y - 7, 8, theme["label"], tracking=0, weight=1, max_width=46)
         c.text(_reading(metric), 188, y + 6, 11, theme["text"], tracking=0, weight=1, max_width=46)
     c.text(_time(clock), 100, 108, 11, theme["text"], tracking=0, weight=1)
 
@@ -240,7 +240,7 @@ def dat_area(c, clock, o):
     if len(points) > 1:
         c.surface([*points, (197, 176), (43, 176)], c.tint(0.2), theme["primary"], hatch=c.tint(0.5))
     else:
-        c.text("NO HISTORY", 120, 150, 7, theme["quiet"], tracking=1, weight=1)
+        c.text("NO HISTORY", 120, 150, 9, theme["label"], tracking=1, weight=1)
     _primary_text(c, metric, 78, o["value-size"] - 6, o)
 
 
@@ -248,7 +248,7 @@ def dat_radar(c, clock, o):
     """Each metric gets a spoke, scaled by its own maximum."""
     theme = c.theme
     metrics = list(clock.get("metrics", []))
-    cy = 112
+    cy = 104
     for radius in (24, 42, 61):
         c.ring(120, cy, radius, theme["grid"])
     count = max(3, len(metrics))
@@ -261,10 +261,10 @@ def dat_radar(c, clock, o):
     if len(points) >= 3:
         c.surface(points, c.tint(0.2), theme["primary"], hatch=c.tint(0.5))
     for index, metric in enumerate(metrics):
-        x, y = polar(120, cy, 76, index * 360 / count)
-        c.text(metric["label"][:6].upper(), x, y, 6, theme["quiet"], tracking=0, weight=1, max_width=36)
+        x, y = polar(120, cy, 72, index * 360 / count)
+        c.text(metric["label"][:6].upper(), x, y, 8, theme["label"], tracking=0, weight=1, max_width=36)
     known = sum(1 for metric in metrics if metric["percent"] is not None)
-    c.text(f"{known} SIGNALS" if metrics else "NO METRICS", 120, 180, o["label-size"], theme["primary"], tracking=1, weight=1)
+    c.text(f"{known} SIGNALS" if metrics else "NO METRICS", 120, 190, o["label-size"], theme["primary"], tracking=1, weight=1)
 
 
 def dat_bands(c, clock, o):
@@ -293,11 +293,11 @@ def dat_spark(c, clock, o):
     if len(points) > 1:
         c.path(points, theme["primary"])
     else:
-        c.text("NO HISTORY", 120, 88, 7, theme["quiet"], tracking=1, weight=1)
+        c.text("NO HISTORY", 120, 88, 9, theme["label"], tracking=1, weight=1)
     c.text(_reading(metrics[0]), 120, 134, min(o["value-size"], 22), theme["text"], tracking=0, weight=1, max_width=130)
     for x, metric in ((65, metrics[1]), (120, metrics[2]), (175, metrics[3])):
         c.text(_reading(metric), x, 166, 10, theme["text"], tracking=0, weight=1, max_width=50)
-        c.text(metric["label"].upper(), x, 178, 5, theme["quiet"], tracking=0, weight=1, max_width=50)
+        c.text(metric["label"].upper(), x, 178, 8, theme["label"], tracking=0, weight=1, max_width=50)
 
 
 FACES = {
@@ -338,5 +338,5 @@ def face_layout(c: Canvas, view: dict, o: dict) -> list[dict]:
         return _direct_actions(c, items, view.get("selected", 0))
     # A face can still front a page: its current destination stays reachable by touch.
     selected = items[view.get("selected", 0) % len(items)]
-    c.text(selected["label"], 120, 192, 7, c.theme["primary"], tracking=1, weight=1, max_width=110)
+    c.text(selected["label"], 120, 192, 9, c.theme["primary"], tracking=1, weight=1, max_width=110)
     return [{"id": selected["id"], "x": 120, "y": 190, "r": 9}]

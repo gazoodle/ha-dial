@@ -47,6 +47,24 @@ lost this and that was built instead. The owner approved the look test on 2026-1
 Smooth means real coverage on every primitive, not just text. Why: on 2026-10-31 both modes were
 found sharing one aliased primitive raster, with 14% of a thick gauge unpainted.
 
+## Readable on the Dial, but not chunky (2026-11-13)
+
+No default text is under 8 px (`MIN_TEXT` in `canvas.py`) or under 4.5:1 against what it sits on, and
+text uses the theme's `label` colour, never `quiet`, which is for lines. A test in
+`tests/test_appearance_tokens.py` holds both. Why: the owner found the physical Dial "a little difficult
+to see"; 74% of text was 8 px or less on a 0.135 mm pixel, and quiet text was 2.2-3.8:1. The lift was
+2 px because the owner asked for "a smidgen bigger without turning into a duplo style interface", and at
+3 px labels began to fill their pills. Don't enlarge further without the owner asking.
+
+## The frame decides how big the interior is (2026-11-13)
+
+Layouts draw in design units for the default frame, and `Canvas.scale` grows them about the centre when
+the frame gives up room (`_interior_scale` in `scene.py`). So a layout never reads the frame settings
+itself, and a setting such as orbit radius means its value at the default frame. Why: the owner asked
+that "removing border allows interior to expand"; `outer-border` was read in one place and freed nothing.
+It only grows, never shrinks, so text stays readable; type rounds down so it can't outgrow its space; and
+picture styles don't scale, because the Dial blits their picture at a fixed size.
+
 ## Atlas scope and style settings (2026-10-31)
 
 The Atlas is a starting point, not the target. Editorial is big type, not a thinner Instrument, and
