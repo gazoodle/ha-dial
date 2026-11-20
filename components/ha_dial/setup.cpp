@@ -80,7 +80,7 @@ void HaDial::draw_setup_(display::Display &it) {
         break;
       case SetupScreen::WAITING_HA:
         title = "Waiting for HA";
-        lines = {address, "ESPHome API connected", "Add HA Dial Server", "then add HA Dial card", "to a dashboard", "Hold 5s: Wi-Fi reset"};
+        lines = {address, "ESPHome API connected", "Add HA Dial Server,", "then build pages in", "the HA Dial panel", "Hold 5s: Wi-Fi reset"};
         break;
       case SetupScreen::READY:
         return;

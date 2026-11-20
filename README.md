@@ -8,7 +8,7 @@ You arrange pages and controls in a Home Assistant panel, and the Dial shows the
 
 *Every screen above comes from the same renderer the Dial uses, with invented names.*
 
-> **Status: prototype.** This is built and tested in development, but it's early. There's no HACS package or release yet, and much of it has only run against test stand-ins. See [What hasn't been proven yet](#what-hasnt-been-proven-yet).
+> **Status: first release.** It runs on a real Dial in a real home, but it's young, and some parts have mostly been tested against stand-ins for HA. See [What hasn't been proven yet](#what-hasnt-been-proven-yet), and please [report anything odd](https://github.com/gazoodle/ha-dial/issues).
 
 ## What it does
 
@@ -42,11 +42,15 @@ The Dial receives only what it needs: final geometry, colours, text masks and to
 
 ## Installation
 
-You need an M5Stack Dial v1.1, Home Assistant with the ESPHome integration, and a Mac or Linux machine with Python 3.11 or later. It's developed against Home Assistant 2026.10.
+You need an M5Stack Dial v1.1, Home Assistant 2026.10 or later with the ESPHome integration, and, to build the firmware, a Mac or Linux machine with Python 3.11 or later and a USB-C cable.
 
 ### 1. Flash the firmware
 
+There's no ready-made firmware image yet, so you build it from this repository:
+
 ```shell
+git clone https://github.com/gazoodle/ha-dial.git
+cd ha-dial
 python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
 tools/flash /dev/cu.usbmodem… ha-dial-connected.yaml
@@ -62,13 +66,15 @@ Each Dial needs its own ESPHome device name.
 
 ### 2. Install the integration
 
-Copy `custom_components/ha_dial` into your HA config folder, or point the deploy tool at a mounted config share:
+**From the Marketplace** (HACS, built into Home Assistant from 2026.11):
 
-```shell
-.venv/bin/python tools/deploy.py /path/to/ha/config
-```
+[![Open your Home Assistant instance and open this repository in the Marketplace.](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=gazoodle&repository=ha-dial&category=integration)
 
-Restart Home Assistant. Later updates raise a Repair when a restart is needed. Refresh your browser after each one.
+Until HA Dial is in the Marketplace's own list, the button offers to add this repository first. With HACS on an older Home Assistant, add `https://github.com/gazoodle/ha-dial` as a custom repository of type **Integration**. Then download **HA Dial** and restart Home Assistant.
+
+**By hand:** copy `custom_components/ha_dial` into the `custom_components` folder of your HA config, and restart Home Assistant.
+
+Refresh your browser after installing or updating.
 
 ### 3. Connect everything
 
@@ -79,7 +85,7 @@ Restart Home Assistant. Later updates raise a Repair when a restart is needed. R
 5. **Refresh your browser.** **HA Dial** then appears in the sidebar, for administrators.
 6. **Build your pages.** Open **HA Dial**, choose your Dial, add some pages and controls, then press **Save and apply**.
 
-The Dial shows **Waiting for HA** until it has pages. That screen still mentions adding a dashboard card, but you don't need one.
+The Dial shows **Waiting for HA** until it has pages.
 
 ## The panel
 
@@ -227,7 +233,7 @@ Most of this has been tested through automated checks, stand-ins for HA and comp
 - Explorer on a real home, including rebuilds and HA restarts.
 - Pictures from real cameras, and the Dial reaching HA across subnets.
 - White and colour on real lights, which round values differently.
-- How turning feels on the Dial, and suitable values for its settings.
+- How turning feels on the Dial, and suitable values for its settings. Some light controls are known to lag behind the dial while you turn.
 - Live operation from the preview, and Follow Dial turned off.
 - Memory use and draw time on the Dial at its most complex screens.
 
@@ -240,6 +246,12 @@ tools/compile ha-dial-connected.yaml     # Full firmware build
 ```
 
 Some C++ pixel checks need ArduinoJson from a firmware build, and they're skipped until you've run one.
+
+To try a change on your own HA, point the deploy tool at a mounted config share. It raises a Repair in HA when a restart is needed:
+
+```shell
+.venv/bin/python tools/deploy.py /path/to/ha/config
+```
 
 | Path | Contents |
 | --- | --- |

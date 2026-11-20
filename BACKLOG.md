@@ -216,10 +216,11 @@ Consider whether a concrete use case needs the Dial to control local hardware wh
 unavailable. If so, design ownership and state reconciliation on reconnect before changing the
 current HA-owned control architecture.
 
-## Dial setup text (2026-11-02)
+## Light control lag (2026-11-20)
 
-The **Waiting for HA** screen in `components/ha_dial/setup.cpp` still says to add a dashboard card. Pages now come from
-the panel, so it should say that instead. It needs a firmware build, so take it with the next one. The README notes it.
+The owner finds some light controls laggy on the Dial. Accepted for the soft launch, but it blocks anything
+wider (AGENTS.md, Rotary UX). Not yet known: which styles and modes (brightness, white, colour), and which
+lights. Measure before changing anything: HA's value-owner logs and the timings in README's How turning feels.
 
 ## Local drawing of state changes (2026-11-01)
 

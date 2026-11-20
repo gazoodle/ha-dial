@@ -161,6 +161,11 @@ after rotation stopped. That experience is unacceptable as the product UX, even 
 A unit test passing does not establish physical responsiveness: measure burst/release behaviour
 and verify it on the Dial before calling this UX complete.
 
+Amended 2026-11-20: the owner accepted a soft launch through the Marketplace (HACS) with some light
+controls still lagging, listed as a known issue in the README. The rule above still holds for anything
+wider than that, such as announcing it. Why: the owner wants real users' feedback first, and a soft
+launch is only found by people looking for it.
+
 ## Simulator controls (2026-10-27)
 
 Use smaller, translucent orange, nearly circular rotation arrows in the card's bottom corners,
