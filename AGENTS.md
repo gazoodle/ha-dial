@@ -65,6 +65,15 @@ that "removing border allows interior to expand"; `outer-border` was read in one
 It only grows, never shrinks, so text stays readable; type rounds down so it can't outgrow its space; and
 picture styles don't scale, because the Dial blits their picture at a fixed size.
 
+## A touch target covers what's drawn, and a fingertip more (2026-11-20)
+
+Back and Home respond across their whole drawn button plus slack (`CHROME_TOUCH_MARGIN`), and a test checks
+it. A pill is three circles; a crowded page drops the two end circles so it stays within the Dial's 16
+regions, which HA checks in `scene.py`. Why: the owner found Back and Home hard to hit on the live Dial.
+One centred 16 px circle covered about half of each pill and none of its icon. A larger margin reaches
+the action buttons, and the first fix (six circles everywhere) took a dense Snake to 18 regions, which
+the Dial would have refused.
+
 ## Atlas scope and style settings (2026-10-31)
 
 The Atlas is a starting point, not the target. Editorial is big type, not a thinner Instrument, and

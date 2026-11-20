@@ -217,10 +217,76 @@ def test_action_buttons_never_share_a_touch_area_with_back_or_home(dial):
         resolved = scene.compile_scene({"kind": "control", "id": "c", "domain": domain, "title": "Example", "style": f"CTL-{base}-{shape}", "back": True, "actions": actions, "appearance": {"raster": raster}, **LEVEL})
         chrome = [region for region in resolved["regions"] if region["id"] in {"back", "home"}]
         buttons = [region for region in resolved["regions"] if region["id"] in actions]
-        assert len(buttons) == len(actions) and len(chrome) == 2, (raster, shape, domain)
+        assert len(buttons) == len(actions) and {region["id"] for region in chrome} == {"back", "home"}, (raster, shape, domain)
         for button in buttons:
             for other in chrome:
                 assert hypot(button["x"] - other["x"], button["y"] - other["y"]) >= button["r"] + other["r"], (raster, shape, button, other)
+
+
+def test_a_crowded_page_keeps_back_and_home_within_the_dials_touch_limit(dial):
+    """Snake at four a row shows 12 items: three circles each for Back and Home would make 18."""
+    scene = dial.load("scene")
+    items = [{"id": f"i{n}", "label": f"Item {n}", "icon": "mdi:lightbulb", "children": []} for n in range(30)]
+    dense = {"snake-per-row": 4, "snake-row-length": 170, "snake-turn": 14}
+    resolved = scene.compile_scene({"kind": "menu", "id": "home", "title": "Home", "style": "NAV-SNAKE", "back": True, "items": items, "selected": 0, "appearance": dense})
+    assert len(resolved["regions"]) <= scene.MAX_REGIONS
+    assert [region["id"] for region in resolved["regions"]].count("back") == 1
+    assert not any("spare" in region for region in resolved["regions"])
+    roomy = scene.compile_scene({"kind": "menu", "id": "home", "title": "Home", "style": "NAV-ORBIT", "back": True, "items": items[:6]})
+    assert [region["id"] for region in roomy["regions"]].count("back") == 3
+    assert not any("spare" in region for region in roomy["regions"])
+
+
+@pytest.mark.parametrize("chrome_style", ["pill", "circle"])
+def test_back_and_home_respond_across_what_is_drawn_and_a_fingertip_beyond(dial, monkeypatch, chrome_style):
+    """The owner found them hard to hit: one centred circle left the pills' icons untouchable."""
+    scene, catalogue = dial.load("scene"), dial.load("catalogue")
+    layout = sys.modules[scene.chrome.__module__]  # The copy scene uses; loading again would make another.
+    slack = 5  # About 0.7 mm, at the narrowest point between a pill's touch circles; most of it gets more.
+    drawn = []
+    shapes = {"pill": scene.Canvas.pill, "disc": scene.Canvas.disc}
+    drawing = [False]
+
+    def recorded(kind):
+        def draw(self, x, y, *args, **options):
+            if drawing[0]:
+                drawn.append((kind, x, y, *args[:2]))
+            return shapes[kind](self, x, y, *args, **options)
+        return draw
+
+    chrome = layout.chrome
+
+    def watched(*args, **options):
+        drawing[0] = True
+        try:
+            return chrome(*args, **options)
+        finally:
+            drawing[0] = False
+
+    monkeypatch.setattr(scene.Canvas, "pill", recorded("pill"))
+    monkeypatch.setattr(scene.Canvas, "disc", recorded("disc"))
+    monkeypatch.setattr(layout, "chrome", watched)
+    monkeypatch.setattr(scene, "chrome", watched)
+    controls = [
+        {"kind": "control", "id": "c", "domain": domain, "title": "Example", "style": f"CTL-{base}-{shape}", "back": True, "actions": actions, **LEVEL}
+        for shape, (domain, base, actions) in product(SHAPES, ACTIONS)
+    ]
+    for view in [*views(catalogue), *controls]:
+        drawn.clear()
+        resolved = scene.compile_scene({**view, "appearance": {"chrome-style": chrome_style}})
+        regions = [region for region in resolved["regions"] if region["id"] in {"back", "home"}]
+        assert len(drawn) == 2, (view["style"], drawn)
+        for kind, x, y, first, second in drawn:
+            # A pill is a capsule: every point within radius of its centre line. A disc has no length.
+            half, radius = (first / 2 - second / 2, second / 2) if kind == "pill" else (0, first)
+            outline = [
+                (px, py)
+                for px in range(round(x - half - radius - slack), round(x + half + radius + slack) + 1)
+                for py in range(round(y - radius - slack), round(y + radius + slack) + 1)
+                if hypot(px - min(max(px, x - half), x + half), py - y) <= radius + slack
+            ]
+            missed = [point for point in outline if not any(hypot(point[0] - region["x"], point[1] - region["y"]) <= region["r"] for region in regions)]
+            assert not missed, (view["style"], kind, len(missed), missed[:3], regions)
 
 
 def test_the_confirm_question_replaces_the_state_line(dial):

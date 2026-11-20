@@ -12,6 +12,8 @@ from .face_layout import face_layout
 from .navigation_layout import chrome, navigation_layout
 
 MAX_VIEW_BYTES = 24576
+# The firmware's fixed region array (SceneBuffer::regions in components/ha_dial/scene.h).
+MAX_REGIONS = 16
 
 THEMES = {
     "ember": {"bg": "#060707", "surface": "#15110f", "primary": "#ff8b2d", "secondary": "#ffd19a", "quiet": "#77513a", "text": "#fff7eb", "grid": "#3a2920"},
@@ -94,6 +96,11 @@ def compile_scene(view: dict) -> dict:
         regions, cog = navigation_layout(c, view, options)
     if cog is not None and (settings := _settings_cog(c, view, cog)):
         regions.append(settings)
+
+    # The Dial refuses a whole scene with too many touch areas, so a crowded page gives up the
+    # spare ones (Back and Home's end circles) rather than every touch area on it.
+    crowded = len(regions) > MAX_REGIONS
+    regions = [{key: value for key, value in region.items() if key != "spare"} for region in regions if not (crowded and region.get("spare"))]
     if c.scale != 1:
         # Touch areas are drawn-for-default too, and must land on what they belong to.
         regions = [{**region, "x": round(c.at(region["x"])), "y": round(c.at(region["y"])), "r": round(region["r"] * c.scale)} for region in regions]

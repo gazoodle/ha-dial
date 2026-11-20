@@ -8,6 +8,10 @@ from .canvas import Canvas, polar
 from .catalogue import CONTROL_TYPES
 from .snake_path import arrange
 
+# How far Back and Home respond beyond what's drawn. The Dial is about 0.135 mm a pixel, so 8 px
+# is about a millimetre: enough for a finger that lands a little low or wide.
+CHROME_TOUCH_MARGIN = 8
+
 
 def icon_for(item: dict, options: dict) -> str:
     """An item's icon, preferring the Atlas's fine line look where MDI has an outline."""
@@ -26,6 +30,13 @@ def chrome(c: Canvas, view: dict, o: dict, y: int) -> list[dict]:
     breadth = size * (4 if y < 180 else 5)
     y += o["chrome-offset"]
     half = (breadth / 2 if style == "pill" else size) + o["chrome-gap"] / 2
+    # A pill is touched through circles on its two rounded ends and its middle, so its icon and
+    # label both respond. One centred circle left the icons outside it, and the ends alone leave a
+    # waist across the label. The margin is a fingertip's slack: at 10 px the areas would reach the
+    # action buttons on some controls.
+    end = breadth / 2 - size
+    ends = (-end, 0, end) if style == "pill" else (0,)
+    reach = size + CHROME_TOUCH_MARGIN
     regions = []
     for name, icon, label, x, present in (
         ("back", "mdi:arrow-left", "BACK", 120 - half, view.get("back")),
@@ -33,7 +44,8 @@ def chrome(c: Canvas, view: dict, o: dict, y: int) -> list[dict]:
     ):
         if not present:
             continue
-        regions.append({"id": name, "x": round(x), "y": round(y), "r": max(14, size + 4)})
+        # The end circles are spare: on a crowded page scene.py drops them to stay within the Dial's limit.
+        regions.extend({"id": name, "x": round(x + end), "y": round(y), "r": reach, **({"spare": True} if end else {})} for end in ends)
         if style == "hidden":
             continue
         surface, primary = c.theme["surface"], c.theme["primary"]

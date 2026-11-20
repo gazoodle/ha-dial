@@ -80,7 +80,9 @@ The scene format is independent of its transport encoding. The current JSON serv
 replaced or supplemented without changing which layer owns layout.
 
 The original scenes use version 1 JSON with a 240 × 240 size, background colour, drawing
-elements and touch regions. Elements are circles, straight lines, arcs and pre-rendered text masks.
+elements and touch regions. Elements are circles, straight lines, arcs and pre-rendered text masks. Touch regions are circles; a
+non-round target, such as a pill, is several circles with the same identifier, and the first region a
+touch falls in wins. The firmware holds 16 regions and refuses a scene with more.
 The masks use packed two-bit coverage; the device expands them directly to pixels. The card uses
 the same mask pixels and rasterises the supplied primitive geometry on its canvas. Neither side
 chooses scene geometry or font metrics.

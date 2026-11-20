@@ -2,12 +2,14 @@
 
 ## Current state
 
-Release 2026.11.1 (integration and firmware), 2026-11-20, a soft launch through the Marketplace
-(HACS, built into HA from 2026.11) with light lag as a known issue (AGENTS.md, Rotary UX amendment).
-It adds `hacs.json`, manifest `codeowners` and `issue_tracker`, `.github/workflows/validate.yaml` (HACS
-action and hassfest), a Marketplace-first README and a regenerated `docs/screens.png`. Firmware fixes the
-Waiting for HA text; compiled, not flashed. Integration not deployed since b31. The `hacs/default` pull
-request waits for the owner.
+Releases on 2026-11-20, a soft launch through the Marketplace (HACS, built into HA from 2026.11) with
+light lag as a known issue (AGENTS.md, Rotary UX amendment). 2026.11.1 (integration and firmware) added
+`hacs.json`, manifest `codeowners` and `issue_tracker`, `.github/workflows/validate.yaml` (HACS action and
+hassfest), a Marketplace-first README and a regenerated `docs/screens.png`; its firmware fixes the Waiting
+for HA text, compiled but not flashed (the Dial runs b6). Integration 2026.11.2 makes Back and Home touch
+areas cover the whole drawn button (rule in AGENTS.md), confirmed "much better" on the Dial by the owner,
+and adds Marketplace categories. HA runs 2026.11.2-b1, the same code. The `hacs/default` pull request was
+opened from the owner's fork `gazoodle/default` after 2026.11.2.
 
 Integration b31 (copied to HA on 2026-11-13 with approval, all 57 files verified, HA restart and
 browser refresh pending; it also carries b30) makes small text 2 px larger with an 8 px floor and gives

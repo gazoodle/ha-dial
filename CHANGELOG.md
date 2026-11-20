@@ -1,5 +1,10 @@
 # HA Dial Server changelog
 
+## 2026.11.2
+
+- Make Back and Home much easier to hit on the Dial. Their whole pill now responds, including the arrow and house, which didn't before, with about a millimetre of slack around it. On Crisp's round buttons the touch area is 40 px across instead of 32. No firmware change is needed.
+- List HA Dial under Buttons & remotes and DIY hardware in the Marketplace.
+
 ## 2026.11.1
 
 - Install from the Marketplace (HACS): the repository now has the files and checks it needs. Home Assistant 2026.10 or later is required.
