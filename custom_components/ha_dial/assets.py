@@ -1,12 +1,18 @@
-"""HA-rasterised Smooth text and icons, and the digit atlases shared by both renderers."""
+"""HA-rasterised Smooth text and icons, and the digit atlases shared by both renderers.
+
+Bundled resources are read once, by `_load_resources` in the integration's setup, in the executor, so
+nothing here touches the disk on HA's event loop. Rasterising runs in the executor with the scene.
+"""
 
 import json
 from functools import lru_cache
+from io import BytesIO
 from math import ceil
 from pathlib import Path
 
 SUPERSAMPLE = 4
 MASK_WIDTH, MASK_HEIGHT = 240, 120
+RESOURCES = Path(__file__).with_name("resources")
 
 
 @lru_cache(maxsize=512)
@@ -83,7 +89,19 @@ def _number_mask(size: int, raster: str = "smooth", extended: bool = False) -> d
 
 @lru_cache(maxsize=1)
 def icon_names() -> dict:
-    return json.loads((Path(__file__).with_name("resources") / "mdi.json").read_text())
+    return json.loads((RESOURCES / "mdi.json").read_text())
+
+
+@lru_cache(maxsize=1)
+def mdi_data() -> bytes:
+    return (RESOURCES / "mdi.ttf").read_bytes()
+
+
+def mdi_font(size: int):
+    """A fresh font from the bytes in memory: no disk read, and no Pillow object shared between threads."""
+    from PIL import ImageFont
+
+    return ImageFont.truetype(BytesIO(mdi_data()), size)
 
 
 def usable_icon(name, fallback: str) -> str:
@@ -93,12 +111,12 @@ def usable_icon(name, fallback: str) -> str:
 
 @lru_cache(maxsize=256)
 def icon_mask(name: str, size: int, colour: str) -> dict:
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw
 
     names = icon_names()
     if name not in names:
         raise ValueError(f"Unknown bundled MDI icon: {name}")
-    font = ImageFont.truetype(str(Path(__file__).with_name("resources") / "mdi.ttf"), size * SUPERSAMPLE)
+    font = mdi_font(size * SUPERSAMPLE)
     image = Image.new("L", (size * SUPERSAMPLE, size * SUPERSAMPLE))
     glyph = chr(names[name])
     box = font.getbbox(glyph)

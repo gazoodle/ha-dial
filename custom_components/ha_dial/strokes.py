@@ -122,7 +122,7 @@ def text_segments(text: str, height: int, tracking: int) -> tuple:
 
 
 @lru_cache(maxsize=1)
-def _stroke_icons() -> dict:
+def stroke_icons() -> dict:
     return json.loads((RESOURCES / "stroke_icons.json").read_text())
 
 
@@ -193,12 +193,12 @@ def _simplify(points: list, tolerance: float) -> list:
 @lru_cache(maxsize=64)
 def _traced(name: str) -> tuple:
     """Outline an MDI glyph at high resolution, in the 24-unit icon grid."""
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw
 
-    from .assets import icon_names
+    from .assets import icon_names, mdi_font
 
     size = 96
-    font = ImageFont.truetype(str(RESOURCES / "mdi.ttf"), size)
+    font = mdi_font(size)
     image = Image.new("L", (size, size))
     glyph = chr(icon_names()[name])
     box = font.getbbox(glyph)
@@ -220,8 +220,8 @@ def icon_paths(name: str) -> tuple:
     """Polylines for an icon in a 24-unit grid, whichever source supplies them."""
     bare = name.removeprefix("mdi:").removesuffix("-outline")
     atlas = ATLAS_ICONS.get(bare)
-    if atlas in _stroke_icons():
-        return tuple(tuple((x, y) for x, y in path) for path in _stroke_icons()[atlas])
+    if atlas in stroke_icons():
+        return tuple(tuple((x, y) for x, y in path) for path in stroke_icons()[atlas])
     return _traced(name)
 
 

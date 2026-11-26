@@ -25,7 +25,7 @@ from homeassistant.helpers.event import (
 )
 
 from .catalogue import CHRONOGRAPH_STYLES, FACE_STYLES
-from .chronograph import resolve_clock, source_entities
+from .chronograph import async_resolve_clock, source_entities
 from .const import DOMAIN
 from .controls import control_command, control_state, preview_feedback
 from .definition import THEMES, build_definition, leaf_items, validate_definition
@@ -146,9 +146,29 @@ def _next_revision(hass: HomeAssistant, device: str) -> int:
     return revisions[device]
 
 
+def _compile_all(views: tuple[dict, ...]) -> list[dict]:
+    return [compile_scene(view) for view in views]
+
+
+async def _compile(hass: HomeAssistant, *views: dict) -> list[dict]:
+    """Compile off the event loop: Pillow rasterises text and icons, and a cold gallery takes ~100 ms.
+
+    One batch at a time, so scenes come back in the order they were asked for. A card accepts an equal
+    revision, so a slow older scene must never land after a newer one.
+    """
+    async with hass.data[DOMAIN].setdefault("compile_lock", asyncio.Lock()):
+        return await hass.async_add_executor_job(_compile_all, views)
+
+
+def _suppressed(state: dict, device: str) -> bool:
+    return bool(state.get("unloading")) or device in state.get("resetting", set()) or (
+        device in state.get("stored_definitions", {}) and state["stored_definitions"][device] is None
+    )
+
+
 async def _push(hass: HomeAssistant, device: str, view: dict) -> None:
     state = hass.data[DOMAIN]
-    if state.get("unloading") or device in state.get("resetting", set()) or (device in state.get("stored_definitions", {}) and state["stored_definitions"][device] is None):
+    if _suppressed(state, device):
         return
     await ensure_history(hass, view)
 
@@ -156,25 +176,34 @@ async def _push(hass: HomeAssistant, device: str, view: dict) -> None:
         await _push(hass, device, _navigator(hass, device).current())
 
     request_frame(hass, device, view, republish)
-    view = resolve_clock(hass, view)
-    _navigator(hass, device).clock_snapshot = view if view.get("style") in FACE_STYLES else None
-    revision = _next_revision(hass, device)
+    navigator = _navigator(hass, device)
+    view = await async_resolve_clock(hass, view)
+    navigator.clock_snapshot = view if view.get("style") in FACE_STYLES else None
     service = f"{device}_ha_dial_show_view"
     connected = (
         not _is_preview(device)
         and hass.services.has_service("esphome", service)
         and state.get("transport_available", {}).get(device, True)
     )
+    previous = navigator.previous() if connected else None
+    if previous:
+        previous = await async_resolve_clock(hass, previous)
+    # Nothing awaits between taking the revision and queueing for the compiler, so revisions stay in order.
+    revision = _next_revision(hass, device)
     state.setdefault("deployment_status", {})[device] = (
         "sent" if connected else "preview" if _is_preview(device) else "waiting"
     )
-    async_dispatcher_send(
-        hass, f"{DOMAIN}_scene_{device}", _scene_result(hass, device, view)
-    )
+    # One compile serves the cards and the Dial.
+    scene, *rest = await _compile(hass, *([view, previous] if previous else [view]))
+    # A reset or unload may have begun while the compiler ran; it owns the Dial from then on.
+    if _suppressed(state, device):
+        return
+    async_dispatcher_send(hass, f"{DOMAIN}_scene_{device}", _result(hass, device, scene))
     if connected:
         state.setdefault("pending_scenes", {})[device] = (
             view,
-            resolve_clock(hass, previous) if (previous := _navigator(hass, device).previous()) else None,
+            scene,
+            next(iter(rest), None),
             revision,
             state.get("input_sequences", {}).get(device, 0),
         )
@@ -193,9 +222,9 @@ async def _send_scenes(hass: HomeAssistant, device: str) -> None:
     pending = state["pending_scenes"]
     try:
         while device in pending:
-            view, previous, revision, sequence = pending.pop(device)
+            view, scene, previous, revision, sequence = pending.pop(device)
             try:
-                payload = device_payload(resolve_clock(hass, view), resolve_clock(hass, previous) if previous else None, revision, sequence)
+                payload = device_payload(view, scene, previous, revision, sequence)
                 async with asyncio.timeout(10):
                     await hass.services.async_call(
                         "esphome",
@@ -209,22 +238,28 @@ async def _send_scenes(hass: HomeAssistant, device: str) -> None:
                 )
                 if state["revisions"].get(device) == revision:
                     state["deployment_status"][device] = "failed"
-                    async_dispatcher_send(
-                        hass,
-                        f"{DOMAIN}_scene_{device}",
-                        _scene_result(hass, device, _navigator(hass, device).current()),
-                    )
+                    await _publish_result(hass, device)
     finally:
         state["scene_workers"].pop(device, None)
         pending.pop(device, None)
 
 
-def _scene_result(hass: HomeAssistant, device: str, view: dict) -> dict:
-    state = hass.data[DOMAIN]
+async def _publish_result(hass: HomeAssistant, device: str) -> None:
+    """Tell cards the current scene and its delivery status. Callbacks schedule it as a task."""
+    result = await _scene_result(hass, device, _navigator(hass, device).current())
+    async_dispatcher_send(hass, f"{DOMAIN}_scene_{device}", result)
+
+
+async def _scene_result(hass: HomeAssistant, device: str, view: dict) -> dict:
     snapshot = _navigator(hass, device).clock_snapshot
     if snapshot and (snapshot.get("id"), snapshot.get("style")) == (view.get("id"), view.get("style")):
         view = {**view, "_clock": snapshot["_clock"]}
-    scene = compile_scene(resolve_clock(hass, view))
+    (scene,) = await _compile(hass, await async_resolve_clock(hass, view))
+    return _result(hass, device, scene)
+
+
+def _result(hass: HomeAssistant, device: str, scene: dict) -> dict:
+    state = hass.data[DOMAIN]
     return {
         "scene": scene,
         "frames": scene_frames(hass, scene),

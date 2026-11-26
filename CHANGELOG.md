@@ -1,5 +1,12 @@
 # HA Dial Server changelog
 
+## 2026.11.3
+
+- Keep Home Assistant responsive while HA Dial draws. Screens are now drawn in the background instead of on the core that every integration shares; a first screen or a style gallery could hold it for up to a tenth of a second.
+- Read the bundled icons and time zone names once, when HA Dial starts, instead of from disk while drawing or checking pages.
+- Draw each screen once for both the Dial and the dashboard cards. It used to be drawn twice for every update.
+- Only administrators can now give a card its own pages when it subscribes, as every other way of changing pages already required. The card only does this straight after one of those, so nothing it does is affected.
+
 ## 2026.11.2
 
 - Make Back and Home much easier to hit on the Dial. Their whole pill now responds, including the arrow and house, which didn't before, with about a millimetre of slack around it. On Crisp's round buttons the touch area is 40 px across instead of 32. No firmware change is needed.

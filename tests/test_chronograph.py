@@ -5,8 +5,14 @@ import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from zoneinfo import ZoneInfo
 
 import pytest
+
+
+def _resolve(clock, hass, view, now=None):
+    """Resolve with the face's zones loaded, as `async_resolve_clock` does in HA."""
+    return clock.resolve_clock(hass, view, {name: ZoneInfo(name) for name in clock.clock_zone_names(view)}, now)
 
 
 def test_clock_validation_and_nested_definition(integration, dial):
@@ -65,7 +71,7 @@ def test_clock_sources_and_all_variants(integration, dial):
     }
     drawings = []
     for style in dial.load("catalogue").CHRONOGRAPH_STYLES:
-        resolved = clock.resolve_clock(integration.hass, {**base, "style": style}, now)
+        resolved = _resolve(clock, integration.hass, {**base, "style": style}, now)
         assert resolved["_clock"]["day"] == 1
         assert resolved["_clock"]["hour"] == 8
         assert resolved["_clock"]["second"] == 58
@@ -73,11 +79,10 @@ def test_clock_sources_and_all_variants(integration, dial):
         drawing = scene.compile_scene(resolved)
         assert drawing["version"] == 5
         assert len(drawing["elements"]) <= 64
-        assert len(protocol.device_payload(resolved, resolved, 1).encode()) <= 24576
+        assert len(protocol.device_payload(resolved, drawing, drawing, 1).encode()) <= 24576
         drawings.append(json.dumps(drawing))
     assert len(set(drawings)) == 4
-    missing = clock.resolve_clock(
-        integration.hass, {**base, "style": "CHR-MOONPHASE", "clock": {}}, now
+    missing = _resolve(clock, integration.hass, {**base, "style": "CHR-MOONPHASE", "clock": {}}, now
     )
     assert missing["_clock"]["moon"] == "unavailable"
     assert "_clock" not in base
@@ -148,13 +153,11 @@ def test_complication_availability_and_dst(integration, dial):
         integration.hass.states["sensor.reserve"] = SimpleNamespace(
             state=value, attributes={"unit_of_measurement": unit}
         )
-        resolved = clock.resolve_clock(
-            integration.hass, view, datetime(2026, 10, 25, 0, 30, tzinfo=UTC)
+        resolved = _resolve(clock, integration.hass, view, datetime(2026, 10, 25, 0, 30, tzinfo=UTC)
         )
         assert resolved["_clock"]["hour"] == 1
         assert resolved["_clock"]["reserve"] == expected
-    repeated = clock.resolve_clock(
-        integration.hass, view, datetime(2026, 10, 25, 1, 30, tzinfo=UTC)
+    repeated = _resolve(clock, integration.hass, view, datetime(2026, 10, 25, 1, 30, tzinfo=UTC)
     )
     assert repeated["_clock"]["hour"] == 1
     for phase in (
@@ -169,8 +172,7 @@ def test_complication_availability_and_dst(integration, dial):
         "unavailable",
     ):
         integration.hass.states["sensor.moon"] = SimpleNamespace(state=phase)
-        lunar = clock.resolve_clock(
-            integration.hass,
+        lunar = _resolve(clock, integration.hass,
             {**view, "style": "CHR-MOONPHASE", "clock": {"moon_entity": "sensor.moon"}},
             datetime(2026, 10, 25, tzinfo=UTC),
         )
@@ -194,13 +196,11 @@ def test_acknowledgement_keeps_the_published_reading(integration, dial):
         navigator = await runtime._install_definition(
             case.hass, "preview_clock", source, definition
         )
-        view = clock.resolve_clock(
-            case.hass, navigator.current(), datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+        view = _resolve(clock, case.hass, navigator.current(), datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
         )
         await runtime._push(case.hass, "preview_clock", view)
-        assert runtime._scene_result(case.hass, "preview_clock", navigator.current())[
-            "scene"
-        ] == dial.load("scene").compile_scene(view)
+        result = await runtime._scene_result(case.hass, "preview_clock", navigator.current())
+        assert result["scene"] == dial.load("scene").compile_scene(view)
         case.data["definition_unsubs"].pop("preview_clock")()
 
     asyncio.run(run())
@@ -219,8 +219,7 @@ def test_face_sources_read_real_state_and_missing_sources_stay_honest(integratio
     states["sensor.gone"] = SimpleNamespace(state="unavailable", attributes={})
     states["weather.home"] = SimpleNamespace(state="rainy", attributes={"temperature": 9.5, "temperature_unit": "°C"})
     states["sun.sun"] = SimpleNamespace(state="above_horizon", attributes={"next_rising": "2026-06-02T04:00:00+00:00", "next_setting": "2026-06-01T20:00:00+00:00"})
-    resolved = clock.resolve_clock(
-        integration.hass,
+    resolved = _resolve(clock, integration.hass,
         _face("WAT-RINGS", weather_entity="weather.home", metrics=[
             {"entity_id": "sensor.level"}, {"entity_id": "sensor.power", "maximum": 7}, {"entity_id": "sensor.gone", "label": "Lost"}, ]),
         now,
@@ -232,9 +231,9 @@ def test_face_sources_read_real_state_and_missing_sources_stay_honest(integratio
     assert resolved["weather"] == {"state": "rainy", "temperature": "9.5°C"}
     assert resolved["sun"]["above"] and resolved["sun"]["setting"] == "20:00" and resolved["sun"]["progress"] == 0.5
     # A power reading without a maximum has no meaningful progress: rings must not invent one.
-    unscaled = clock.resolve_clock(integration.hass, _face("WAT-RINGS", metrics=[{"entity_id": "sensor.power"}]), now)
+    unscaled = _resolve(clock, integration.hass, _face("WAT-RINGS", metrics=[{"entity_id": "sensor.power"}]), now)
     assert unscaled["_clock"]["metrics"][0]["percent"] is None
-    assert clock.resolve_clock(integration.hass, _face("AMB-SOLAR"), now)["_clock"]["weather"] is None
+    assert _resolve(clock, integration.hass, _face("AMB-SOLAR"), now)["_clock"]["weather"] is None
     assert clock.source_entities(_face("AMB-SOLAR", weather_entity="weather.home")) == {"sun.sun", "weather.home"}
     assert clock.source_entities({"style": "NAV-ORBIT", "clock": {"weather_entity": "weather.home"}}) == set()
     for bad in ({"metrics": [{"entity_id": "not an entity"}]}, {"metrics": [{"entity_id": "sensor.a", "minimum": 2, "maximum": 1}]}, {"history_hours": 0}, {"weather_entity": "sensor.a"}, {"surprise": 1}):
@@ -357,7 +356,7 @@ def test_history_ranges_stay_independent_when_loaded_and_updated(integration, di
     views = [_face("DAT-AREA", metrics=[{"entity_id": "sensor.level"}], history_hours=hours) for hours in (2, 24)]
 
     def series(view):
-        return clock.resolve_clock(hass, view)["_clock"]["metrics"][0]["series"]
+        return _resolve(clock, hass, view)["_clock"]["metrics"][0]["series"]
 
     async def run():
         for view in (*views, *views):

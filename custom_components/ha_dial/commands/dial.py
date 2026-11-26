@@ -18,6 +18,7 @@ from ..const import DOMAIN
 from ..navigator import Navigator
 from ..protocol import device_payload
 from ..runtime import (
+    _compile,
     _input,
     _install_definition,
     _is_preview,
@@ -41,7 +42,7 @@ from .common import DEVICE_SCHEMA, INPUTS, _require_server
 async def _ws_view(hass, connection, msg) -> None:
     connection.send_result(
         msg["id"],
-        _scene_result(hass, msg["device"], _navigator(hass, msg["device"]).current()),
+        await _scene_result(hass, msg["device"], _navigator(hass, msg["device"]).current()),
     )
 
 
@@ -84,7 +85,7 @@ async def _ws_input(hass, connection, msg) -> None:
         await _push(hass, msg["device"], _navigator(hass, msg["device"]).current())
         connection.send_error(msg["id"], "service_error", str(error))
         return
-    connection.send_result(msg["id"], _scene_result(hass, msg["device"], view))
+    connection.send_result(msg["id"], await _scene_result(hass, msg["device"], view))
 
 
 @websocket_api.websocket_command(
@@ -104,6 +105,11 @@ async def _ws_subscribe(hass, connection, msg) -> None:
         and device not in state["definition_sources"]
         and "definition" in msg
     ):
+        # Installing renders its templates and keeps trackers running, as configure does; the card only
+        # sends one after configure has succeeded, so this refuses nobody the card serves.
+        if not connection.user or not connection.user.is_admin:
+            connection.send_error(msg["id"], "unauthorized", "Administrator access required")
+            return
         try:
             definition = _render_definition(hass, msg["definition"])
         except (TemplateError, TypeError, ValueError) as error:
@@ -145,7 +151,7 @@ async def _ws_subscribe(hass, connection, msg) -> None:
 
     connection.subscriptions[msg["id"]] = remove
     connection.send_result(msg["id"])
-    changed(_scene_result(hass, device, _navigator(hass, device).current()))
+    changed(await _scene_result(hass, device, _navigator(hass, device).current()))
 
 
 async def _refresh_browsing(hass, dial: str, source: dict) -> None:
@@ -184,7 +190,7 @@ async def _ws_browse(hass, connection, msg) -> None:
         return
     browsing[session] = dial
     navigator = await _install_definition(hass, session, source, definition)
-    connection.send_result(msg["id"], _scene_result(hass, session, navigator.current()))
+    connection.send_result(msg["id"], await _scene_result(hass, session, navigator.current()))
 
 
 @websocket_api.websocket_command(
@@ -236,11 +242,13 @@ async def _ws_configure(hass, connection, msg) -> None:
             _sync_control(hass, _navigator(hass, device))
             await _push(hass, device, _navigator(hass, device).current())
         connection.send_result(
-            msg["id"], _scene_result(hass, device, _navigator(hass, device).current())
+            msg["id"], await _scene_result(hass, device, _navigator(hass, device).current())
         )
         return
-    candidate = Navigator(definition=definition)
-    device_payload(candidate.current(), None, 0)
+    # Refuses, before saving, a first screen too big for the Dial.
+    first = Navigator(definition=definition).current()
+    (scene,) = await _compile(hass, first)
+    device_payload(first, scene, None, 0)
     if not _is_preview(device):
         async with state.setdefault("definition_lock", asyncio.Lock()):
             if not state["active"]:
@@ -264,7 +272,7 @@ async def _ws_configure(hass, connection, msg) -> None:
         navigator = await _install_definition(
             hass, device, source, definition, push=True
         )
-    connection.send_result(msg["id"], _scene_result(hass, device, navigator.current()))
+    connection.send_result(msg["id"], await _scene_result(hass, device, navigator.current()))
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/reset", vol.Required("device"): DEVICE_SCHEMA})

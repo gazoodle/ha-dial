@@ -57,7 +57,6 @@ def test_navigation_ids_survive_reordering_and_long_root(dial):
 def test_all_supported_scenes_fit_device_contract(dial):
     scene = dial.load("scene")
     nav_type = dial.load("navigator").Navigator
-    protocol = dial.load("protocol")
     maximum = 0
     for theme in scene.THEMES:
         for count in range(9):
@@ -90,7 +89,7 @@ def test_all_supported_scenes_fit_device_contract(dial):
                     if view.get("domain") == "cover":
                         view.update(continuous=True, actions=["open", "stop", "close"])
                     payload = json.loads(
-                        protocol.device_payload(view, nav.previous(), 100)
+                        dial.payload(view, nav.previous(), 100)
                     )
                     encoded = json.dumps(payload, separators=(",", ":")).encode()
                     maximum = max(maximum, len(encoded))
@@ -137,7 +136,6 @@ def test_light_identity_power_availability_and_complete_text(dial):
 def test_mixed_domain_tree_and_template_defaults(dial):
     definition = dial.load("definition")
     nav_type = dial.load("navigator").Navigator
-    protocol = dial.load("protocol")
     hass = SimpleNamespace(states={})
     pages = [
         {"id": "root", "title": "Home"},
@@ -167,7 +165,7 @@ def test_mixed_domain_tree_and_template_defaults(dial):
             continuous=domain != "switch",
             actions=["open", "stop", "close"] if domain == "cover" else [],
         )
-        payload = json.loads(protocol.device_payload(view, nav.previous(), 1))
+        payload = json.loads(dial.payload(view, nav.previous(), 1))
         assert ("value" in payload) == (domain != "switch")
         assert "entity_id" not in payload
         assert len(payload["scene"]["elements"]) <= 64

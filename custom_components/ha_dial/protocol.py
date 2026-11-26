@@ -1,22 +1,25 @@
-"""Bounded device transport for an already resolved scene."""
+"""Bounded device transport for an already compiled scene.
+
+Scenes arrive compiled: the same scene a push sends to cards, so each is compiled once, off the loop.
+"""
 
 import json
 
-from .scene import MAX_VIEW_BYTES, compile_scene
+from .scene import MAX_VIEW_BYTES
 
 
 def device_payload(
-    view: dict, previous: dict | None, revision: int, input_sequence: int = 0
+    view: dict, scene: dict, previous: dict | None, revision: int, input_sequence: int = 0
 ) -> str:
     payload = {
         "revision": revision,
         "input_sequence": input_sequence,
-        "scene": compile_scene(view),
+        "scene": scene,
         "back": bool(previous),
         "settings": view.get("kind") == "settings",
     }
     if previous:
-        payload["previous"] = compile_scene(previous)
+        payload["previous"] = previous
     if view.get("kind") == "control" and view.get("continuous", True):
         payload.update(
             {

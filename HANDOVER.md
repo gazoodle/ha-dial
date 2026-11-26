@@ -1,35 +1,23 @@
-# Handover — 2026-11-20
+# Handover — 2026-11-26
 
 ## Current state
 
-Releases on 2026-11-20, a soft launch through the Marketplace (HACS, built into HA from 2026.11) with
-light lag as a known issue (AGENTS.md, Rotary UX amendment). 2026.11.1 (integration and firmware) added
-`hacs.json`, manifest `codeowners` and `issue_tracker`, `.github/workflows/validate.yaml` (HACS action and
-hassfest), a Marketplace-first README and a regenerated `docs/screens.png`; its firmware fixes the Waiting
-for HA text, compiled but not flashed (the Dial runs b6). Integration 2026.11.2 makes Back and Home touch
-areas cover the whole drawn button (rule in AGENTS.md), confirmed "much better" on the Dial by the owner,
-and adds Marketplace categories. HA runs 2026.11.2-b1, the same code. The `hacs/default` pull request was
-opened from the owner's fork `gazoodle/default` after 2026.11.2.
+Integration 2026.11.3 (2026-11-26) answers the review of the `hacs/default` pull request,
+opened from the owner's fork `gazoodle/default` after 2026.11.2. Scenes compile in the executor
+behind a FIFO lock (`runtime._compile`), once per push for both the Dial and the cards. Bundled
+icons, the icon font and time zone names load once at setup (`_load_resources`). Clock faces get
+their zones from `dt_util.async_get_time_zone`. `ha_dial/subscribe` refuses non-admins when it
+installs a definition. HA ran 2026.11.3-b1, the same code, with a clean log after a restart.
+Firmware is unchanged and the Dial runs b6. The next release is the first-flash web installer
+(BACKLOG.md), which needs the stock naming decision first.
 
-Integration b31 (copied to HA on 2026-11-13 with approval, all 57 files verified, HA restart and
-browser refresh pending; it also carries b30) makes small text 2 px larger with an 8 px floor and gives
-captions a readable `label` colour; the rule and its reason are in AGENTS.md. Verified: 286 tests,
-including identical card and firmware pixels on regenerated fixtures, and every style inspected in
-Smooth, a sample in Crisp. The owner hasn't yet judged it on the Dial, which is the real test. The
-suite is over its 15 s budget (it was 15.9 s before this build): the pixel comparison is 6 s
-of it, and b31's two new tests brought it to about 20 s. b31 also grows the interior when the ring is
-hidden or slimmed (rule in AGENTS.md); inspected in Smooth for every style and a sample in Crisp. Still
-open: the owner wants "more depth" in some styles, not yet defined.
-
-Integration b30 fixes history ranges sharing one cache and camera entries being lost while another
-capture runs. Verified: both regressions failed before the fixes; 285 tests and Ruff pass. Pyright
-could not resolve HA imports because the scratch HA type sources are incomplete. Not deployed;
-firmware unchanged at b6.
-
-b30 also gives the panel the full available width with columns and a zoom slider that stay fixed
-while the Dial grows inside its viewport. Chromium checks at 1840, 1280, 1024 and 390 px cover
-100–400% zoom and a mouse drag; the original layout fails the same check. Screenshot inspected.
-The browser harness uses stub HA responses and lives in scratch, not the suite.
+Earlier: 2026.11.1 and 2026.11.2 (2026-11-20) were a soft launch through the Marketplace (HACS,
+built into HA from 2026.11) with light lag as a known issue (AGENTS.md, Rotary UX amendment). They
+added the HACS files and validation workflow, 2 px larger small text with an 8 px floor, interior
+growth when the ring is hidden, and Back and Home touch areas covering the whole pill (rules in
+AGENTS.md). The 2026.11.1 firmware fixes the Waiting for HA text, compiled but not flashed. Still
+open: the owner wants "more depth" in some styles, not yet defined. The suite is over its 15 s
+budget, at about 18 s for 295 tests; the pixel comparison is 6 s of it.
 
 Scene v5, the rebuilt Crisp/Smooth, every navigation style, domain graphics and shapes, the settings
 table and generated dialog, and the Ambient, Watch and Data faces are implemented and committed in
@@ -70,7 +58,8 @@ inspected contact sheets. The owner reviews sheets by phone; an approved sheet c
   run against stand-in registries shaped from HA's source, with its HA calls type-checked. First real checks: a live home,
   rebuilds as the registries change and after an HA restart, and the panel's Explorer settings. 
 - Until 2026-10-31 the scratch Pyright config checked nothing, because its paths weren't relative, so earlier clean results
-  meant little. It now covers the integration with HA's types; the one remaining error is `aiohttp` missing from the venv.
+  meant little. With HA 2026.10.4 types it reports 15 errors, unchanged by 2026.11.3: 14 are voluptuous schemas
+  against HA's probatio typing, one the event type in `_watch_home`.
 - b19 adds Snake navigation (`snake_path.py`). Its dialog has only run against test stubs;
   check it in the live panel, and turning through a long snake on the Dial. A snake too big for the space shrinks its
   path evenly while its icons keep their size, so sliders near their limits can appear to stop growing it.

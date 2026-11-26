@@ -198,6 +198,17 @@ recovery. Reuse the standard tools if practical; report the effort and gaps befo
 an installer project. A polished path from unboxing to the first usable dial is the goal, not merely
 a successful flash. Treat this as product UX with clear progress, actionable errors and a way back.
 
+Scheduled for the release after 2026.11.3 (owner, 2026-11-26), kept out of 2026.11.3 so the HACS
+re-review stays small. Findings on 2026-11-26: `ha-dial-connected.yaml` is already stock (no
+credentials, setup AP and captive portal, open API, OTA) and builds already emit
+`firmware.factory.bin`. ESPHome 2026.10 accepts `improv_serial` with the S3's `USB_SERIAL_JTAG`
+logger (it only rejects `USB_CDC`). Missing: `improv_serial`, `dashboard_import`, an ESP Web Tools
+manifest and page served over HTTPS (GitHub Pages, built by a release workflow), and README steps.
+Web Serial is desktop Chrome/Edge only. Open decision: every stock Dial is named `ha-dial`, and a MAC
+suffix would rename the owner's Dial and orphan its saved pages, which are keyed by name; settle
+identity versus name (see Local maintenance) first. Test locally before publishing: Chrome allows
+Web Serial on `localhost`, so the USB-connected Dial can be flashed from a local page.
+
 ## Touch-controller diagnostics (2026-10-27)
 
 The USB capture during HA reconnect diagnosis included repeated

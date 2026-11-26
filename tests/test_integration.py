@@ -293,6 +293,10 @@ def test_burst_coalesces_scenes_and_commands_do_not_wait_for_display(integration
             "commands must be issued before a blocked display send"
         )
         assert len(frames) == 1
+        # Scenes are compiled on a worker thread, so the later inputs queue a moment after their
+        # commands. Release the send once the last has: they must replace each other, not queue up.
+        while i.data.get("pending_scenes", {}).get("burst_dial", ({},))[0].get("value") != 75:
+            await asyncio.sleep(0)
         release.set()
         await asyncio.gather(first, *rest)
         assert [frame["value"] for frame in frames] == [60, 75], (

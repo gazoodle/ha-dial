@@ -12,7 +12,6 @@ def test_domain_styles_compile_and_remain_bounded(integration, dial):
     definition = dial.load("definition")
     nav_type = dial.load("navigator").Navigator
     controls = dial.load("controls")
-    protocol = dial.load("protocol")
     for domain in catalogue.CONTROL_TYPES:
         state = SimpleNamespace(
             state="on",
@@ -50,7 +49,7 @@ def test_domain_styles_compile_and_remain_bounded(integration, dial):
             view = nav.input("press")
             nav.sync(**controls.control_state(domain + ".demo", state))
             view = nav.current()
-            encoded = protocol.device_payload(view, nav.previous(), 1)
+            encoded = dial.payload(view, nav.previous(), 1)
             payload = json.loads(encoded)
             assert len(encoded.encode()) <= 24576
             assert len(payload["scene"]["elements"]) <= 64

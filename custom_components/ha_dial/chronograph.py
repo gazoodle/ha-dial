@@ -1,9 +1,10 @@
 """Face configuration and HA-owned source resolution; no browser/device clock semantics."""
 
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
+from functools import lru_cache
 from math import isfinite
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import available_timezones
 
 from .catalogue import FACE_STYLES
 from .frames import resolve_frame
@@ -34,6 +35,12 @@ def _validate_metric(metric):
         raise ValueError("Metric minimum must be below its maximum")
 
 
+@lru_cache(maxsize=1)
+def zone_names() -> frozenset[str]:
+    """Read from the tz database once, at setup in the executor; validation then needs no disk."""
+    return frozenset(available_timezones())
+
+
 def validate_clock(value):
     if not isinstance(value, dict):
         raise TypeError("Clock settings must be an object")
@@ -45,10 +52,8 @@ def validate_clock(value):
     for name in [value.get("timezone", "UTC"), *zones]:
         if not isinstance(name, str) or len(name) > 64:
             raise ValueError("Use IANA time zone names")
-        try:
-            ZoneInfo(name)
-        except (ZoneInfoNotFoundError, ValueError) as error:
-            raise ValueError(f"Unknown time zone: {name}") from error
+        if name not in zone_names():
+            raise ValueError(f"Unknown time zone: {name}")
     for field in ("moon_entity", "reserve_entity"):
         entity = value.get(field, "")
         if not isinstance(entity, str) or entity and not re.fullmatch(r"sensor\.[a-z0-9_]{1,248}", entity):
@@ -169,17 +174,39 @@ def _detection(hass, entity):
     return {"active": active, "text": text.upper()}
 
 
-def resolve_clock(hass, view, now: datetime | None = None):
-    if view.get("style") not in FACE_STYLES:
+def _unresolved_face(view) -> bool:
+    return view.get("style") in FACE_STYLES and "_clock" not in view
+
+
+def clock_zone_names(view) -> set[str]:
+    settings = view.get("clock", {})
+    return {*filter(None, [settings.get("timezone")]), *settings.get("world_zones", DEFAULT_ZONES)}
+
+
+async def async_resolve_clock(hass, view, now: datetime | None = None):
+    """Load the face's zones here, in async code: a zone's first lookup reads the tz database from disk."""
+    if not _unresolved_face(view):
         return view
-    if "_clock" in view:
+    from homeassistant.util import dt as dt_util
+
+    zones = {}
+    for name in clock_zone_names(view):
+        # Validation accepted the name, so failing to load it now is a fault to report, not a default.
+        if (zone := await dt_util.async_get_time_zone(name)) is None:
+            raise ValueError(f"Unknown time zone: {name}")
+        zones[name] = zone
+    return resolve_clock(hass, view, zones, now)
+
+
+def resolve_clock(hass, view, zones: dict[str, tzinfo], now: datetime | None = None):
+    """`zones` holds every name in `clock_zone_names`, already loaded; see `async_resolve_clock`."""
+    if not _unresolved_face(view):
         return view
     from homeassistant.util import dt as dt_util
 
     now = now or dt_util.now()
     settings = view.get("clock", {})
-    local = now.astimezone(ZoneInfo(settings["timezone"])) if settings.get("timezone") else now
-    zones = settings.get("world_zones", DEFAULT_ZONES)
+    local = now.astimezone(zones[settings["timezone"]]) if settings.get("timezone") else now
     moon = hass.states.get(settings.get("moon_entity", ""))
     reserve_state = hass.states.get(settings.get("reserve_entity", ""))
     reserve = None
@@ -201,8 +228,8 @@ def resolve_clock(hass, view, now: datetime | None = None):
             "date": local.strftime("%a %d %b").upper(),
             "weekday_name": local.strftime("%A").upper(),
             "zones": [
-                (zone.rsplit("/", 1)[-1].replace("_", " ").upper(), now.astimezone(ZoneInfo(zone)).strftime("%H:%M"))
-                for zone in zones
+                (zone.rsplit("/", 1)[-1].replace("_", " ").upper(), now.astimezone(zones[zone]).strftime("%H:%M"))
+                for zone in settings.get("world_zones", DEFAULT_ZONES)
             ],
             "moon": moon.state if moon else "unavailable",
             "reserve": reserve,

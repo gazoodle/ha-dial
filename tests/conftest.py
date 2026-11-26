@@ -9,6 +9,7 @@ from enum import IntFlag
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import jinja2
 import pytest
@@ -38,7 +39,17 @@ def dial(monkeypatch):
         spec.loader.exec_module(value)
         return value
 
-    yield SimpleNamespace(load=load, module=module, package=package)
+    def loaded(name):
+        return sys.modules.get(f"dial_test.{name}") or load(name)
+
+    def payload(view, previous, revision):
+        """The Dial's payload for a view, compiled once as HA's push compiles it."""
+        compile_scene = loaded("scene").compile_scene
+        return loaded("protocol").device_payload(
+            view, compile_scene(view), compile_scene(previous) if previous else None, revision
+        )
+
+    yield SimpleNamespace(load=load, module=module, package=package, payload=payload)
     for name in list(sys.modules):
         if name.startswith("dial_test."):
             sys.modules.pop(name, None)
@@ -85,7 +96,18 @@ def integration(dial):
     )
     dial.module("homeassistant.helpers")
     dial.module("homeassistant.util")
-    dial.module("homeassistant.util.dt", now=lambda: datetime.now(UTC), utcnow=lambda: datetime.now(UTC))
+    async def async_get_time_zone(name):
+        try:
+            return ZoneInfo(name)
+        except (ZoneInfoNotFoundError, ValueError):
+            return None
+
+    dial.module(
+        "homeassistant.util.dt",
+        now=lambda: datetime.now(UTC),
+        utcnow=lambda: datetime.now(UTC),
+        async_get_time_zone=async_get_time_zone,
+    )
 
     class TemplateError(Exception):
         pass
@@ -181,6 +203,8 @@ def integration(dial):
         ),
         templates={},
         async_create_task=create_task,
+        # A real worker thread, as in HA, so code that must run off the loop does.
+        async_add_executor_job=lambda target, *args: asyncio.get_running_loop().run_in_executor(None, target, *args),
     )
     connection = SimpleNamespace(
         send_result=AsyncMock(),

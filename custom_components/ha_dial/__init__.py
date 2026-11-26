@@ -13,7 +13,6 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_FRIENDLY_NAME, CONF_ENTITY_ID
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
-from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
@@ -30,9 +29,9 @@ from .runtime import (
     _install_definition,
     _is_preview,
     _navigator,
+    _publish_result,
     _push,
     _render_definition,
-    _scene_result,
     _sync_control,
 )
 
@@ -42,7 +41,23 @@ LOADED_VERSION = manifest_version(Path(__file__).parent)
 LOADED_REVISION = revision(Path(__file__).parent)
 
 
+def _load_resources() -> None:
+    """Read bundled icons, the icon font and the tz names once, in the executor.
+
+    Validation and compiling then never read the disk on the event loop.
+    """
+    from .assets import icon_names, mdi_data
+    from .chronograph import zone_names
+    from .strokes import stroke_icons
+
+    icon_names()
+    mdi_data()
+    stroke_icons()
+    zone_names()
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    await hass.async_add_executor_job(_load_resources)
     state = hass.data.setdefault(
         DOMAIN,
         {
@@ -200,11 +215,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 _push(hass, device, _navigator(hass, device).current())
             )
         state.setdefault("deployment_status", {})[device] = "applied"
-        async_dispatcher_send(
-            hass,
-            f"{DOMAIN}_scene_{device}",
-            _scene_result(hass, device, _navigator(hass, device).current()),
-        )
+        hass.async_create_task(_publish_result(hass, device))
 
     entry.async_on_unload(
         hass.bus.async_listen("esphome.ha_dial_scene_status", scene_status)
@@ -221,7 +232,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         else:
             _LOGGER.info("Dial %s fetched a frame in %s ms (free heap %s, largest block %s)", *details)
         state.setdefault("frame_status", {})[device] = str(error)
-        async_dispatcher_send(hass, f"{DOMAIN}_scene_{device}", _scene_result(hass, device, _navigator(hass, device).current()))
+        hass.async_create_task(_publish_result(hass, device))
 
     entry.async_on_unload(hass.bus.async_listen("esphome.ha_dial_frame_status", frame_status))
 

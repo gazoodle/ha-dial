@@ -7,7 +7,7 @@ from homeassistant.components import websocket_api
 
 from ..const import DOMAIN
 from ..navigator import Navigator
-from ..runtime import _sync_control
+from ..runtime import _compile, _sync_control
 from .common import _require_server
 
 
@@ -40,11 +40,11 @@ async def _ws_gallery(hass, connection, msg) -> None:
         PAGED_STYLES,
         control_styles,
     )
-    from ..chronograph import resolve_clock
+    from ..chronograph import async_resolve_clock
     from ..definition import build_definition
     from ..frames import capture, frame_key, scene_frames
     from ..history import ensure_history
-    from ..scene import THEMES, compile_scene
+    from ..scene import THEMES
 
     try:
         page = {**msg["page"], "id": "gallery", "parent": ""}
@@ -76,21 +76,24 @@ async def _ws_gallery(hass, connection, msg) -> None:
             candidate = {**nav.current(), "style": style}
             if (key := frame_key(candidate)) and key not in hass.data[DOMAIN].get("frames", {}):
                 await capture(hass, candidate, key)
-        view = resolve_clock(hass, nav.current())
+        view = await async_resolve_clock(hass, nav.current())
         if msg.get("preview_only"):
-            scene = compile_scene(view)
+            (scene,) = await _compile(hass, view)
             connection.send_result(msg["id"], {"scene": scene, "frames": scene_frames(hass, scene)})
             return
         styles = sorted(control_styles(entity.split(".", 1)[0]) if entity else PAGED_STYLES if msg.get("long") else NAV_STYLES if msg.get("nav_only") else PAGE_STYLES)
         # From the unresolved view: a resolved one carries the selected style's picture, and every
         # thumbnail would then show that one treatment.
         unresolved = nav.current()
-        style_scenes = {style: compile_scene(resolve_clock(hass, {**unresolved, "style": style})) for style in styles}
+        style_views = [await async_resolve_clock(hass, {**unresolved, "style": style}) for style in styles]
+        # Every style and theme in one batch for the compiler.
+        scenes = await _compile(hass, *style_views, *({**view, "theme": theme} for theme in THEMES))
+        style_scenes = dict(zip(styles, scenes))
         connection.send_result(msg["id"], {
             "style": view.get("style"), "theme": view.get("theme"),
             "frames": {key: value for scene in style_scenes.values() for key, value in scene_frames(hass, scene).items()},
             "styles": style_scenes,
-            "themes": {theme: compile_scene({**view, "theme": theme}) for theme in THEMES},
+            "themes": dict(zip(THEMES, scenes[len(styles):])),
         })
     except (ValueError, TypeError, KeyError, StopIteration) as error:
         connection.send_error(msg["id"], "invalid_format", str(error))
